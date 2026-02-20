@@ -42,6 +42,12 @@ abstract class RepositoryModule {
     @Binds @Singleton
     abstract fun bindPlayerEngine(impl: Media3PlayerEngine): PlayerEngine
 
+    @Binds @Singleton
+    abstract fun bindPlaybackHistoryRepository(impl: PlaybackHistoryRepositoryImpl): PlaybackHistoryRepository
+
+    @Binds @Singleton
+    abstract fun bindSyncMetadataRepository(impl: SyncMetadataRepositoryImpl): SyncMetadataRepository
+
     companion object {
         // PreferencesRepository is provided by @Inject constructor
 

@@ -307,3 +307,67 @@ fun VirtualGroup.toEntity() = VirtualGroupEntity(
     position = position,
     createdAt = createdAt
 )
+
+// ── Playback History ───────────────────────────────────────────────
+
+fun PlaybackHistoryEntity.toDomain() = PlaybackHistory(
+    id = id,
+    contentId = contentId,
+    contentType = try { ContentType.valueOf(contentType) } catch (_: Exception) { ContentType.MOVIE },
+    providerId = providerId,
+    title = title,
+    posterUrl = posterUrl,
+    streamUrl = streamUrl,
+    resumePositionMs = resumePositionMs,
+    totalDurationMs = totalDurationMs,
+    lastWatchedAt = lastWatchedAt,
+    watchCount = watchCount,
+    seriesId = seriesId,
+    seasonNumber = seasonNumber,
+    episodeNumber = episodeNumber
+)
+
+fun PlaybackHistory.toEntity() = PlaybackHistoryEntity(
+    id = id,
+    contentId = contentId,
+    contentType = contentType.name,
+    providerId = providerId,
+    title = title,
+    posterUrl = posterUrl,
+    streamUrl = streamUrl,
+    resumePositionMs = resumePositionMs,
+    totalDurationMs = totalDurationMs,
+    lastWatchedAt = lastWatchedAt,
+    watchCount = watchCount,
+    seriesId = seriesId,
+    seasonNumber = seasonNumber,
+    episodeNumber = episodeNumber
+)
+
+// ── Sync Metadata ──────────────────────────────────────────────────
+
+fun SyncMetadataEntity.toDomain() = SyncMetadata(
+    providerId = providerId,
+    lastLiveSync = lastLiveSync,
+    lastMovieSync = lastMovieSync,
+    lastSeriesSync = lastSeriesSync,
+    lastEpgSync = lastEpgSync,
+    liveCount = liveCount,
+    movieCount = movieCount,
+    seriesCount = seriesCount,
+    epgCount = epgCount,
+    lastSyncStatus = lastSyncStatus
+)
+
+fun SyncMetadata.toEntity() = SyncMetadataEntity(
+    providerId = providerId,
+    lastLiveSync = lastLiveSync,
+    lastMovieSync = lastMovieSync,
+    lastSeriesSync = lastSeriesSync,
+    lastEpgSync = lastEpgSync,
+    liveCount = liveCount,
+    movieCount = movieCount,
+    seriesCount = seriesCount,
+    epgCount = epgCount,
+    lastSyncStatus = lastSyncStatus
+)

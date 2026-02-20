@@ -23,6 +23,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.streamvault.domain.repository.SyncMetadataRepository
+import com.streamvault.domain.model.SyncMetadata
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -53,7 +55,8 @@ class SyncManager @Inject constructor(
     private val xtreamApiService: XtreamApiService,
     private val m3uParser: M3uParser,
     private val epgRepository: EpgRepository,
-    private val okHttpClient: OkHttpClient
+    private val okHttpClient: OkHttpClient,
+    private val syncMetadataRepository: SyncMetadataRepository
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -112,58 +115,98 @@ class SyncManager @Inject constructor(
             password = provider.password
         )
 
-        // Live
-        progress(onProgress, "Downloading Live TV…")
-        api.getLiveCategories().getOrThrow("Live categories").let { cats ->
+        var metadata = syncMetadataRepository.getMetadata(provider.id) ?: SyncMetadata(provider.id)
+        val now = System.currentTimeMillis()
+
+        // Live (TTL 24h)
+        if (!isCacheValid(metadata.lastLiveSync, TTL_24_HOURS, now)) {
+            progress(onProgress, "Downloading Live TV…")
+            val cats = api.getLiveCategories().getOrThrow("Live categories")
             Log.d(TAG, "Saving ${cats.size} live categories")
             categoryDao.replaceAll(provider.id, "LIVE", cats.map { it.toEntity(provider.id) })
-        }
-        api.getLiveStreams().getOrThrow("Live streams").let { channels ->
+
+            val channels = api.getLiveStreams().getOrThrow("Live streams")
             Log.d(TAG, "Saving ${channels.size} channels")
             channelDao.replaceAll(provider.id, channels.map { it.toEntity() })
+            
+            metadata = metadata.copy(lastLiveSync = now, liveCount = channels.size)
+            syncMetadataRepository.updateMetadata(metadata)
+        } else {
+            Log.d(TAG, "Skipping Live TV sync (cache still valid)")
         }
 
-        // VOD
-        progress(onProgress, "Downloading Movies…")
-        api.getVodCategories().getOrNull()?.let { cats ->
-            Log.d(TAG, "Saving ${cats.size} VOD categories")
-            categoryDao.replaceAll(provider.id, "MOVIE", cats.map { it.toEntity(provider.id) })
-        }
-        api.getVodStreams().getOrNull()?.let { movies ->
-            Log.d(TAG, "Saving ${movies.size} movies")
-            movieDao.replaceAll(provider.id, movies.map { it.toEntity() })
-        }
-
-        // Series
-        progress(onProgress, "Downloading Series…")
-        api.getSeriesCategories().getOrNull()?.let { cats ->
-            Log.d(TAG, "Saving ${cats.size} series categories")
-            categoryDao.replaceAll(provider.id, "SERIES", cats.map { it.toEntity(provider.id) })
-        }
-        api.getSeriesList().getOrNull()?.let { seriesList ->
-            Log.d(TAG, "Saving ${seriesList.size} series")
-            seriesDao.replaceAll(provider.id, seriesList.map { it.toEntity() })
+        // VOD (TTL 24h)
+        if (!isCacheValid(metadata.lastMovieSync, TTL_24_HOURS, now)) {
+            progress(onProgress, "Downloading Movies…")
+            val cats = api.getVodCategories().getOrNull()
+            if (cats != null) {
+                Log.d(TAG, "Saving ${cats.size} VOD categories")
+                categoryDao.replaceAll(provider.id, "MOVIE", cats.map { it.toEntity(provider.id) })
+            }
+            
+            val movies = api.getVodStreams().getOrNull()
+            if (movies != null) {
+                Log.d(TAG, "Saving ${movies.size} movies")
+                movieDao.replaceAll(provider.id, movies.map { it.toEntity() })
+                metadata = metadata.copy(lastMovieSync = now, movieCount = movies.size)
+                syncMetadataRepository.updateMetadata(metadata)
+            }
+        } else {
+            Log.d(TAG, "Skipping Movies sync (cache still valid)")
         }
 
-        // EPG
-        try {
-            progress(onProgress, "Downloading EPG…")
-            val base = provider.serverUrl.trimEnd('/')
-            val xmltvUrl = "$base/xmltv.php?username=${provider.username}&password=${provider.password}"
-            epgRepository.refreshEpg(provider.id, xmltvUrl)
-        } catch (e: Exception) {
-            Log.e(TAG, "EPG sync failed (non-fatal): ${e.message}")
+        // Series (TTL 24h)
+        if (!isCacheValid(metadata.lastSeriesSync, TTL_24_HOURS, now)) {
+            progress(onProgress, "Downloading Series…")
+            val cats = api.getSeriesCategories().getOrNull()
+            if (cats != null) {
+                Log.d(TAG, "Saving ${cats.size} series categories")
+                categoryDao.replaceAll(provider.id, "SERIES", cats.map { it.toEntity(provider.id) })
+            }
+            
+            val seriesList = api.getSeriesList().getOrNull()
+            if (seriesList != null) {
+                Log.d(TAG, "Saving ${seriesList.size} series")
+                seriesDao.replaceAll(provider.id, seriesList.map { it.toEntity() })
+                metadata = metadata.copy(lastSeriesSync = now, seriesCount = seriesList.size)
+                syncMetadataRepository.updateMetadata(metadata)
+            }
+        } else {
+            Log.d(TAG, "Skipping Series sync (cache still valid)")
+        }
+
+        // EPG (TTL 6h)
+        if (!isCacheValid(metadata.lastEpgSync, TTL_6_HOURS, now)) {
+            try {
+                progress(onProgress, "Downloading EPG…")
+                val base = provider.serverUrl.trimEnd('/')
+                val xmltvUrl = provider.epgUrl.ifBlank { "$base/xmltv.php?username=${provider.username}&password=${provider.password}" }
+                epgRepository.refreshEpg(provider.id, xmltvUrl)
+                
+                metadata = metadata.copy(lastEpgSync = now)
+                syncMetadataRepository.updateMetadata(metadata)
+            } catch (e: Exception) {
+                Log.e(TAG, "EPG sync failed (non-fatal): ${e.message}")
+            }
+        } else {
+            Log.d(TAG, "Skipping EPG sync (cache still valid)")
         }
     }
 
     // ── M3U sync ────────────────────────────────────────────────────
 
     private suspend fun syncM3u(provider: Provider, onProgress: ((String) -> Unit)?) {
-        withContext(Dispatchers.IO) {
-            Log.d(TAG, "Starting M3U refresh for ${provider.name}")
-            progress(onProgress, "Downloading Playlist…")
-            val url = provider.m3uUrl.ifBlank { provider.serverUrl }
-            val response = okHttpClient.newCall(Request.Builder().url(url).build()).execute()
+        var metadata = syncMetadataRepository.getMetadata(provider.id) ?: SyncMetadata(provider.id)
+        val now = System.currentTimeMillis()
+
+        // M3U must be fully re-downloaded (no granular deltas), so we use lastLiveSync
+        // as the general indicator for the playlist payload TTL (24h)
+        if (!isCacheValid(metadata.lastLiveSync, TTL_24_HOURS, now)) {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "Starting M3U refresh for ${provider.name}")
+                progress(onProgress, "Downloading Playlist…")
+                val url = provider.m3uUrl.ifBlank { provider.serverUrl }
+                val response = okHttpClient.newCall(Request.Builder().url(url).build()).execute()
 
             if (!response.isSuccessful) {
                 throw Exception("Failed to download M3U: HTTP ${response.code}")
@@ -232,6 +275,31 @@ class SyncManager @Inject constructor(
             Log.d(TAG, "Saving ${movies.size} movies")
             movieDao.replaceAll(provider.id, movies)
             Log.d(TAG, "M3U refresh complete")
+
+            metadata = metadata.copy(
+                lastLiveSync = now, lastMovieSync = now, lastSeriesSync = now, // treat as single payload
+                liveCount = channels.size, movieCount = movies.size
+            )
+            syncMetadataRepository.updateMetadata(metadata)
+            }
+        } else {
+            Log.d(TAG, "Skipping M3U playlist sync (cache still valid)")
+        }
+
+        // Try EPG refresh if standard M3U provider linked an EPG URL
+        if (!provider.epgUrl.isNullOrBlank()) {
+            if (!isCacheValid(metadata.lastEpgSync, TTL_6_HOURS, now)) {
+                try {
+                    progress(onProgress, "Downloading EPG…")
+                    epgRepository.refreshEpg(provider.id, provider.epgUrl)
+                    metadata = metadata.copy(lastEpgSync = now)
+                    syncMetadataRepository.updateMetadata(metadata)
+                } catch (e: Exception) {
+                    Log.e(TAG, "EPG sync failed (non-fatal): ${e.message}")
+                }
+            } else {
+                Log.d(TAG, "Skipping EPG sync (cache still valid)")
+            }
         }
     }
 
@@ -281,9 +349,19 @@ class SyncManager @Inject constructor(
                 group.contains("film")
     }
 
+    private fun isCacheValid(lastSync: Long, ttlMillis: Long, now: Long = System.currentTimeMillis()): Boolean {
+        // If lastSync is 0, cache is invalid. If now - lastSync < ttl, cache is valid.
+        return lastSync > 0 && (now - lastSync) < ttlMillis
+    }
+
     private fun progress(callback: ((String) -> Unit)?, message: String) {
         _syncState.value = SyncState.Syncing(message)
         callback?.invoke(message)
+    }
+
+    companion object {
+        const val TTL_24_HOURS = 24L * 60 * 60 * 1000L
+        const val TTL_6_HOURS = 6L * 60 * 60 * 1000L
     }
 
     // Extension to convert Result<T> to T-or-throw for mandatory resources

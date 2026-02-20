@@ -23,7 +23,10 @@ object DatabaseModule {
             StreamVaultDatabase::class.java,
             "streamvault.db"
         )
-            .addMigrations(StreamVaultDatabase.MIGRATION_2_3)
+            .addMigrations(
+                StreamVaultDatabase.MIGRATION_2_3,
+                StreamVaultDatabase.MIGRATION_3_4
+            )
             // NOTE: fallbackToDestructiveMigration() intentionally removed.
             // All future schema changes MUST add a corresponding Migration in StreamVaultDatabase.
             .build()
@@ -37,4 +40,6 @@ object DatabaseModule {
     @Provides fun provideProgramDao(db: StreamVaultDatabase): ProgramDao = db.programDao()
     @Provides fun provideFavoriteDao(db: StreamVaultDatabase): FavoriteDao = db.favoriteDao()
     @Provides fun provideVirtualGroupDao(db: StreamVaultDatabase): VirtualGroupDao = db.virtualGroupDao()
+    @Provides fun providePlaybackHistoryDao(db: StreamVaultDatabase): PlaybackHistoryDao = db.playbackHistoryDao()
+    @Provides fun provideSyncMetadataDao(db: StreamVaultDatabase): SyncMetadataDao = db.syncMetadataDao()
 }

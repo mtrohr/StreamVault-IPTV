@@ -67,6 +67,7 @@ class SyncManagerTest {
     private val xtreamApi: XtreamApiService = mock()
     private val epgRepo: EpgRepository = mock()
     private val okHttp: OkHttpClient = mock()
+    private val syncMetadataRepo: com.streamvault.domain.repository.SyncMetadataRepository = mock()
 
     private fun buildManager(
         providerType: String = "XTREAM_CODES",
@@ -80,7 +81,8 @@ class SyncManagerTest {
         xtreamApiService = xtreamApi,
         m3uParser = M3uParser(),
         epgRepository = epgRepo,
-        okHttpClient = okHttp
+        okHttpClient = okHttp,
+        syncMetadataRepository = syncMetadataRepo
     )
 
     // ── Initial state ───────────────────────────────────────────────

@@ -229,4 +229,43 @@ data class CategoryCount(
     @ColumnInfo(name = "item_count") val item_count: Int
 )
 
+@Entity(
+    tableName = "playback_history",
+    indices = [
+        Index(value = ["content_id", "content_type", "provider_id"], unique = true),
+        Index(value = ["last_watched_at"]),
+        Index(value = ["provider_id"])
+    ]
+)
+data class PlaybackHistoryEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    @ColumnInfo(name = "content_id") val contentId: Long,
+    @ColumnInfo(name = "content_type") val contentType: String, // LIVE, MOVIE, SERIES_EPISODE
+    @ColumnInfo(name = "provider_id") val providerId: Long,
+    val title: String = "",
+    @ColumnInfo(name = "poster_url") val posterUrl: String? = null,
+    @ColumnInfo(name = "stream_url") val streamUrl: String = "",
+    @ColumnInfo(name = "resume_position_ms") val resumePositionMs: Long = 0,
+    @ColumnInfo(name = "total_duration_ms") val totalDurationMs: Long = 0,
+    @ColumnInfo(name = "last_watched_at") val lastWatchedAt: Long = 0,
+    @ColumnInfo(name = "watch_count") val watchCount: Int = 1,
+    @ColumnInfo(name = "series_id") val seriesId: Long? = null,
+    @ColumnInfo(name = "season_number") val seasonNumber: Int? = null,
+    @ColumnInfo(name = "episode_number") val episodeNumber: Int? = null
+)
 
+@Entity(tableName = "sync_metadata")
+data class SyncMetadataEntity(
+    @PrimaryKey
+    @ColumnInfo(name = "provider_id") val providerId: Long,
+    @ColumnInfo(name = "last_live_sync") val lastLiveSync: Long = 0,
+    @ColumnInfo(name = "last_movie_sync") val lastMovieSync: Long = 0,
+    @ColumnInfo(name = "last_series_sync") val lastSeriesSync: Long = 0,
+    @ColumnInfo(name = "last_epg_sync") val lastEpgSync: Long = 0,
+    @ColumnInfo(name = "live_count") val liveCount: Int = 0,
+    @ColumnInfo(name = "movie_count") val movieCount: Int = 0,
+    @ColumnInfo(name = "series_count") val seriesCount: Int = 0,
+    @ColumnInfo(name = "epg_count") val epgCount: Int = 0,
+    @ColumnInfo(name = "last_sync_status") val lastSyncStatus: String = "NONE"
+)

@@ -105,10 +105,27 @@ interface MovieDao {
     @Query("DELETE FROM movies WHERE provider_id = :providerId")
     suspend fun deleteByProvider(providerId: Long)
 
+    @Query("""
+        UPDATE movies 
+        SET watch_progress = (
+            SELECT resume_position_ms FROM playback_history 
+            WHERE playback_history.content_id = movies.id 
+            AND playback_history.content_type = 'MOVIE'
+            AND playback_history.provider_id = :providerId
+        )
+        WHERE id IN (
+            SELECT content_id FROM playback_history 
+            WHERE content_type = 'MOVIE' 
+            AND provider_id = :providerId
+        ) AND provider_id = :providerId
+    """)
+    suspend fun restoreWatchProgress(providerId: Long)
+
     @Transaction
     suspend fun replaceAll(providerId: Long, movies: List<MovieEntity>) {
         deleteByProvider(providerId)
         insertAll(movies)
+        restoreWatchProgress(providerId)
     }
 
     @Query("SELECT category_id, COUNT(*) as item_count FROM movies WHERE provider_id = :providerId AND category_id IS NOT NULL GROUP BY category_id")
@@ -174,6 +191,29 @@ interface EpisodeDao {
 
     @Query("DELETE FROM episodes WHERE series_id = :seriesId")
     suspend fun deleteBySeries(seriesId: Long)
+
+    @Query("""
+        UPDATE episodes 
+        SET watch_progress = (
+            SELECT resume_position_ms FROM playback_history 
+            WHERE playback_history.content_id = episodes.id 
+            AND playback_history.content_type = 'SERIES_EPISODE'
+            AND playback_history.provider_id = episodes.provider_id
+        )
+        WHERE id IN (
+            SELECT content_id FROM playback_history 
+            WHERE content_type = 'SERIES_EPISODE' 
+            AND provider_id = episodes.provider_id
+        ) AND series_id = :seriesId
+    """)
+    suspend fun restoreWatchProgress(seriesId: Long)
+
+    @Transaction
+    suspend fun replaceAll(seriesId: Long, episodes: List<EpisodeEntity>) {
+        deleteBySeries(seriesId)
+        insertAll(episodes)
+        restoreWatchProgress(seriesId)
+    }
 }
 
 @Dao
@@ -270,4 +310,43 @@ interface VirtualGroupDao {
 
     @Query("DELETE FROM virtual_groups WHERE id = :id")
     suspend fun delete(id: Long)
+}
+
+@Dao
+interface PlaybackHistoryDao {
+    @Query("SELECT * FROM playback_history ORDER BY last_watched_at DESC LIMIT :limit")
+    fun getRecentlyWatched(limit: Int = 100): Flow<List<PlaybackHistoryEntity>>
+
+    @Query("SELECT * FROM playback_history WHERE provider_id = :providerId ORDER BY last_watched_at DESC LIMIT :limit")
+    fun getRecentlyWatchedByProvider(providerId: Long, limit: Int = 100): Flow<List<PlaybackHistoryEntity>>
+
+    @Query("SELECT * FROM playback_history WHERE content_id = :contentId AND content_type = :contentType AND provider_id = :providerId")
+    suspend fun get(contentId: Long, contentType: String, providerId: Long): PlaybackHistoryEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrUpdate(history: PlaybackHistoryEntity)
+
+    @Query("DELETE FROM playback_history WHERE content_id = :contentId AND content_type = :contentType AND provider_id = :providerId")
+    suspend fun delete(contentId: Long, contentType: String, providerId: Long)
+
+    @Query("DELETE FROM playback_history")
+    suspend fun deleteAll()
+
+    @Query("DELETE FROM playback_history WHERE provider_id = :providerId")
+    suspend fun deleteByProvider(providerId: Long)
+}
+
+@Dao
+interface SyncMetadataDao {
+    @Query("SELECT * FROM sync_metadata WHERE provider_id = :providerId")
+    fun get(providerId: Long): Flow<SyncMetadataEntity?>
+
+    @Query("SELECT * FROM sync_metadata WHERE provider_id = :providerId")
+    suspend fun getSync(providerId: Long): SyncMetadataEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrUpdate(metadata: SyncMetadataEntity)
+
+    @Query("DELETE FROM sync_metadata WHERE provider_id = :providerId")
+    suspend fun delete(providerId: Long)
 }
