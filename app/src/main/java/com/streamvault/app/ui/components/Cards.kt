@@ -222,7 +222,8 @@ fun MovieCard(
     movie: Movie,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null,
+    isLocked: Boolean = false
 ) {
     FocusableCard(
         onClick = onClick,
@@ -231,7 +232,7 @@ fun MovieCard(
         width = 160.dp,
         height = 240.dp
     ) { isFocused ->
-        if (!movie.posterUrl.isNullOrBlank()) {
+        if (!movie.posterUrl.isNullOrBlank() && !isLocked) {
             AsyncImage(
                 model = movie.posterUrl,
                 contentDescription = movie.name,
@@ -248,7 +249,7 @@ fun MovieCard(
                 .padding(LocalSpacing.current.sm)
         ) {
             Text(
-                text = movie.name,
+                text = if (isLocked) "Locked Movie" else movie.name,
                 style = MaterialTheme.typography.bodySmall,
                 color = if (isFocused) OnBackground else OnSurface,
                 maxLines = 2,
@@ -257,7 +258,7 @@ fun MovieCard(
         }
 
         // Rating badge
-        if (movie.rating > 0f) {
+        if (movie.rating > 0f && !isLocked) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -281,6 +282,19 @@ fun MovieCard(
                 }
             }
         }
+
+        // Lock Overlay
+        if (isLocked) {
+             Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "🔒",
+                    style = MaterialTheme.typography.displayMedium
+                )
+            }
+        }
     }
 }
 
@@ -291,7 +305,8 @@ fun SeriesCard(
     series: Series,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null,
+    isLocked: Boolean = false
 ) {
     FocusableCard(
         onClick = onClick,
@@ -300,7 +315,7 @@ fun SeriesCard(
         width = 160.dp,
         height = 240.dp
     ) { isFocused ->
-        if (!series.posterUrl.isNullOrBlank()) {
+        if (!series.posterUrl.isNullOrBlank() && !isLocked) {
             AsyncImage(
                 model = series.posterUrl,
                 contentDescription = series.name,
@@ -316,12 +331,25 @@ fun SeriesCard(
                 .padding(LocalSpacing.current.sm)
         ) {
             Text(
-                text = series.name,
+                text = if (isLocked) "Locked Series" else series.name,
                 style = MaterialTheme.typography.bodySmall,
                 color = if (isFocused) OnBackground else OnSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+
+        // Lock Overlay
+        if (isLocked) {
+             Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "🔒",
+                    style = MaterialTheme.typography.displayMedium
+                )
+            }
         }
     }
 }

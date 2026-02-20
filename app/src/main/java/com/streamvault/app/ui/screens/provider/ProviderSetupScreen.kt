@@ -88,9 +88,12 @@ class ProviderSetupViewModel @Inject constructor(
         
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, validationError = null, syncProgress = "Connecting...") }
+            // Pass existingProviderId if editing
+            val existingId = if (_uiState.value.isEditing) _uiState.value.existingProviderId else null
+
             when (val result = providerRepository.loginXtream(serverUrl, username, password, name, onProgress = { msg ->
                 _uiState.update { it.copy(syncProgress = msg) }
-            })) {
+            }, id = existingId)) {
                 is Result.Success -> {
                     _uiState.update {
                         it.copy(isLoading = false, loginSuccess = true, error = null, syncProgress = null)
@@ -128,9 +131,12 @@ class ProviderSetupViewModel @Inject constructor(
         
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, validationError = null, syncProgress = "Validating...") }
+            // Pass existingProviderId if editing
+            val existingId = if (_uiState.value.isEditing) _uiState.value.existingProviderId else null
+
             when (val result = providerRepository.validateM3u(url, name, onProgress = { msg ->
                 _uiState.update { it.copy(syncProgress = msg) }
-            })) {
+            }, id = existingId)) {
                 is Result.Success -> {
                     _uiState.update {
                         it.copy(isLoading = false, loginSuccess = true, error = null, syncProgress = null)

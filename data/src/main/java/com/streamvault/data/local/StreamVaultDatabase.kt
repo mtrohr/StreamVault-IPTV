@@ -17,7 +17,7 @@ import com.streamvault.data.local.entity.*
         FavoriteEntity::class,
         VirtualGroupEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class StreamVaultDatabase : RoomDatabase() {
@@ -30,4 +30,19 @@ abstract class StreamVaultDatabase : RoomDatabase() {
     abstract fun programDao(): ProgramDao
     abstract fun favoriteDao(): FavoriteDao
     abstract fun virtualGroupDao(): VirtualGroupDao
+
+    companion object {
+        val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE categories ADD COLUMN is_user_protected INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE channels ADD COLUMN is_user_protected INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE movies ADD COLUMN is_adult INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE movies ADD COLUMN is_user_protected INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE series ADD COLUMN is_adult INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE series ADD COLUMN is_user_protected INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE episodes ADD COLUMN is_adult INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE episodes ADD COLUMN is_user_protected INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+    }
 }

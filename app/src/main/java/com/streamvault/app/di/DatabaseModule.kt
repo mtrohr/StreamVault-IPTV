@@ -23,6 +23,7 @@ object DatabaseModule {
             StreamVaultDatabase::class.java,
             "streamvault.db"
         )
+            .addMigrations(StreamVaultDatabase.MIGRATION_2_3)
             .fallbackToDestructiveMigration()
             .build()
 

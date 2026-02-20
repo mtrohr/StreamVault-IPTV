@@ -26,6 +26,7 @@ class PreferencesRepository @Inject constructor(
         val DEFAULT_VIEW_MODE = stringPreferencesKey("default_view_mode")
         val PARENTAL_CONTROL_LEVEL = intPreferencesKey("parental_control_level")
         val PARENTAL_PIN = stringPreferencesKey("parental_pin")
+        val DEFAULT_CATEGORY_ID = longPreferencesKey("default_category_id")
     }
 
     val lastActiveProviderId: Flow<Long?> = context.dataStore.data.map { preferences ->
@@ -38,7 +39,7 @@ class PreferencesRepository @Inject constructor(
 
     val parentalControlLevel: Flow<Int> = context.dataStore.data
         .map { preferences ->
-            preferences[PreferencesKeys.PARENTAL_CONTROL_LEVEL] ?: 0 // 0 = OFF, 1 = LOCKED, 2 = HIDDEN
+            preferences[PreferencesKeys.PARENTAL_CONTROL_LEVEL] ?: 1 // Default to 1 = LOCKED
         }
 
     val parentalPin: Flow<String> = context.dataStore.data
@@ -72,6 +73,16 @@ class PreferencesRepository @Inject constructor(
 
     suspend fun clearDefaultViewMode() {
         context.dataStore.edit { preferences ->
+        }
+    }
+
+    val defaultCategoryId: Flow<Long?> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.DEFAULT_CATEGORY_ID]
+    }
+
+    suspend fun setDefaultCategory(categoryId: Long) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.DEFAULT_CATEGORY_ID] = categoryId
         }
     }
 }

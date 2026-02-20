@@ -27,6 +27,7 @@ object Routes {
     const val SEARCH = "search"
     const val SERIES_DETAIL = "series_detail/{seriesId}"
     const val WELCOME = "welcome"
+    const val PARENTAL_CONTROL_GROUPS = "parental_control_groups/{providerId}"
 
 
     fun providerSetup(providerId: Long? = null) = "provider_setup?providerId=${providerId ?: -1L}"
@@ -46,6 +47,7 @@ object Routes {
     }
 
     fun seriesDetail(seriesId: Long) = "series_detail/$seriesId"
+    fun parentalControlGroups(providerId: Long) = "parental_control_groups/$providerId"
 }
 
 @Composable
@@ -187,7 +189,29 @@ fun AppNavigation() {
                 onEditProvider = { provider ->
                     navController.navigate(Routes.providerSetup(provider.id))
                 },
+                onNavigateToParentalControl = { providerId ->
+                    navController.navigate(Routes.parentalControlGroups(providerId))
+                },
                 currentRoute = Routes.SETTINGS
+            )
+        }
+
+        composable(
+            route = Routes.PARENTAL_CONTROL_GROUPS,
+            arguments = listOf(
+                navArgument("providerId") { type = NavType.LongType }
+            )
+        ) {
+            com.streamvault.app.ui.screens.settings.parental.ParentalControlGroupScreen(
+                currentRoute = Routes.SETTINGS,
+                onNavigate = { route ->
+                    navController.navigate(route) {
+                        popUpTo(Routes.HOME) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onBack = { navController.popBackStack() }
             )
         }
 

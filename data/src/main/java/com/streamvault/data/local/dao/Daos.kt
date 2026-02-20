@@ -71,6 +71,9 @@ interface ChannelDao {
 
     @Query("SELECT COUNT(*) FROM channels WHERE provider_id = :providerId")
     fun getCount(providerId: Long): Flow<Int>
+
+    @Query("UPDATE channels SET is_user_protected = :isProtected WHERE category_id = :categoryId")
+    suspend fun updateProtectionStatus(categoryId: Long, isProtected: Boolean)
 }
 
 @Dao
@@ -113,6 +116,9 @@ interface MovieDao {
 
     @Query("SELECT COUNT(*) FROM movies WHERE provider_id = :providerId")
     fun getCount(providerId: Long): Flow<Int>
+
+    @Query("UPDATE movies SET is_user_protected = :isProtected WHERE category_id = :categoryId")
+    suspend fun updateProtectionStatus(categoryId: Long, isProtected: Boolean)
 }
 
 @Dao
@@ -146,6 +152,9 @@ interface SeriesDao {
 
     @Query("SELECT COUNT(*) FROM series WHERE provider_id = :providerId")
     fun getCount(providerId: Long): Flow<Int>
+
+    @Query("UPDATE series SET is_user_protected = :isProtected WHERE category_id = :categoryId")
+    suspend fun updateProtectionStatus(categoryId: Long, isProtected: Boolean)
 }
 
 
@@ -183,6 +192,9 @@ interface CategoryDao {
         deleteByProviderAndType(providerId, type)
         insertAll(categories)
     }
+
+    @Query("UPDATE categories SET is_user_protected = :isProtected WHERE category_id = :categoryId")
+    suspend fun updateProtectionStatus(categoryId: Long, isProtected: Boolean)
 }
 
 @Dao

@@ -20,6 +20,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.Icons
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -31,6 +33,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TextButton
 import com.streamvault.app.ui.components.CategoryRow
 import com.streamvault.app.ui.components.ChannelCard
+import com.streamvault.app.ui.components.dialogs.CategoryOptionsDialog
 import com.streamvault.app.ui.components.dialogs.PinDialog
 import com.streamvault.app.ui.components.TopNavBar
 import com.streamvault.app.ui.theme.*
@@ -50,16 +53,18 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import com.streamvault.domain.usecase.GetCustomCategories
 
-// ── ViewModel ──────────────────────────────────────────────────────
+
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val providerRepository: ProviderRepository,
     private val channelRepository: ChannelRepository,
+    private val categoryRepository: com.streamvault.domain.repository.CategoryRepository,
     private val favoriteRepository: com.streamvault.domain.repository.FavoriteRepository,
     private val preferencesRepository: PreferencesRepository,
     private val epgRepository: EpgRepository,
-    private val getCustomCategories: com.streamvault.domain.usecase.GetCustomCategories
+    private val getCustomCategories: com.streamvault.domain.usecase.GetCustomCategories,
+    private val parentalControlManager: com.streamvault.domain.manager.ParentalControlManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -143,21 +148,29 @@ class HomeViewModel @Inject constructor(
     private fun loadCategoriesAndChannels(providerId: Long) {
         categoriesJob?.cancel()
         categoriesJob = viewModelScope.launch {
-            // Combine provider categories with custom categories
+            // Combine provider categories, custom categories, and default category preference
             combine(
                 channelRepository.getCategories(providerId),
-                getCustomCategories()
-            ) { providerCats, customCats ->
-                customCats + providerCats
-            }.collect { categories ->
+                getCustomCategories(),
+                preferencesRepository.defaultCategoryId
+            ) { providerCats, customCats, defaultId ->
+                Triple(customCats + providerCats, defaultId, Unit)
+            }.collect { (categories, defaultId, _) ->
                 _uiState.update { it.copy(categories = categories) }
                 
                 val currentSelected = _uiState.value.selectedCategory
                 
                 if (currentSelected == null && categories.isNotEmpty()) {
-                    // Initial selection
+                    // Initial selection logic:
+                    // 1. Default Category (if set and exists)
+                    // 2. Favorites (id -999, if exists)
+                    // 3. First available category
+                    val defaultCat = defaultId?.let { id -> categories.find { it.id == id } }
                     val favoritesCat = categories.find { it.id == -999L }
-                    if (favoritesCat != null) {
+                    
+                    if (defaultCat != null) {
+                        selectCategory(defaultCat)
+                    } else if (favoritesCat != null) {
                         selectCategory(favoritesCat)
                     } else {
                         selectCategory(categories.first())
@@ -174,10 +187,14 @@ class HomeViewModel @Inject constructor(
                         // Refresh content. Do NOT set isLoading=true here to avoid flickering.
                         loadChannelsForCategory(reselectedCat)
                     } else {
-                         // Category disappeared (deleted group?), fallback to default
+                         // Category disappeared (deleted group?), fallback to default logic
+                        val defaultCat = defaultId?.let { id -> categories.find { it.id == id } }
                         val favoritesCat = categories.find { it.id == -999L }
-                        if (favoritesCat != null) {
-                            selectCategory(favoritesCat)
+                        
+                        if (defaultCat != null) {
+                            selectCategory(defaultCat)
+                        } else if (favoritesCat != null) {
+                             selectCategory(favoritesCat)
                         } else if (categories.isNotEmpty()) {
                             selectCategory(categories.first())
                         }
@@ -190,6 +207,9 @@ class HomeViewModel @Inject constructor(
     fun selectCategory(category: Category) {
         // Fix for Bug 1: Prevent double-click from reloading/clearing if already selected
         if (_uiState.value.selectedCategory?.id == category.id) return
+
+        // Ephemeral Unlock: switching category re-locks everything
+        parentalControlManager.clearUnlockedCategories()
 
         _uiState.update { it.copy(selectedCategory = category, isLoading = true) }
         loadChannelsForCategory(category)
@@ -434,6 +454,33 @@ class HomeViewModel @Inject constructor(
         val storedPin = preferencesRepository.parentalPin.firstOrNull() ?: "0000"
         return pin == storedPin
     }
+
+    fun unlockCategory(category: Category) {
+        parentalControlManager.unlockCategory(category.id)
+    }
+
+    fun setDefaultCategory(category: Category) {
+        viewModelScope.launch {
+            preferencesRepository.setDefaultCategory(category.id)
+            _uiState.update { it.copy(userMessage = "Set '${category.name}' as default") }
+        }
+    }
+
+    fun toggleCategoryLock(category: Category) {
+        viewModelScope.launch {
+            val newStatus = !category.isUserProtected
+            categoryRepository.setCategoryProtection(category.id, newStatus)
+            val msg = if (newStatus) "Locked '${category.name}'" else "Unlocked '${category.name}'"
+            _uiState.update { it.copy(userMessage = msg) }
+        }
+    }
+    fun showCategoryOptions(category: Category) {
+        _uiState.update { it.copy(selectedCategoryForOptions = category) }
+    }
+
+    fun dismissCategoryOptions() {
+        _uiState.update { it.copy(selectedCategoryForOptions = null) }
+    }
 }
 
 data class HomeUiState(
@@ -452,7 +499,8 @@ data class HomeUiState(
     val userMessage: String? = null,
     val showDeleteGroupDialog: Boolean = false,
     val groupToDelete: Category? = null,
-    val parentalControlLevel: Int = 0
+    val parentalControlLevel: Int = 0,
+    val selectedCategoryForOptions: Category? = null
 )
 
 // ── Screen ─────────────────────────────────────────────────────────
@@ -472,6 +520,7 @@ fun HomeScreen(
     var pinError by remember { mutableStateOf<String?>(null) }
     var pendingUnlockCategory by remember { mutableStateOf<Category?>(null) }
     var pendingUnlockChannel by remember { mutableStateOf<Channel?>(null) }
+    var pendingLockToggleCategory by remember { mutableStateOf<Category?>(null) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(uiState.userMessage) {
@@ -496,7 +545,9 @@ fun HomeScreen(
                         pinError = null
                         
                         pendingUnlockCategory?.let { category ->
+                            // Use the sequence: Select (clears old unlocks) -> Unlock (adds this one)
                             viewModel.selectCategory(category)
+                            viewModel.unlockCategory(category)
                             pendingUnlockCategory = null
                         }
                         
@@ -504,12 +555,40 @@ fun HomeScreen(
                              onChannelClick(channel, uiState.selectedCategory, uiState.provider)
                              pendingUnlockChannel = null
                         }
+
+                        pendingLockToggleCategory?.let { category ->
+                            viewModel.toggleCategoryLock(category)
+                            pendingLockToggleCategory = null
+                        }
                     } else {
                         pinError = "Incorrect PIN"
                     }
                 }
             },
             error = pinError
+        )
+    }
+
+    if (uiState.selectedCategoryForOptions != null) {
+        val category = uiState.selectedCategoryForOptions!!
+        CategoryOptionsDialog(
+            category = category,
+            onDismissRequest = { viewModel.dismissCategoryOptions() },
+            onSetAsDefault = {
+                viewModel.setDefaultCategory(category)
+                viewModel.dismissCategoryOptions()
+            },
+            onToggleLock = {
+                viewModel.dismissCategoryOptions()
+                pendingLockToggleCategory = category
+                showPinDialog = true
+            },
+            onDelete = if (category.isVirtual && category.id != -999L) {
+                {
+                    viewModel.dismissCategoryOptions()
+                    viewModel.requestDeleteGroup(category)
+                }
+            } else null
         )
     }
 
@@ -577,7 +656,7 @@ fun HomeScreen(
                             },
                             key = { it.id }
                         ) { category ->
-                            val isLocked = category.isAdult && uiState.parentalControlLevel == 1
+                            val isLocked = (category.isAdult || category.isUserProtected) && uiState.parentalControlLevel == 1
                             
                             CategoryItem(
                                 category = category,
@@ -591,7 +670,7 @@ fun HomeScreen(
                                         viewModel.selectCategory(category) 
                                     }
                                 },
-                                onLongClick = { viewModel.requestDeleteGroup(category) }
+                                onLongClick = { viewModel.showCategoryOptions(category) }
                             )
                         }
                     }
@@ -685,7 +764,7 @@ fun HomeScreen(
                                     items = uiState.filteredChannels,
                                     key = { it.id }
                                 ) { channel ->
-                                    val isLocked = channel.isAdult && uiState.parentalControlLevel == 1
+                                    val isLocked = (channel.isAdult || channel.isUserProtected || (uiState.selectedCategory?.isUserProtected ?: false)) && uiState.parentalControlLevel == 1
                                     
                                     ChannelCard(
                                         channel = channel,
@@ -860,6 +939,7 @@ fun SearchInput(
             .height(56.dp)
             .background(bgColor, RoundedCornerShape(8.dp))
             .border(borderWidth, borderColor, RoundedCornerShape(8.dp))
+            .onFocusChanged { isFocused = it.hasFocus } // Track focus (self or child)
             .clickable { 
                 focusRequester.requestFocus() 
                 keyboardController?.show()
@@ -884,8 +964,7 @@ fun SearchInput(
                     onValueChange = onValueChange,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .focusRequester(focusRequester)
-                        .onFocusChanged { isFocused = it.isFocused },
+                        .focusRequester(focusRequester),
                     textStyle = MaterialTheme.typography.bodyMedium.copy(
                         color = OnSurface
                     ),

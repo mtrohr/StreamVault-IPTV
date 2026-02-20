@@ -205,7 +205,9 @@ class XtreamProvider(
                             streamUrl = buildSeriesStreamUrl(
                                 ep.id.toLongOrNull() ?: 0,
                                 ep.containerExtension
-                            )
+                            ),
+                            isAdult = false,
+                            isUserProtected = false
                         )
                     },
                     episodeCount = episodes.size
@@ -298,7 +300,8 @@ class XtreamProvider(
             catchUpDays = tvArchiveDuration ?: 0,
             providerId = providerId,
             streamUrl = "$serverUrl/live/$username/$password/$streamId.ts",
-            isAdult = isCatAdult
+            isAdult = isCatAdult,
+            isUserProtected = false
         )
     }
 
@@ -311,7 +314,9 @@ class XtreamProvider(
         containerExtension = containerExtension,
         rating = rating5based?.toFloatOrNull() ?: 0f,
         providerId = providerId,
-        streamUrl = buildMovieStreamUrl(streamId, containerExtension)
+        streamUrl = buildMovieStreamUrl(streamId, containerExtension),
+        isAdult = isAdultContent(categoryName),
+        isUserProtected = false
     )
 
     private fun XtreamSeriesItem.toDomain() = Series(
@@ -329,7 +334,9 @@ class XtreamProvider(
         youtubeTrailer = youtubeTrailer,
         episodeRunTime = episodeRunTime,
         lastModified = lastModified?.toLongOrNull() ?: 0L,
-        providerId = providerId
+        providerId = providerId,
+        isAdult = false, // Category name not on series item in Xtream
+        isUserProtected = false
     )
 
     private fun XtreamEpgListing.toDomain(): Program {

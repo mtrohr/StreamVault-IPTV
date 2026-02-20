@@ -23,5 +23,7 @@ data class Movie(
     val isFavorite: Boolean = false,
     val providerId: Long = 0,
     val watchProgress: Long = 0L,
-    val lastWatchedAt: Long = 0L
+    val lastWatchedAt: Long = 0L,
+    val isAdult: Boolean = false,
+    val isUserProtected: Boolean = false
 )

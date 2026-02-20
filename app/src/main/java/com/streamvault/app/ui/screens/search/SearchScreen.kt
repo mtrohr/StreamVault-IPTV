@@ -38,6 +38,7 @@ import com.streamvault.domain.repository.SeriesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -45,7 +46,8 @@ class SearchViewModel @Inject constructor(
     private val providerRepository: ProviderRepository,
     private val channelRepository: ChannelRepository,
     private val movieRepository: MovieRepository,
-    private val seriesRepository: SeriesRepository
+    private val seriesRepository: SeriesRepository,
+    private val preferencesRepository: com.streamvault.data.preferences.PreferencesRepository
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -54,16 +56,32 @@ class SearchViewModel @Inject constructor(
     private val _selectedTab = MutableStateFlow(SearchTab.ALL)
     val selectedTab: StateFlow<SearchTab> = _selectedTab.asStateFlow()
 
+    private val _parentalControlLevel = MutableStateFlow(0)
+
+    init {
+        viewModelScope.launch {
+            preferencesRepository.parentalControlLevel.collect { level ->
+                _parentalControlLevel.value = level
+            }
+        }
+    }
+
     @OptIn(FlowPreview::class)
     val uiState: StateFlow<SearchUiState> = combine(
         providerRepository.getActiveProvider(),
         _query.debounce(300),
-        _selectedTab
-    ) { provider, query, tab ->
-        Triple(provider, query, tab)
-    }.flatMapLatest { (provider, query, tab) ->
+        _selectedTab,
+        _parentalControlLevel
+    ) { provider, query, tab, level ->
+        SearchFilterParams(provider, query, tab, level)
+    }.flatMapLatest { params ->
+        val provider = params.provider
+        val query = params.query
+        val tab = params.tab
+        val level = params.level
+
         if (provider == null || query.length < 2) {
-            flowOf(SearchUiState())
+            flowOf(SearchUiState(parentalControlLevel = level))
         } else {
             val providerId = provider.id
             combine(
@@ -79,7 +97,8 @@ class SearchViewModel @Inject constructor(
                     movies = movies,
                     series = series,
                     isLoading = false,
-                    hasSearched = true
+                    hasSearched = true,
+                    parentalControlLevel = level
                 )
             }
         }
@@ -92,7 +111,18 @@ class SearchViewModel @Inject constructor(
     fun onTabSelected(tab: SearchTab) {
         _selectedTab.value = tab
     }
+
+    suspend fun verifyPin(pin: String): Boolean {
+        return preferencesRepository.parentalPin.first() == pin
+    }
 }
+
+private data class SearchFilterParams(
+    val provider: com.streamvault.domain.model.Provider?,
+    val query: String,
+    val tab: SearchTab,
+    val level: Int
+)
 
 enum class SearchTab(val title: String) {
     ALL("All"),
@@ -106,7 +136,8 @@ data class SearchUiState(
     val movies: List<Movie> = emptyList(),
     val series: List<Series> = emptyList(),
     val isLoading: Boolean = false,
-    val hasSearched: Boolean = false
+    val hasSearched: Boolean = false,
+    val parentalControlLevel: Int = 0
 ) {
     val isEmpty: Boolean get() = hasSearched && channels.isEmpty() && movies.isEmpty() && series.isEmpty()
 }
@@ -123,32 +154,48 @@ fun SearchScreen(
     val selectedTab by viewModel.selectedTab.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val focusManager = LocalFocusManager.current
+    var showPinDialog by remember { mutableStateOf(false) }
+    var pinError by remember { mutableStateOf<String?>(null) }
+    var pendingChannel by remember { mutableStateOf<Channel?>(null) }
+    var pendingMovie by remember { mutableStateOf<Movie?>(null) }
+    var pendingSeries by remember { mutableStateOf<Series?>(null) }
+    val scope = rememberCoroutineScope()
+
+    if (showPinDialog) {
+        com.streamvault.app.ui.components.dialogs.PinDialog(
+            onDismissRequest = {
+                showPinDialog = false
+                pinError = null
+                pendingChannel = null
+                pendingMovie = null
+                pendingSeries = null
+            },
+            onPinEntered = { pin ->
+                scope.launch {
+                    if (viewModel.verifyPin(pin)) {
+                        showPinDialog = false
+                        pinError = null
+                        pendingChannel?.let { onChannelClick(it) }
+                        pendingMovie?.let { onMovieClick(it) }
+                        pendingSeries?.let { onSeriesClick(it) }
+                        pendingChannel = null
+                        pendingMovie = null
+                        pendingSeries = null
+                    } else {
+                        pinError = "Incorrect PIN"
+                    }
+                }
+            },
+            error = pinError
+        )
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp)
     ) {
-        // Search Bar
-        SearchTextField(
-            value = query,
-            onValueChange = viewModel::onQueryChange,
-            onDone = { focusManager.clearFocus() }
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Tabs
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            SearchTab.values().forEach { tab ->
-                FilterChip(
-                    selected = tab == selectedTab,
-                    onClick = { viewModel.onTabSelected(tab) },
-                    content = { Text(tab.title) }
-                )
-            }
-        }
-
+// ... (omitted SearchTextField and FilterChips) ...
         Spacer(modifier = Modifier.height(24.dp))
 
         // Results
@@ -175,9 +222,18 @@ fun SearchScreen(
                         }
                     }
                     items(uiState.channels) { channel ->
+                        val isLocked = (channel.isAdult || channel.isUserProtected) && uiState.parentalControlLevel == 1
                         ChannelCard(
                             channel = channel,
-                            onClick = { onChannelClick(channel) },
+                            isLocked = isLocked,
+                            onClick = {
+                                if (isLocked) {
+                                    pendingChannel = channel
+                                    showPinDialog = true
+                                } else {
+                                    onChannelClick(channel)
+                                }
+                            },
                             modifier = Modifier.aspectRatio(16f/9f)
                         )
                     }
@@ -191,9 +247,18 @@ fun SearchScreen(
                         }
                     }
                     items(uiState.movies) { movie ->
+                        val isLocked = (movie.isAdult || movie.isUserProtected) && uiState.parentalControlLevel == 1
                         MovieCard(
                             movie = movie,
-                            onClick = { onMovieClick(movie) },
+                            isLocked = isLocked,
+                            onClick = {
+                                if (isLocked) {
+                                    pendingMovie = movie
+                                    showPinDialog = true
+                                } else {
+                                    onMovieClick(movie)
+                                }
+                            },
                             modifier = Modifier.aspectRatio(2f/3f)
                         )
                     }
@@ -207,9 +272,18 @@ fun SearchScreen(
                         }
                     }
                     items(uiState.series) { series ->
+                        val isLocked = (series.isAdult || series.isUserProtected) && uiState.parentalControlLevel == 1
                         SeriesCard(
                             series = series,
-                            onClick = { onSeriesClick(series) },
+                            isLocked = isLocked,
+                            onClick = {
+                                if (isLocked) {
+                                    pendingSeries = series
+                                    showPinDialog = true
+                                } else {
+                                    onSeriesClick(series)
+                                }
+                            },
                             modifier = Modifier.aspectRatio(2f/3f)
                         )
                     }

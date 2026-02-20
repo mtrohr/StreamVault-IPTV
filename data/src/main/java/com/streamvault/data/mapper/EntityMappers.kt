@@ -53,7 +53,9 @@ fun ChannelEntity.toDomain() = Channel(
     number = number,
     catchUpSupported = catchUpSupported,
     catchUpDays = catchUpDays,
-    providerId = providerId
+    providerId = providerId,
+    isAdult = isAdult,
+    isUserProtected = isUserProtected
 )
 
 fun Channel.toEntity() = ChannelEntity(
@@ -69,7 +71,9 @@ fun Channel.toEntity() = ChannelEntity(
     number = number,
     catchUpSupported = catchUpSupported,
     catchUpDays = catchUpDays,
-    providerId = providerId
+    providerId = providerId,
+    isAdult = isAdult,
+    isUserProtected = isUserProtected
 )
 
 // ── Movie ──────────────────────────────────────────────────────────
@@ -96,7 +100,9 @@ fun MovieEntity.toDomain() = Movie(
     youtubeTrailer = youtubeTrailer,
     providerId = providerId,
     watchProgress = watchProgress,
-    lastWatchedAt = lastWatchedAt
+    lastWatchedAt = lastWatchedAt,
+    isAdult = isAdult,
+    isUserProtected = isUserProtected
 )
 
 fun Movie.toEntity() = MovieEntity(
@@ -122,7 +128,9 @@ fun Movie.toEntity() = MovieEntity(
     youtubeTrailer = youtubeTrailer,
     providerId = providerId,
     watchProgress = watchProgress,
-    lastWatchedAt = lastWatchedAt
+    lastWatchedAt = lastWatchedAt,
+    isAdult = isAdult,
+    isUserProtected = isUserProtected
 )
 
 // ── Series ─────────────────────────────────────────────────────────
@@ -144,7 +152,9 @@ fun SeriesEntity.toDomain() = Series(
     youtubeTrailer = youtubeTrailer,
     episodeRunTime = episodeRunTime,
     lastModified = lastModified,
-    providerId = providerId
+    providerId = providerId,
+    isAdult = isAdult,
+    isUserProtected = isUserProtected
 )
 
 fun Series.toEntity() = SeriesEntity(
@@ -165,7 +175,9 @@ fun Series.toEntity() = SeriesEntity(
     youtubeTrailer = youtubeTrailer,
     episodeRunTime = episodeRunTime,
     lastModified = lastModified,
-    providerId = providerId
+    providerId = providerId,
+    isAdult = isAdult,
+    isUserProtected = isUserProtected
 )
 
 // ── Episode ────────────────────────────────────────────────────────
@@ -186,7 +198,9 @@ fun EpisodeEntity.toDomain() = Episode(
     seriesId = seriesId,
     providerId = providerId,
     watchProgress = watchProgress,
-    lastWatchedAt = lastWatchedAt
+    lastWatchedAt = lastWatchedAt,
+    isAdult = isAdult,
+    isUserProtected = isUserProtected
 )
 
 fun Episode.toEntity() = EpisodeEntity(
@@ -206,7 +220,9 @@ fun Episode.toEntity() = EpisodeEntity(
     seriesId = seriesId,
     providerId = providerId,
     watchProgress = watchProgress,
-    lastWatchedAt = lastWatchedAt
+    lastWatchedAt = lastWatchedAt,
+    isAdult = isAdult,
+    isUserProtected = isUserProtected
 )
 
 // ── Category ───────────────────────────────────────────────────────
@@ -215,7 +231,9 @@ fun CategoryEntity.toDomain() = com.streamvault.domain.model.Category(
     id = categoryId,
     name = name,
     parentId = parentId,
-    type = try { ContentType.valueOf(type) } catch (_: Exception) { ContentType.LIVE }
+    type = try { ContentType.valueOf(type) } catch (_: Exception) { ContentType.LIVE },
+    isAdult = isAdult,
+    isUserProtected = isUserProtected
 )
 
 fun com.streamvault.domain.model.Category.toEntity(providerId: Long) = CategoryEntity(
@@ -223,7 +241,9 @@ fun com.streamvault.domain.model.Category.toEntity(providerId: Long) = CategoryE
     name = name,
     parentId = parentId,
     type = type.name,
-    providerId = providerId
+    providerId = providerId,
+    isAdult = isAdult,
+    isUserProtected = isUserProtected
 )
 
 // ── Program ────────────────────────────────────────────────────────

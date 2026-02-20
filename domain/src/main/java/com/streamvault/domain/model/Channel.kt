@@ -16,5 +16,6 @@ data class Channel(
     val providerId: Long = 0,
     val currentProgram: Program? = null,
     val nextProgram: Program? = null,
-    val isAdult: Boolean = false
+    val isAdult: Boolean = false,
+    val isUserProtected: Boolean = false
 )

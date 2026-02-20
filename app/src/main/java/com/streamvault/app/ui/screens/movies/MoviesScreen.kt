@@ -26,7 +26,8 @@ import javax.inject.Inject
 @HiltViewModel
 class MoviesViewModel @Inject constructor(
     private val providerRepository: ProviderRepository,
-    private val movieRepository: MovieRepository
+    private val movieRepository: MovieRepository,
+    private val preferencesRepository: com.streamvault.data.preferences.PreferencesRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MoviesUiState())
@@ -45,12 +46,23 @@ class MoviesViewModel @Inject constructor(
                     }
                 }
         }
+
+        viewModelScope.launch {
+            preferencesRepository.parentalControlLevel.collect { level ->
+                _uiState.update { it.copy(parentalControlLevel = level) }
+            }
+        }
+    }
+
+    suspend fun verifyPin(pin: String): Boolean {
+        return preferencesRepository.parentalPin.first() == pin
     }
 }
 
 data class MoviesUiState(
     val moviesByCategory: Map<String, List<Movie>> = emptyMap(),
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    val parentalControlLevel: Int = 0
 )
 
 @Composable
@@ -61,6 +73,33 @@ fun MoviesScreen(
     viewModel: MoviesViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showPinDialog by remember { mutableStateOf(false) }
+    var pinError by remember { mutableStateOf<String?>(null) }
+    var pendingMovie by remember { mutableStateOf<Movie?>(null) }
+    val scope = rememberCoroutineScope()
+
+    if (showPinDialog) {
+        com.streamvault.app.ui.components.dialogs.PinDialog(
+            onDismissRequest = {
+                showPinDialog = false
+                pinError = null
+                pendingMovie = null
+            },
+            onPinEntered = { pin ->
+                scope.launch {
+                    if (viewModel.verifyPin(pin)) {
+                        showPinDialog = false
+                        pinError = null
+                        pendingMovie?.let { onMovieClick(it) }
+                        pendingMovie = null
+                    } else {
+                        pinError = "Incorrect PIN"
+                    }
+                }
+            },
+            error = pinError
+        )
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopNavBar(currentRoute = currentRoute, onNavigate = onNavigate)
@@ -87,7 +126,19 @@ fun MoviesScreen(
                     key = { it.key }
                 ) { (categoryName, movies) ->
                     CategoryRow(title = categoryName, items = movies) { movie ->
-                        MovieCard(movie = movie, onClick = { onMovieClick(movie) })
+                        val isLocked = (movie.isAdult || movie.isUserProtected) && uiState.parentalControlLevel == 1
+                        MovieCard(
+                            movie = movie,
+                            isLocked = isLocked,
+                            onClick = {
+                                if (isLocked) {
+                                    pendingMovie = movie
+                                    showPinDialog = true
+                                } else {
+                                    onMovieClick(movie)
+                                }
+                            }
+                        )
                     }
                 }
             }

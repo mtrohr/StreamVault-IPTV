@@ -37,6 +37,9 @@ abstract class RepositoryModule {
     abstract fun bindFavoriteRepository(impl: FavoriteRepositoryImpl): FavoriteRepository
 
     @Binds @Singleton
+    abstract fun bindCategoryRepository(impl: CategoryRepositoryImpl): CategoryRepository
+
+    @Binds @Singleton
     abstract fun bindPlayerEngine(impl: Media3PlayerEngine): PlayerEngine
 
     companion object {

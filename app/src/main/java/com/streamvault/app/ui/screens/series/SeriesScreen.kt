@@ -27,7 +27,8 @@ import javax.inject.Inject
 @HiltViewModel
 class SeriesViewModel @Inject constructor(
     private val providerRepository: ProviderRepository,
-    private val seriesRepository: SeriesRepository
+    private val seriesRepository: SeriesRepository,
+    private val preferencesRepository: com.streamvault.data.preferences.PreferencesRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SeriesUiState())
@@ -46,12 +47,23 @@ class SeriesViewModel @Inject constructor(
                     }
                 }
         }
+
+        viewModelScope.launch {
+            preferencesRepository.parentalControlLevel.collect { level ->
+                _uiState.update { it.copy(parentalControlLevel = level) }
+            }
+        }
+    }
+
+    suspend fun verifyPin(pin: String): Boolean {
+        return preferencesRepository.parentalPin.first() == pin
     }
 }
 
 data class SeriesUiState(
     val seriesByCategory: Map<String, List<Series>> = emptyMap(),
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    val parentalControlLevel: Int = 0
 )
 
 @Composable
@@ -62,6 +74,33 @@ fun SeriesScreen(
     viewModel: SeriesViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showPinDialog by remember { mutableStateOf(false) }
+    var pinError by remember { mutableStateOf<String?>(null) }
+    var pendingSeriesId by remember { mutableStateOf<Long?>(null) }
+    val scope = rememberCoroutineScope()
+
+    if (showPinDialog) {
+        com.streamvault.app.ui.components.dialogs.PinDialog(
+            onDismissRequest = {
+                showPinDialog = false
+                pinError = null
+                pendingSeriesId = null
+            },
+            onPinEntered = { pin ->
+                scope.launch {
+                    if (viewModel.verifyPin(pin)) {
+                        showPinDialog = false
+                        pinError = null
+                        pendingSeriesId?.let { onSeriesClick(it) }
+                        pendingSeriesId = null
+                    } else {
+                        pinError = "Incorrect PIN"
+                    }
+                }
+            },
+            error = pinError
+        )
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopNavBar(currentRoute = currentRoute, onNavigate = onNavigate)
@@ -88,10 +127,17 @@ fun SeriesScreen(
                     key = { it.key }
                 ) { (categoryName, seriesList) ->
                     CategoryRow(title = categoryName, items = seriesList) { series ->
+                        val isLocked = (series.isAdult || series.isUserProtected) && uiState.parentalControlLevel == 1
                         SeriesCard(
                             series = series,
+                            isLocked = isLocked,
                             onClick = {
-                                onSeriesClick(series.id)
+                                if (isLocked) {
+                                    pendingSeriesId = series.id
+                                    showPinDialog = true
+                                } else {
+                                    onSeriesClick(series.id)
+                                }
                             }
                         )
                     }

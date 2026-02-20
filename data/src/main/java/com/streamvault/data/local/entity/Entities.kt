@@ -50,7 +50,8 @@ data class ChannelEntity(
     @ColumnInfo(name = "catch_up_supported") val catchUpSupported: Boolean = false,
     @ColumnInfo(name = "catch_up_days") val catchUpDays: Int = 0,
     @ColumnInfo(name = "provider_id") val providerId: Long = 0,
-    @ColumnInfo(name = "is_adult") val isAdult: Boolean = false
+    @ColumnInfo(name = "is_adult") val isAdult: Boolean = false,
+    @ColumnInfo(name = "is_user_protected") val isUserProtected: Boolean = false
 )
 
 @Entity(
@@ -85,7 +86,9 @@ data class MovieEntity(
     @ColumnInfo(name = "youtube_trailer") val youtubeTrailer: String? = null,
     @ColumnInfo(name = "provider_id") val providerId: Long = 0,
     @ColumnInfo(name = "watch_progress") val watchProgress: Long = 0L,
-    @ColumnInfo(name = "last_watched_at") val lastWatchedAt: Long = 0L
+    @ColumnInfo(name = "last_watched_at") val lastWatchedAt: Long = 0L,
+    @ColumnInfo(name = "is_adult") val isAdult: Boolean = false,
+    @ColumnInfo(name = "is_user_protected") val isUserProtected: Boolean = false
 )
 
 @Entity(
@@ -115,7 +118,9 @@ data class SeriesEntity(
     @ColumnInfo(name = "youtube_trailer") val youtubeTrailer: String? = null,
     @ColumnInfo(name = "episode_run_time") val episodeRunTime: String? = null,
     @ColumnInfo(name = "last_modified") val lastModified: Long = 0L,
-    @ColumnInfo(name = "provider_id") val providerId: Long = 0
+    @ColumnInfo(name = "provider_id") val providerId: Long = 0,
+    @ColumnInfo(name = "is_adult") val isAdult: Boolean = false,
+    @ColumnInfo(name = "is_user_protected") val isUserProtected: Boolean = false
 )
 
 @Entity(
@@ -144,7 +149,9 @@ data class EpisodeEntity(
     @ColumnInfo(name = "series_id") val seriesId: Long = 0,
     @ColumnInfo(name = "provider_id") val providerId: Long = 0,
     @ColumnInfo(name = "watch_progress") val watchProgress: Long = 0L,
-    @ColumnInfo(name = "last_watched_at") val lastWatchedAt: Long = 0L
+    @ColumnInfo(name = "last_watched_at") val lastWatchedAt: Long = 0L,
+    @ColumnInfo(name = "is_adult") val isAdult: Boolean = false,
+    @ColumnInfo(name = "is_user_protected") val isUserProtected: Boolean = false
 )
 
 @Entity(
@@ -162,7 +169,8 @@ data class CategoryEntity(
     @ColumnInfo(name = "parent_id") val parentId: Long? = null,
     val type: String = "LIVE", // LIVE, MOVIE, SERIES
     @ColumnInfo(name = "provider_id") val providerId: Long = 0,
-    @ColumnInfo(name = "is_adult") val isAdult: Boolean = false
+    @ColumnInfo(name = "is_adult") val isAdult: Boolean = false,
+    @ColumnInfo(name = "is_user_protected") val isUserProtected: Boolean = false
 )
 
 @Entity(

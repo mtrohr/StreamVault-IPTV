@@ -3,6 +3,8 @@ package com.streamvault.data.repository
 import com.streamvault.data.local.dao.CategoryDao
 import com.streamvault.data.local.dao.ChannelDao
 import com.streamvault.data.local.entity.CategoryCount
+import com.streamvault.data.local.entity.CategoryEntity
+import com.streamvault.data.local.entity.ChannelEntity
 import com.streamvault.data.mapper.toDomain
 import com.streamvault.domain.model.Category
 import com.streamvault.domain.model.Channel
@@ -20,22 +22,36 @@ import javax.inject.Singleton
 class ChannelRepositoryImpl @Inject constructor(
     private val channelDao: ChannelDao,
     private val categoryDao: CategoryDao,
-    private val preferencesRepository: PreferencesRepository
+    private val preferencesRepository: PreferencesRepository,
+    private val parentalControlManager: com.streamvault.domain.manager.ParentalControlManager
 ) : ChannelRepository {
 
     override fun getChannels(providerId: Long): Flow<List<Channel>> =
         combine(
             channelDao.getByProvider(providerId),
-            preferencesRepository.parentalControlLevel
-        ) { entities, level ->
-            // Level 2 = HIDDEN. If hidden, filter out adult channels.
-            if (level == 2) {
-                entities.filter { !it.isAdult }
+            preferencesRepository.parentalControlLevel,
+            parentalControlManager.unlockedCategories
+        ) { entities, level, unlockedCats ->
+            // Level 2 = HIDDEN. 
+            // If hidden, filter out adult/protected UNLESS they are in unlockedCats.
+            val filtered = if (level == 2) {
+                entities.filter { entity ->
+                    val isUnlocked = entity.categoryId != null && unlockedCats.contains(entity.categoryId)
+                    (!entity.isAdult && !entity.isUserProtected) || isUnlocked
+                }
             } else {
                 entities
             }
-        }.map { entities ->
-            entities.map { it.toDomain() }
+            
+            filtered.map { entity ->
+                val domain = entity.toDomain()
+                // If category is unlocked, mark channel as NOT protected/ADULT for this session
+                if (entity.categoryId != null && unlockedCats.contains(entity.categoryId)) {
+                    domain.copy(isUserProtected = false, isAdult = false)
+                } else {
+                    domain
+                }
+            }
         }
 
     override fun getChannelsByCategory(providerId: Long, categoryId: Long): Flow<List<Channel>> =
@@ -45,24 +61,39 @@ class ChannelRepositoryImpl @Inject constructor(
             } else {
                 channelDao.getByCategory(providerId, categoryId)
             },
-            preferencesRepository.parentalControlLevel
-        ) { entities, level ->
-            // Level 2 = HIDDEN. If hidden, filter out adult channels.
-            if (level == 2) {
-                entities.filter { !it.isAdult }
+            preferencesRepository.parentalControlLevel,
+            parentalControlManager.unlockedCategories
+        ) { entities, level, unlockedCats ->
+             // Level 2 = HIDDEN. 
+            // If hidden, filter out adult/protected UNLESS they are in unlockedCats.
+            val filtered = if (level == 2) {
+                entities.filter { entity ->
+                    val isUnlocked = entity.categoryId != null && unlockedCats.contains(entity.categoryId)
+                    (!entity.isAdult && !entity.isUserProtected) || isUnlocked
+                }
             } else {
                 entities
             }
-        }.map { entities ->
-            entities.map { it.toDomain() }
+            
+            filtered.map { entity ->
+                val domain = entity.toDomain()
+                // If category is unlocked, mark channel as NOT protected/ADULT for this session
+                if (entity.categoryId != null && unlockedCats.contains(entity.categoryId)) {
+                    domain.copy(isUserProtected = false, isAdult = false)
+                } else {
+                    domain
+                }
+            }
         }
 
     override fun getCategories(providerId: Long): Flow<List<Category>> =
         combine(
             categoryDao.getByProviderAndType(providerId, ContentType.LIVE.name),
             channelDao.getCategoryCounts(providerId),
-            channelDao.getCount(providerId)
-        ) { categories, counts, totalCount ->
+            channelDao.getCount(providerId),
+            preferencesRepository.parentalControlLevel,
+            parentalControlManager.unlockedCategories
+        ) { categories: List<CategoryEntity>, counts: List<CategoryCount>, totalCount: Int, level: Int, unlockedCats: Set<Long> ->
             android.util.Log.d("ChannelRepo", "getCategories: ${categories.size} cats, ${counts.size} counts, total: $totalCount")
             val countMap = counts.associate { it.categoryId to it.item_count }
             
@@ -74,14 +105,52 @@ class ChannelRepositoryImpl @Inject constructor(
             )
             
             val mappedCategories = categories.map { entity ->
-                entity.toDomain().copy(count = countMap[entity.categoryId] ?: 0)
+                val domain = entity.toDomain().copy(count = countMap[entity.categoryId] ?: 0)
+                // If unlocked, update domain model (though Category model doesn't strictly need it if we trust the check elsewhere, 
+                // but nice for UI to show 'unlocked' icon if we had one. For now just passing through).
+                 if (unlockedCats.contains(entity.categoryId)) {
+                    domain.copy(isUserProtected = false)
+                } else {
+                    domain
+                }
             }
             
-            listOf(allChannelsCategory) + mappedCategories
+            // Filter categories if level is HIDDEN
+            val filteredCategories = if (level == 2) {
+                mappedCategories.filter { category ->
+                    (!category.isAdult && !category.isUserProtected) || unlockedCats.contains(category.id)
+                }
+            } else {
+                mappedCategories
+            }
+            
+            listOf(allChannelsCategory) + filteredCategories
         }
 
     override fun searchChannels(providerId: Long, query: String): Flow<List<Channel>> =
-        channelDao.search(providerId, query).map { entities -> entities.map { it.toDomain() } }
+        combine(
+            channelDao.search(providerId, query),
+            preferencesRepository.parentalControlLevel,
+            parentalControlManager.unlockedCategories
+        ) { entities, level, unlockedCats ->
+            val filtered = if (level == 2) {
+                entities.filter { entity ->
+                     val isUnlocked = entity.categoryId != null && unlockedCats.contains(entity.categoryId)
+                    (!entity.isAdult && !entity.isUserProtected) || isUnlocked
+                }
+            } else {
+                entities
+            }
+            
+             filtered.map { entity ->
+                val domain = entity.toDomain()
+                if (entity.categoryId != null && unlockedCats.contains(entity.categoryId)) {
+                    domain.copy(isUserProtected = false, isAdult = false)
+                } else {
+                    domain
+                }
+            }
+        }
 
     override suspend fun getChannel(channelId: Long): Channel? =
         channelDao.getById(channelId)?.toDomain()

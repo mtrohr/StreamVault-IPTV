@@ -138,6 +138,7 @@ fun SettingsScreen(
     onNavigate: (String) -> Unit,
     onAddProvider: () -> Unit = {},
     onEditProvider: (Provider) -> Unit = {},
+    onNavigateToParentalControl: (Long) -> Unit = {},
     currentRoute: String,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
@@ -213,7 +214,8 @@ fun SettingsScreen(
                         onConnect = { viewModel.setActiveProvider(provider.id) },
                         onRefresh = { viewModel.refreshProvider(provider.id) },
                         onDelete = { viewModel.deleteProvider(provider.id) },
-                        onEdit = { onEditProvider(provider) }
+                        onEdit = { onEditProvider(provider) },
+                        onParentalControl = { onNavigateToParentalControl(provider.id) }
                     )
                 }
 
@@ -248,6 +250,28 @@ fun SettingsScreen(
                         )
                     }
                 }
+            }
+
+            // Parental Control
+            item {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = "Parental Control",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Primary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                ParentalControlCard(
+                    level = uiState.parentalControlLevel,
+                    onChangeLevel = { 
+                        pendingAction = ParentalAction.ChangeLevel
+                        showPinDialog = true
+                    },
+                    onChangePin = {
+                        pendingAction = ParentalAction.ChangePin
+                        showPinDialog = true
+                    }
+                )
             }
 
             // Decoder settings
@@ -400,7 +424,8 @@ private fun LevelOption(level: Int, text: String, currentLevel: Int, onSelect: (
             onClick = onSelect
         )
         Spacer(modifier = Modifier.width(8.dp))
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = OnBackground)
+        // Explicitly use Black for dialog text as it likely has a light background
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = Color.Black)
     }
 }
 
@@ -435,8 +460,23 @@ private fun ParentalControlCard(
                     color = if (level == 0) ErrorColor else Primary
                 )
             }
-            Button(onClick = onChangeLevel) {
-                Text("Change")
+            
+            // Custom Focusable Button for "Change"
+            Surface(
+                onClick = onChangeLevel,
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Secondary.copy(alpha = 0.2f),
+                    focusedContainerColor = Secondary.copy(alpha = 0.5f),
+                    contentColor = Secondary,
+                    focusedContentColor = Secondary
+                )
+            ) {
+                Text(
+                    text = "Change",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                )
             }
         }
         
@@ -448,8 +488,23 @@ private fun ParentalControlCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Parental PIN", style = MaterialTheme.typography.bodyLarge, color = OnBackground)
-            OutlinedButton(onClick = onChangePin) {
-                Text("Change PIN")
+            
+            // Custom Focusable Button for "Change PIN"
+            Surface(
+                onClick = onChangePin,
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Primary.copy(alpha = 0.2f),
+                    focusedContainerColor = Primary.copy(alpha = 0.5f),
+                    contentColor = Primary,
+                    focusedContentColor = Primary
+                )
+            ) {
+                Text(
+                    text = "Change PIN",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                )
             }
         }
     }
@@ -463,7 +518,9 @@ private fun ProviderSettingsCard(
     onConnect: () -> Unit,
     onRefresh: () -> Unit,
     onDelete: () -> Unit,
-    onEdit: () -> Unit) {
+    onEdit: () -> Unit,
+    onParentalControl: () -> Unit
+) {
     // Use Column layout - provider info + buttons below as separate focusable items
     Column(
         modifier = Modifier
@@ -593,6 +650,24 @@ private fun ProviderSettingsCard(
                     color = ErrorColor,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                 )
+            }
+
+            if (isActive) {
+                Surface(
+                    onClick = onParentalControl,
+                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Primary.copy(alpha = 0.15f),
+                        focusedContainerColor = Primary.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Text(
+                        text = "🛡️ Parental Control",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                    )
+                }
             }
         }
     }

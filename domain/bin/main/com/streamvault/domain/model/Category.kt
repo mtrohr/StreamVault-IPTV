@@ -7,5 +7,6 @@ data class Category(
     val type: ContentType = ContentType.LIVE,
     val isVirtual: Boolean = false,
     val count: Int = 0,
-    val isAdult: Boolean = false
+    val isAdult: Boolean = false,
+    val isUserProtected: Boolean = false
 )

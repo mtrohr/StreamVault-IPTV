@@ -82,23 +82,30 @@ class ProviderRepositoryImpl @Inject constructor(
         username: String,
         password: String,
         name: String,
-        onProgress: ((String) -> Unit)?
+        onProgress: ((String) -> Unit)?,
+        id: Long?
     ): Result<Provider> {
         onProgress?.invoke("Authenticating...")
         val provider = createXtreamProvider(0, serverUrl, username, password)
         return when (val authResult = provider.authenticate()) {
             is Result.Success -> {
-                // Check if provider already exists
-                val existingProvider = providerDao.getByUrlAndUser(serverUrl, username)
+                // Check if provider already exists by ID first, then by URL/User
+                val existingProvider = if (id != null) {
+                    providerDao.getById(id)
+                } else {
+                    providerDao.getByUrlAndUser(serverUrl, username)
+                }
                 
                 val providerData = if (existingProvider != null) {
                     onProgress?.invoke("Updating existing provider...")
                     // Update existing provider details
                     val updated = existingProvider.copy(
                         name = name.ifBlank { existingProvider.name },
+                        serverUrl = serverUrl,
+                        username = username,
                         password = password, // Update password if changed
                         isActive = true,
-                        lastSyncedAt = 0 // Reset sync time to force update? Or keep?
+                        lastSyncedAt = 0 // Reset sync time to force update
                     )
                     providerDao.update(updated)
                     updated.toDomain()
@@ -139,19 +146,26 @@ class ProviderRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun validateM3u(url: String, name: String, onProgress: ((String) -> Unit)?): Result<Provider> = try {
+    override suspend fun validateM3u(url: String, name: String, onProgress: ((String) -> Unit)?, id: Long?): Result<Provider> = try {
         onProgress?.invoke("Validating playlist URL...")
         val providerName = name.ifBlank { 
             url.substringAfterLast("/").substringBefore("?").ifBlank { "M3U Playlist" } 
         }
         
-        // Check for existing
-        val existingProvider = providerDao.getByUrlAndUser(url, "")
+        // Check for existing by ID first, then by URL
+        val existingProvider = if (id != null) {
+            providerDao.getById(id)
+        } else {
+            providerDao.getByUrlAndUser(url, "")
+        }
         
         val providerData = if (existingProvider != null) {
             val updated = existingProvider.copy(
                 name = if (name.isNotBlank()) name else existingProvider.name,
-                isActive = true
+                serverUrl = url,
+                m3uUrl = url,
+                isActive = true,
+                lastSyncedAt = 0 // Reset sync time
             )
             providerDao.update(updated)
             updated.toDomain()
