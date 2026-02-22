@@ -188,6 +188,15 @@ fun ChannelCard(
                         Text("★", style = MaterialTheme.typography.labelSmall, color = Color.Black)
                     }
                 }
+                if (channel.catchUpSupported) {
+                    Box(
+                        modifier = Modifier
+                            .background(Primary, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("📼", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    }
+                }
                 Box(
                     modifier = Modifier
                         .background(AccentRed, RoundedCornerShape(4.dp))

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 4,
-    "identityHash": "b14c1de6571c191aec43a79a67ebc1ef",
+    "identityHash": "55a757cfaa70d7e240ef719680f48d09",
     "entities": [
       {
         "tableName": "providers",
@@ -115,7 +115,7 @@
       },
       {
         "tableName": "channels",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `stream_id` INTEGER NOT NULL, `name` TEXT NOT NULL, `logo_url` TEXT, `group_title` TEXT, `category_id` INTEGER, `category_name` TEXT, `stream_url` TEXT NOT NULL, `epg_channel_id` TEXT, `number` INTEGER NOT NULL, `catch_up_supported` INTEGER NOT NULL, `catch_up_days` INTEGER NOT NULL, `provider_id` INTEGER NOT NULL, `is_adult` INTEGER NOT NULL, `is_user_protected` INTEGER NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `stream_id` INTEGER NOT NULL, `name` TEXT NOT NULL, `logo_url` TEXT, `group_title` TEXT, `category_id` INTEGER, `category_name` TEXT, `stream_url` TEXT NOT NULL, `epg_channel_id` TEXT, `number` INTEGER NOT NULL, `catch_up_supported` INTEGER NOT NULL, `catch_up_days` INTEGER NOT NULL, `catchUpSource` TEXT, `provider_id` INTEGER NOT NULL, `is_adult` INTEGER NOT NULL, `is_user_protected` INTEGER NOT NULL)",
         "fields": [
           {
             "fieldPath": "id",
@@ -188,6 +188,12 @@
             "columnName": "catch_up_days",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "catchUpSource",
+            "columnName": "catchUpSource",
+            "affinity": "TEXT",
+            "notNull": false
           },
           {
             "fieldPath": "providerId",
@@ -1273,7 +1279,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b14c1de6571c191aec43a79a67ebc1ef')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '55a757cfaa70d7e240ef719680f48d09')"
     ]
   }
 }

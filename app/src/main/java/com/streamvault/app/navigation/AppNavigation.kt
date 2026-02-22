@@ -23,7 +23,7 @@ object Routes {
     const val SERIES = "series"
     const val FAVORITES = "favorites"
     const val SETTINGS = "settings"
-    const val PLAYER = "player/{streamUrl}?title={title}&channelId={channelId}&internalId={internalId}&categoryId={categoryId}&providerId={providerId}&isVirtual={isVirtual}"
+    const val PLAYER = "player/{streamUrl}?title={title}&channelId={channelId}&internalId={internalId}&categoryId={categoryId}&providerId={providerId}&isVirtual={isVirtual}&contentType={contentType}"
     const val SEARCH = "search"
     const val SERIES_DETAIL = "series_detail/{seriesId}"
     const val WELCOME = "welcome"
@@ -39,11 +39,12 @@ object Routes {
         internalId: Long = -1L,
         categoryId: Long? = null,
         providerId: Long? = null,
-        isVirtual: Boolean = false
+        isVirtual: Boolean = false,
+        contentType: String = "LIVE"
     ): String {
         val encodedUrl = java.net.URLEncoder.encode(streamUrl, "UTF-8")
         val encodedTitle = java.net.URLEncoder.encode(title, "UTF-8")
-        return "player/$encodedUrl?title=$encodedTitle&channelId=${channelId ?: ""}&internalId=$internalId&categoryId=${categoryId ?: -1L}&providerId=${providerId ?: -1L}&isVirtual=$isVirtual"
+        return "player/$encodedUrl?title=$encodedTitle&channelId=${channelId ?: ""}&internalId=$internalId&categoryId=${categoryId ?: -1L}&providerId=${providerId ?: -1L}&isVirtual=$isVirtual&contentType=$contentType"
     }
 
     fun seriesDetail(seriesId: Long) = "series_detail/$seriesId"
@@ -103,7 +104,8 @@ fun AppNavigation() {
                             internalId = channel.id,
                             categoryId = category?.id,
                             providerId = provider?.id,
-                            isVirtual = category?.isVirtual == true
+                            isVirtual = category?.isVirtual == true,
+                            contentType = "LIVE"
                         )
                     )
                 },
@@ -122,7 +124,14 @@ fun AppNavigation() {
         composable(Routes.MOVIES) {
             MoviesScreen(
                 onMovieClick = { movie ->
-                    navController.navigate(Routes.player(movie.streamUrl, movie.name))
+                    navController.navigate(Routes.player(
+                        streamUrl = movie.streamUrl,
+                        title = movie.name,
+                        internalId = movie.id,
+                        categoryId = movie.categoryId,
+                        providerId = movie.providerId,
+                        contentType = "MOVIE"
+                    ))
                 },
                 onNavigate = { route ->
                     navController.navigate(route) {
@@ -238,7 +247,8 @@ fun AppNavigation() {
                 navArgument("internalId") { type = NavType.LongType; defaultValue = -1L },
                 navArgument("categoryId") { type = NavType.LongType; defaultValue = -1L },
                 navArgument("providerId") { type = NavType.LongType; defaultValue = -1L },
-                navArgument("isVirtual") { type = NavType.BoolType; defaultValue = false }
+                navArgument("isVirtual") { type = NavType.BoolType; defaultValue = false },
+                navArgument("contentType") { type = NavType.StringType; defaultValue = "LIVE" }
             )
         ) { backStackEntry ->
             val streamUrl = java.net.URLDecoder.decode(
@@ -254,6 +264,7 @@ fun AppNavigation() {
             val categoryId = backStackEntry.arguments?.getLong("categoryId")?.takeIf { it != -1L }
             val providerId = backStackEntry.arguments?.getLong("providerId")?.takeIf { it != -1L }
             val isVirtual = backStackEntry.arguments?.getBoolean("isVirtual") ?: false
+            val contentType = backStackEntry.arguments?.getString("contentType") ?: "LIVE"
             
             PlayerScreen(
                 streamUrl = streamUrl,
@@ -263,6 +274,7 @@ fun AppNavigation() {
                 categoryId = categoryId,
                 providerId = providerId,
                 isVirtual = isVirtual,
+                contentType = contentType,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -276,7 +288,13 @@ fun AppNavigation() {
             com.streamvault.app.ui.screens.series.SeriesDetailScreen(
                 onEpisodeClick = { episode ->
                     // Navigate to player
-                     navController.navigate(Routes.player(episode.streamUrl, "${episode.title} - S${episode.seasonNumber}E${episode.episodeNumber}"))
+                     navController.navigate(Routes.player(
+                         streamUrl = episode.streamUrl, 
+                         title = "${episode.title} - S${episode.seasonNumber}E${episode.episodeNumber}",
+                         internalId = episode.id,
+                         providerId = episode.providerId,
+                         contentType = "SERIES_EPISODE"
+                     ))
                 },
                 onBack = { navController.popBackStack() }
             )

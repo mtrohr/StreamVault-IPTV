@@ -12,6 +12,12 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.animation.*
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontWeight
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -31,229 +37,20 @@ import com.streamvault.domain.repository.EpgRepository
 import com.streamvault.player.PlaybackState
 import com.streamvault.player.PlayerEngine
 import com.streamvault.player.PlayerError
+import com.streamvault.player.PlayerTrack
+import com.streamvault.player.TrackType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import com.streamvault.app.ui.components.dialogs.ProgramHistoryDialog
 
-@HiltViewModel
-class PlayerViewModel @Inject constructor(
-    val playerEngine: PlayerEngine,
-    private val epgRepository: EpgRepository,
-    private val channelRepository: com.streamvault.domain.repository.ChannelRepository,
-    private val favoriteRepository: com.streamvault.domain.repository.FavoriteRepository
-) : ViewModel() {
 
-    private val _showControls = MutableStateFlow(true)
-    val showControls: StateFlow<Boolean> = _showControls.asStateFlow()
-
-    private val _showZapOverlay = MutableStateFlow(false)
-    val showZapOverlay: StateFlow<Boolean> = _showZapOverlay.asStateFlow()
-    
-    private val _currentProgram = MutableStateFlow<Program?>(null)
-    val currentProgram: StateFlow<Program?> = _currentProgram.asStateFlow()
-
-    private val _currentChannel = MutableStateFlow<com.streamvault.domain.model.Channel?>(null)
-    val currentChannel: StateFlow<com.streamvault.domain.model.Channel?> = _currentChannel.asStateFlow()
-    
-    // Zapping state
-    private var channelList: List<com.streamvault.domain.model.Channel> = emptyList()
-    private var currentChannelIndex = -1
-    private var currentCategoryId: Long = -1
-    private var currentProviderId: Long = -1
-    private var isVirtualCategory: Boolean = false
-    
-    private var epgJob: kotlinx.coroutines.Job? = null
-    private var playlistJob: kotlinx.coroutines.Job? = null
-    private var hideControlsJob: kotlinx.coroutines.Job? = null
-    private var hideZapOverlayJob: kotlinx.coroutines.Job? = null
-    
-    val playerError: StateFlow<PlayerError?> = playerEngine.error
-        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), null)
-
-    val videoFormat: StateFlow<VideoFormat> = playerEngine.videoFormat
-
-    fun prepare(streamUrl: String, epgChannelId: String?, internalChannelId: Long, categoryId: Long = -1, providerId: Long = -1, isVirtual: Boolean = false) {
-        val streamInfo = StreamInfo(
-            url = streamUrl,
-            streamType = com.streamvault.domain.model.StreamType.UNKNOWN
-        )
-        playerEngine.prepare(streamInfo)
-        
-        // Load playlist if context changed
-        if (categoryId != -1L && (categoryId != currentCategoryId || providerId != currentProviderId)) {
-            currentCategoryId = categoryId
-            currentProviderId = providerId
-            isVirtualCategory = isVirtual
-            loadPlaylist(categoryId, providerId, isVirtual, internalChannelId)
-        } else {
-             // If playlist already loaded, just update index
-             if (channelList.isNotEmpty() && internalChannelId != -1L) {
-                 currentChannelIndex = channelList.indexOfFirst { it.id == internalChannelId }
-                 // Fallback to URL if ID fail
-                 if (currentChannelIndex == -1) {
-                     currentChannelIndex = channelList.indexOfFirst { it.streamUrl == streamUrl }
-                 }
-             }
-        }
-        currentStreamUrl = streamUrl
-        
-        // Fetch EPG if ID provided
-        fetchEpg(epgChannelId)
-    }
-
-    private fun fetchEpg(epgChannelId: String?) {
-        epgJob?.cancel()
-        if (epgChannelId != null) {
-            epgJob = viewModelScope.launch {
-                epgRepository.getNowPlaying(epgChannelId).collect { program ->
-                    _currentProgram.value = program
-                }
-            }
-        } else {
-            _currentProgram.value = null
-        }
-    }
-
-    private fun loadPlaylist(categoryId: Long, providerId: Long, isVirtual: Boolean, initialChannelId: Long) {
-        playlistJob?.cancel()
-        playlistJob = viewModelScope.launch {
-            val flows = if (isVirtual) {
-                if (categoryId == -999L) {
-                    // Global Favorites
-                    favoriteRepository.getFavorites(com.streamvault.domain.model.ContentType.LIVE)
-                        .map { favorites -> favorites.map { it.contentId } }
-                        .flatMapLatest { ids -> 
-                            if (ids.isEmpty()) flowOf(emptyList()) 
-                            else channelRepository.getChannelsByIds(ids)
-                        }
-                } else {
-                    // Custom Group
-                    // categoryId is positive here from args? 
-                    // In HomeViewModel, category.id is negative for custom groups.
-                    // We passed category.id directly. So it should be negative if it came from HomeViewModel.
-                    // But wait, HomeViewModel passes `category.id`.
-                    // If it is a custom group, ID is negative.
-                    // So we should handle it.
-                    // BUT `FavoriteRepository.getFavoritesByGroup` expects positive Group ID.
-                    // In HomeViewModel: `groupId = -category.id`.
-                    // So here strict check:
-                    val groupId = if (categoryId < 0) -categoryId else categoryId
-                    favoriteRepository.getFavoritesByGroup(groupId)
-                        .map { favorites -> favorites.map { it.contentId } }
-                        .flatMapLatest { ids -> 
-                            if (ids.isEmpty()) flowOf(emptyList()) 
-                            else channelRepository.getChannelsByIds(ids)
-                        }
-                }
-            } else {
-                channelRepository.getChannelsByCategory(providerId, categoryId)
-            }
-            
-            flows.collect { channels ->
-                channelList = channels
-                // Recalculate index based on initial ID or URL
-                if (initialChannelId != -1L) {
-                    currentChannelIndex = channelList.indexOfFirst { it.id == initialChannelId }
-                }
-                if (currentChannelIndex == -1) {
-                    currentChannelIndex = channelList.indexOfFirst { it.streamUrl == currentStreamUrl }
-                }
-                
-                if (currentChannelIndex != -1) {
-                    _currentChannel.value = channelList[currentChannelIndex]
-                }
-            }
-        }
-    }
-    
-    // Store current URL to find index later
-    private var currentStreamUrl: String = ""
-
-    fun playNext() {
-        if (channelList.isEmpty()) return
-        
-        if (currentChannelIndex == -1) {
-             currentChannelIndex = channelList.indexOfFirst { it.streamUrl == currentStreamUrl }
-             if (currentChannelIndex == -1) return
-        }
-        
-        val nextIndex = (currentChannelIndex + 1) % channelList.size
-        changeChannel(nextIndex)
-    }
-
-    fun playPrevious() {
-        if (channelList.isEmpty()) return
-        
-        if (currentChannelIndex == -1) {
-             currentChannelIndex = channelList.indexOfFirst { it.streamUrl == currentStreamUrl }
-             if (currentChannelIndex == -1) return
-        }
-        
-        val prevIndex = if (currentChannelIndex - 1 < 0) channelList.size - 1 else currentChannelIndex - 1
-        changeChannel(prevIndex)
-    }
-
-    private fun changeChannel(index: Int) {
-        val channel = channelList[index]
-        currentChannelIndex = index
-        _currentChannel.value = channel
-        
-        // Prepare player
-        val streamInfo = StreamInfo(
-            url = channel.streamUrl,
-            streamType = com.streamvault.domain.model.StreamType.UNKNOWN
-        )
-        playerEngine.prepare(streamInfo)
-        playerEngine.play()
-        
-        fetchEpg(channel.epgChannelId)
-        
-        // Show Zap Overlay
-        _showZapOverlay.value = true
-        _showControls.value = false // Hide full controls
-        hideZapOverlayAfterDelay()
-    }
-
-    fun play() = playerEngine.play()
-    fun pause() = playerEngine.pause()
-    fun seekForward() = playerEngine.seekForward()
-    fun seekBackward() = playerEngine.seekBackward()
-
-    fun toggleControls() {
-        _showControls.value = !_showControls.value
-    }
-
-    fun hideControlsAfterDelay() {
-        // Cancel previous job to prevent race condition
-        hideControlsJob?.cancel()
-        hideControlsJob = viewModelScope.launch {
-            delay(5000)
-            _showControls.value = false
-        }
-    }
-
-    private fun hideZapOverlayAfterDelay() {
-        hideZapOverlayJob?.cancel()
-        hideZapOverlayJob = viewModelScope.launch {
-            delay(4000)
-            _showZapOverlay.value = false
-        }
-    }
-    
-    fun retryStream(streamUrl: String, epgChannelId: String?) {
-        val currentId = if (currentChannelIndex != -1 && channelList.isNotEmpty()) channelList[currentChannelIndex].id else -1L
-        prepare(streamUrl, epgChannelId, currentId, currentCategoryId, currentProviderId, isVirtualCategory)
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        hideControlsJob?.cancel()
-        hideZapOverlayJob?.cancel()
-        playerEngine.release()
-    }
-}
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
@@ -265,6 +62,7 @@ fun PlayerScreen(
     categoryId: Long? = null,
     providerId: Long? = null,
     isVirtual: Boolean = false,
+    contentType: String = "LIVE",
     onBack: () -> Unit,
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
@@ -274,8 +72,20 @@ fun PlayerScreen(
     val videoFormat by viewModel.videoFormat.collectAsState()
     val playerError by viewModel.playerError.collectAsState()
     val currentProgram by viewModel.currentProgram.collectAsState()
+    val nextProgram by viewModel.nextProgram.collectAsState()
+    val programHistory by viewModel.programHistory.collectAsState()
     val currentChannel by viewModel.currentChannel.collectAsState()
     val showZapOverlay by viewModel.showZapOverlay.collectAsState()
+    val resumePrompt by viewModel.resumePrompt.collectAsState()
+    
+    val availableAudioTracks by viewModel.availableAudioTracks.collectAsState()
+    val availableSubtitleTracks by viewModel.availableSubtitleTracks.collectAsState()
+    val aspectRatio by viewModel.aspectRatio.collectAsState()
+    val currentPosition by viewModel.playerEngine.currentPosition.collectAsState()
+    val duration by viewModel.playerEngine.duration.collectAsState()
+
+    var showTrackSelection by remember { mutableStateOf<TrackType?>(null) }
+    var showProgramHistory by remember { mutableStateOf(false) }
     
     val focusRequester = remember { FocusRequester() }
 
@@ -294,8 +104,19 @@ fun PlayerScreen(
         }
     }
 
+    if (showProgramHistory) {
+        ProgramHistoryDialog(
+            programs = programHistory,
+            onDismiss = { showProgramHistory = false },
+            onProgramSelect = { program ->
+                viewModel.playCatchUp(program)
+                showProgramHistory = false
+            }
+        )
+    }
+
     LaunchedEffect(streamUrl, epgChannelId) {
-        viewModel.prepare(streamUrl, epgChannelId, internalChannelId, categoryId ?: -1, providerId ?: -1, isVirtual)
+        viewModel.prepare(streamUrl, epgChannelId, internalChannelId, categoryId ?: -1, providerId ?: -1, isVirtual, contentType)
     }
 
     LaunchedEffect(showControls) {
@@ -333,8 +154,13 @@ fun PlayerScreen(
                             true
                         }
                         KeyEvent.KEYCODE_BACK -> {
-                            onBack()
-                            true
+                            if (showTrackSelection != null) {
+                                showTrackSelection = null
+                                true
+                            } else {
+                                onBack()
+                                true
+                            }
                         }
                         KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                             if (isPlaying) viewModel.pause() else viewModel.play()
@@ -358,12 +184,19 @@ fun PlayerScreen(
         // ExoPlayer Video Surface
         val player = viewModel.playerEngine.getPlayerView()
         if (player is androidx.media3.common.Player) {
-            AndroidView<PlayerView>(
+            AndroidView<androidx.media3.ui.PlayerView>(
                 factory = { context ->
-                    PlayerView(context).apply {
+                    androidx.media3.ui.PlayerView(context).apply {
                         this.player = player
                         useController = false
-                        setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                        setShowBuffering(androidx.media3.ui.PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                    }
+                },
+                update = { playerView ->
+                    playerView.resizeMode = when (aspectRatio) {
+                        AspectRatio.FIT -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        AspectRatio.FILL -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL
+                        AspectRatio.ZOOM -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     }
                 },
                 modifier = Modifier.fillMaxSize()
@@ -446,132 +279,339 @@ fun PlayerScreen(
             }
         }
 
-        // Controls overlay
-        if (showControls) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-            ) {
-                // Title at top
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White,
+        // Cinematic Controls Overlay
+        AnimatedVisibility(
+            visible = showControls,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Top Gradient & Bar
+                Box(
                     modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(32.dp)
-                )
-
-                // Current Program Info
-                if (currentProgram != null) {
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(start = 32.dp, bottom = 32.dp, end = 32.dp)
-                            .widthIn(max = 600.dp)
-                    ) {
-                        Text(
-                            text = currentProgram?.title ?: "",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White
-                        )
-                        
-                        val now = System.currentTimeMillis()
-                        val start = currentProgram?.startTime ?: 0
-                        val end = currentProgram?.endTime ?: 0
-                        
-                        if (start > 0 && end > 0) {
-                            val totalDuration = end - start
-                            val elapsed = now - start
-                            val progress = if (totalDuration > 0) elapsed.toFloat() / totalDuration else 0f
-                            
-                            Spacer(modifier = Modifier.height(8.dp))
-                            androidx.compose.material3.LinearProgressIndicator(
-                                progress = { progress.coerceIn(0f, 1f) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(4.dp),
-                                color = Primary,
-                                trackColor = Color.White.copy(alpha = 0.3f)
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Black.copy(alpha = 0.8f), Color.Transparent)
                             )
-                            
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Row {
+                        )
+                        .align(Alignment.TopCenter)
+                        .padding(horizontal = 32.dp, vertical = 24.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleLarge,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (contentType != "LIVE") {
                                 Text(
-                                    text = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(start)),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.7f)
+                                    text = if (contentType == "MOVIE") "Movie" else "Series",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White.copy(alpha = 0.6f)
                                 )
-                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // System Clock
+                            val currentTime = remember { mutableStateOf(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())) }
+                            LaunchedEffect(Unit) {
+                                while(true) {
+                                    delay(10000)
+                                    currentTime.value = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+                                }
+                            }
+                            Text(
+                                text = currentTime.value,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White.copy(alpha = 0.8f),
+                                modifier = Modifier.padding(end = 24.dp)
+                            )
+
+                            // Exit Button
+                            Surface(
+                                onClick = onBack,
+                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                                colors = ClickableSurfaceDefaults.colors(
+                                    containerColor = Color.White.copy(alpha = 0.1f),
+                                    focusedContainerColor = Primary.copy(alpha = 0.9f)
+                                )
+                            ) {
                                 Text(
-                                    text = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(end)),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.7f)
+                                    text = "✕ Close",
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                 )
                             }
                         }
                     }
                 }
 
-                // Playback controls at center
-                Row(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // Bottom Gradient & Bar
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
+                            )
+                        )
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 32.dp, vertical = 32.dp)
                 ) {
-                    ControlButton("⏪") { viewModel.seekBackward() }
-                    ControlButton(if (isPlaying) "⏸" else "▶") {
-                        if (isPlaying) viewModel.pause() else viewModel.play()
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        if (contentType == "LIVE" && currentProgram != null) {
+                            // Live TV Program Info
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = currentProgram?.title ?: "",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Color.White,
+                                        maxLines = 1
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    currentChannel?.let {
+                                        Text(
+                                            text = "${it.number}. ${it.name}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.White.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+                                
+                                // Next Program Preview
+                                if (nextProgram != null) {
+                                    Column(
+                                        modifier = Modifier
+                                            .padding(end = 24.dp)
+                                            .widthIn(max = 200.dp),
+                                        horizontalAlignment = Alignment.End
+                                    ) {
+                                        Text(
+                                            text = "NEXT",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Primary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = nextProgram?.title ?: "",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(nextProgram?.startTime ?: 0)),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White.copy(alpha = 0.5f)
+                                        )
+                                    }
+                                }
+                                
+                                // Track selection buttons shifted here for Live
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (currentChannel?.catchUpSupported == true) {
+                                        QuickSettingsButton("🔄 Restart") { viewModel.restartCurrentProgram() }
+                                        QuickSettingsButton("📼 Archive") { showProgramHistory = true }
+                                    }
+                                    QuickSettingsButton("📺 ${aspectRatio.modeName}") { viewModel.toggleAspectRatio() }
+                                    if (availableSubtitleTracks.isNotEmpty()) {
+                                        QuickSettingsButton("💬 Subs") { showTrackSelection = TrackType.TEXT }
+                                    }
+                                    if (availableAudioTracks.size > 1) {
+                                        QuickSettingsButton("🔊 Audio") { showTrackSelection = TrackType.AUDIO }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            // Progress bar for Live TV
+                            val now = System.currentTimeMillis()
+                            val start = currentProgram?.startTime ?: 0
+                            val end = currentProgram?.endTime ?: 0
+                            if (start > 0 && end > 0) {
+                                val progress = (now - start).toFloat() / (end - start)
+                                androidx.compose.material3.LinearProgressIndicator(
+                                    progress = { progress.coerceIn(0f, 1f) },
+                                    modifier = Modifier.fillMaxWidth().height(4.dp),
+                                    color = Primary,
+                                    trackColor = Color.White.copy(alpha = 0.2f)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(
+                                        text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(start)),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.5f)
+                                    )
+                                    Text(
+                                        text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(end)),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.5f)
+                                    )
+                                }
+                            }
+                        } else if (contentType != "LIVE") {
+                            // VOD Seek Bar
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = formatDuration(currentPosition),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White
+                                )
+                                Slider(
+                                    value = if (duration > 0) currentPosition.toFloat() / duration else 0f,
+                                    onValueChange = { /* Handled via DPAD usually */ },
+                                    modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
+                                    colors = SliderDefaults.colors(
+                                        activeTrackColor = Primary,
+                                        inactiveTrackColor = Color.White.copy(alpha = 0.2f)
+                                    )
+                                )
+                                Text(
+                                    text = formatDuration(duration),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Content info for VOD
+                                Text(
+                                    text = title,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+
+                                // Track selection for VOD
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    QuickSettingsButton("📺 ${aspectRatio.modeName}") { viewModel.toggleAspectRatio() }
+                                    if (availableSubtitleTracks.isNotEmpty()) {
+                                        QuickSettingsButton("💬 Subs") { showTrackSelection = TrackType.TEXT }
+                                    }
+                                    if (availableAudioTracks.size > 1) {
+                                        QuickSettingsButton("🔊 Audio") { showTrackSelection = TrackType.AUDIO }
+                                    }
+                                }
+                            }
+                        }
                     }
-                    ControlButton("⏩") { viewModel.seekForward() }
                 }
 
-                // Back button
-                Surface(
-                    onClick = onBack,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(32.dp),
-                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = Color.Black.copy(alpha = 0.6f),
-                        focusedContainerColor = Primary.copy(alpha = 0.6f)
-                    )
+                // Center Playback Controls
+                Row(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalArrangement = Arrangement.spacedBy(32.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "✕ Back",
-                        color = Color.White,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
+                    if (contentType != "LIVE") {
+                        TransportButton("⏪") { viewModel.seekBackward() }
+                    }
+                    
+                    Surface(
+                        onClick = { if (isPlaying) viewModel.pause() else viewModel.play() },
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Primary.copy(alpha = 0.8f),
+                            focusedContainerColor = Primary
+                        ),
+                        modifier = Modifier.size(80.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            Text(
+                                text = if (isPlaying) "⏸" else "▶",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    if (contentType != "LIVE") {
+                        TransportButton("⏩") { viewModel.seekForward() }
+                    }
                 }
             }
         }
         
-        // Zap Overlay (Bottom Left)
-        if (showZapOverlay && !showControls && currentChannel != null) {
+        // Cinematic Zap Overlay
+        AnimatedVisibility(
+            visible = showZapOverlay && !showControls && currentChannel != null,
+            enter = fadeIn() + slideInHorizontally(),
+            exit = fadeOut() + slideOutHorizontally(),
+            modifier = Modifier.align(Alignment.BottomStart)
+        ) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
                     .padding(32.dp)
-                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(Color.Black.copy(alpha = 0.8f), Color.Transparent)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    )
                     .padding(16.dp)
-                    .widthIn(max = 400.dp)
+                    .widthIn(min = 300.dp, max = 450.dp)
             ) {
                  Column {
-                     Text(
-                        text = "${currentChannel?.number}. ${currentChannel?.name}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White
-                    )
-                    if (currentProgram != null) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                     Row(verticalAlignment = Alignment.CenterVertically) {
                          Text(
-                            text = currentProgram?.title ?: "",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha=0.8f)
+                            text = currentChannel?.number?.toString() ?: "",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = Primary,
+                            fontWeight = FontWeight.Bold
                         )
-                    }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text(
+                                text = currentChannel?.name ?: "",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White
+                            )
+                            if (currentProgram != null) {
+                                Text(
+                                    text = currentProgram?.title ?: "",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                     }
+                     
+                     if (currentProgram != null) {
+                         val now = System.currentTimeMillis()
+                         val start = currentProgram?.startTime ?: 0
+                         val end = currentProgram?.endTime ?: 0
+                         if (start > 0 && end > 0) {
+                             val progress = (now - start).toFloat() / (end - start)
+                             Spacer(modifier = Modifier.height(8.dp))
+                             androidx.compose.material3.LinearProgressIndicator(
+                                 progress = { progress.coerceIn(0f, 1f) },
+                                 modifier = Modifier.fillMaxWidth().height(2.dp),
+                                 color = Primary,
+                                 trackColor = Color.White.copy(alpha = 0.2f)
+                             )
+                         }
+                     }
                  }
             }
         }
@@ -593,11 +633,196 @@ fun PlayerScreen(
                 )
             }
         }
+        
+        // Resume Prompt Dialog
+        if (resumePrompt.show) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.85f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 500.dp)
+                        .background(SurfaceElevated, RoundedCornerShape(12.dp))
+                        .padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Resume Playback",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Do you want to resume ${resumePrompt.title} from where you left off?",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextSecondary,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(32.dp))
+                    
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Surface(
+                            onClick = { viewModel.dismissResumePrompt(resume = false) },
+                            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                            colors = ClickableSurfaceDefaults.colors(
+                                containerColor = SurfaceVariant,
+                                focusedContainerColor = SurfaceHighlight
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                "Start Over",
+                                modifier = Modifier.padding(vertical = 12.dp).fillMaxWidth(),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                color = Color.White
+                            )
+                        }
+                        
+                        Surface(
+                            onClick = { viewModel.dismissResumePrompt(resume = true) },
+                            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                            colors = ClickableSurfaceDefaults.colors(
+                                containerColor = Primary,
+                                focusedContainerColor = PrimaryVariant
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                "Resume",
+                                modifier = Modifier.padding(vertical = 12.dp).fillMaxWidth(),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                color = Color.White,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Track Selection Dialog
+        if (showTrackSelection != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.8f))
+                    .clickable(onClick = { showTrackSelection = null }),
+                contentAlignment = Alignment.Center
+            ) {
+                val tracks = if (showTrackSelection == TrackType.AUDIO) availableAudioTracks else availableSubtitleTracks
+                
+                Column(
+                    modifier = Modifier
+                        .widthIn(min = 300.dp, max = 400.dp)
+                        .background(SurfaceElevated, RoundedCornerShape(12.dp))
+                        .padding(24.dp)
+                ) {
+                    Text(
+                        text = if (showTrackSelection == TrackType.AUDIO) "Select Audio Track" else "Select Subtitles",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (showTrackSelection == TrackType.TEXT) {
+                            item {
+                                TrackItem(
+                                    name = "Off",
+                                    isSelected = tracks.none { it.isSelected },
+                                    onClick = {
+                                        viewModel.selectSubtitleTrack(null)
+                                        showTrackSelection = null
+                                    }
+                                )
+                            }
+                        }
+                        
+                        items(tracks.size) { index ->
+                            val track = tracks[index]
+                            TrackItem(
+                                name = track.name,
+                                isSelected = track.isSelected,
+                                onClick = {
+                                    if (showTrackSelection == TrackType.AUDIO) {
+                                        viewModel.selectAudioTrack(track.id)
+                                    } else {
+                                        viewModel.selectSubtitleTrack(track.id)
+                                    }
+                                    showTrackSelection = null
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun ControlButton(
+private fun TrackItem(
+    name: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (isSelected) Primary.copy(alpha = 0.2f) else Color.Transparent,
+            focusedContainerColor = SurfaceHighlight
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (isSelected) Primary else TextPrimary,
+                modifier = Modifier.weight(1f)
+            )
+            if (isSelected) {
+                Text("✓", color = Primary, style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickSettingsButton(
+    text: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.White.copy(alpha = 0.1f),
+            focusedContainerColor = Primary.copy(alpha = 0.9f)
+        )
+    ) {
+        Text(
+            text = text,
+            color = Color.White,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+    }
+}
+
+@Composable
+private fun TransportButton(
     text: String,
     onClick: () -> Unit
 ) {
@@ -605,10 +830,10 @@ private fun ControlButton(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.White.copy(alpha = 0.2f),
-            focusedContainerColor = Primary.copy(alpha = 0.8f)
+            containerColor = Color.White.copy(alpha = 0.1f),
+            focusedContainerColor = Color.White.copy(alpha = 0.3f)
         ),
-        modifier = Modifier.size(64.dp)
+        modifier = Modifier.size(56.dp)
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Text(
@@ -617,5 +842,19 @@ private fun ControlButton(
                 color = Color.White
             )
         }
+    }
+}
+
+private fun formatDuration(ms: Long): String {
+    val totalSeconds = ms / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    val hours = minutes / 60
+    val remainingMinutes = minutes % 60
+    
+    return if (hours > 0) {
+        String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, remainingMinutes, seconds)
+    } else {
+        String.format(Locale.getDefault(), "%02d:%02d", remainingMinutes, seconds)
     }
 }

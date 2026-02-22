@@ -18,6 +18,10 @@ interface PlayerEngine {
     val videoFormat: StateFlow<VideoFormat>
     val error: Flow<PlayerError?>
 
+    // Tracks
+    val availableAudioTracks: StateFlow<List<PlayerTrack>>
+    val availableSubtitleTracks: StateFlow<List<PlayerTrack>>
+
     fun prepare(streamInfo: StreamInfo)
     fun play()
     fun pause()
@@ -27,6 +31,8 @@ interface PlayerEngine {
     fun seekBackward(ms: Long = 10_000)
     fun setDecoderMode(mode: DecoderMode)
     fun setVolume(volume: Float)
+    fun selectAudioTrack(trackId: String)
+    fun selectSubtitleTrack(trackId: String?) // null to disable subtitles
     fun release()
 
     /** Returns the underlying player view for Compose embedding */

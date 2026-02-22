@@ -181,6 +181,26 @@ class ProviderRepositoryImpl @Inject constructor(
         onProgress: ((String) -> Unit)?
     ): Result<Unit> = syncManager.sync(providerId, onProgress)
 
+    override suspend fun buildCatchUpUrl(providerId: Long, streamId: Long, start: Long, end: Long): String? {
+        val provider = providerDao.getById(providerId) ?: return null
+        return if (provider.type == ProviderType.XTREAM_CODES.name) {
+            createXtreamProvider(providerId, provider.serverUrl, provider.username, provider.password)
+                .buildCatchUpUrl(streamId, start, end)
+        } else {
+            // M3U catch-up
+            val channel = channelDao.getById(streamId) ?: return null
+            val source = channel.catchUpSource ?: return null
+            
+            // Substitute variables in template
+            source.replace("{start}", start.toString())
+                .replace("{end}", end.toString())
+                .replace("{duration}", (end - start).toString())
+                .replace("{utc}", start.toString())
+                .replace("{lutc}", end.toString())
+                .replace("{timestamp}", start.toString())
+        }
+    }
+
     fun createXtreamProvider(
         providerId: Long,
         serverUrl: String,

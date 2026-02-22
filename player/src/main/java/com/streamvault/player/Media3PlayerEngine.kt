@@ -22,6 +22,7 @@ import com.streamvault.domain.model.StreamInfo
 import com.streamvault.domain.model.StreamType
 import com.streamvault.domain.model.VideoFormat
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import okhttp3.OkHttpClient
 import javax.inject.Inject
@@ -34,8 +35,10 @@ class Media3PlayerEngine @Inject constructor(
     private val okHttpClient: OkHttpClient
 ) : PlayerEngine {
 
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var exoPlayer: ExoPlayer? = null
     private var currentDecoderMode: DecoderMode = DecoderMode.AUTO
+    private var pollingJob: Job? = null
 
     private val _playbackState = MutableStateFlow(PlaybackState.IDLE)
     override val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
@@ -54,6 +57,12 @@ class Media3PlayerEngine @Inject constructor(
 
     private val _error = MutableSharedFlow<PlayerError?>(replay = 1)
     override val error: Flow<PlayerError?> = _error.asSharedFlow()
+
+    private val _availableAudioTracks = MutableStateFlow<List<PlayerTrack>>(emptyList())
+    override val availableAudioTracks: StateFlow<List<PlayerTrack>> = _availableAudioTracks.asStateFlow()
+
+    private val _availableSubtitleTracks = MutableStateFlow<List<PlayerTrack>>(emptyList())
+    override val availableSubtitleTracks: StateFlow<List<PlayerTrack>> = _availableSubtitleTracks.asStateFlow()
 
     private fun getOrCreatePlayer(): ExoPlayer {
         return exoPlayer ?: createPlayer().also { exoPlayer = it }
@@ -86,6 +95,11 @@ class Media3PlayerEngine @Inject constructor(
 
                     override fun onIsPlayingChanged(playing: Boolean) {
                         _isPlaying.value = playing
+                        if (playing) {
+                            startPolling()
+                        } else {
+                            stopPolling()
+                        }
                     }
 
                     override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
@@ -109,6 +123,43 @@ class Media3PlayerEngine @Inject constructor(
                         reason: Int
                     ) {
                         _currentPosition.value = newPosition.positionMs
+                    }
+
+                    override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                        val audioTracks = mutableListOf<PlayerTrack>()
+                        val subtitleTracks = mutableListOf<PlayerTrack>()
+
+                        for (group in tracks.groups) {
+                            val type = group.mediaTrackGroup.type
+                            val isAudio = type == C.TRACK_TYPE_AUDIO
+                            val isText = type == C.TRACK_TYPE_TEXT
+
+                            if (isAudio || isText) {
+                                for (i in 0 until group.length) {
+                                    val format = group.mediaTrackGroup.getFormat(i)
+                                    val id = format.id ?: "${group.mediaTrackGroup.hashCode()}_$i"
+                                    val name = format.label ?: format.language ?: "Track ${i + 1}"
+                                    val isSelected = group.isTrackSelected(i)
+
+                                    val track = PlayerTrack(
+                                        id = id,
+                                        name = name,
+                                        language = format.language,
+                                        type = if (isAudio) TrackType.AUDIO else TrackType.TEXT,
+                                        isSelected = isSelected
+                                    )
+
+                                    if (isAudio && group.isTrackSupported(i, false)) {
+                                        audioTracks.add(track)
+                                    } else if (isText && group.isTrackSupported(i, false)) {
+                                        subtitleTracks.add(track)
+                                    }
+                                }
+                            }
+                        }
+
+                        _availableAudioTracks.value = audioTracks
+                        _availableSubtitleTracks.value = subtitleTracks
                     }
                 })
             }
@@ -223,11 +274,100 @@ class Media3PlayerEngine @Inject constructor(
         exoPlayer?.volume = volume.coerceIn(0f, 1f)
     }
 
+    override fun selectAudioTrack(trackId: String) {
+        exoPlayer?.let { player ->
+            player.trackSelectionParameters = player.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                .build()
+
+            val tracks = player.currentTracks
+            for (group in tracks.groups) {
+                if (group.mediaTrackGroup.type == C.TRACK_TYPE_AUDIO) {
+                    for (i in 0 until group.length) {
+                        val format = group.mediaTrackGroup.getFormat(i)
+                        val id = format.id ?: "${group.mediaTrackGroup.hashCode()}_$i"
+                        if (id == trackId) {
+                            player.trackSelectionParameters = player.trackSelectionParameters
+                                .buildUpon()
+                                .setOverrideForType(
+                                    androidx.media3.common.TrackSelectionOverride(
+                                        group.mediaTrackGroup,
+                                        listOf(i)
+                                    )
+                                )
+                                .build()
+                            return
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun selectSubtitleTrack(trackId: String?) {
+        exoPlayer?.let { player ->
+            if (trackId == null) {
+                player.trackSelectionParameters = player.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .build()
+            } else {
+                player.trackSelectionParameters = player.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .build()
+
+                val tracks = player.currentTracks
+                for (group in tracks.groups) {
+                    if (group.mediaTrackGroup.type == C.TRACK_TYPE_TEXT) {
+                        for (i in 0 until group.length) {
+                            val format = group.mediaTrackGroup.getFormat(i)
+                            val id = format.id ?: "${group.mediaTrackGroup.hashCode()}_$i"
+                            if (id == trackId) {
+                                player.trackSelectionParameters = player.trackSelectionParameters
+                                    .buildUpon()
+                                    .setOverrideForType(
+                                        androidx.media3.common.TrackSelectionOverride(
+                                            group.mediaTrackGroup,
+                                            listOf(i)
+                                        )
+                                    )
+                                    .build()
+                                return
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     override fun release() {
+        stopPolling()
         exoPlayer?.release()
         exoPlayer = null
         _playbackState.value = PlaybackState.IDLE
         _isPlaying.value = false
+    }
+
+    private fun startPolling() {
+        pollingJob?.cancel()
+        pollingJob = scope.launch {
+            while (isActive) {
+                exoPlayer?.let { player ->
+                    _currentPosition.value = player.currentPosition
+                    _duration.value = player.duration.coerceAtLeast(0L)
+                }
+                delay(500) // Poll every 500ms for smooth UI
+            }
+        }
+    }
+
+    private fun stopPolling() {
+        pollingJob?.cancel()
+        pollingJob = null
     }
 
     override fun getPlayerView(): Any? = exoPlayer

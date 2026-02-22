@@ -28,6 +28,7 @@ class M3uParser {
         val tvgLogo: String?,
         val tvgChno: Int?,
         val catchUp: String?,
+        val catchUpDays: Int?,
         val catchUpSource: String?,
         val url: String,
         val extraAttributes: Map<String, String> = emptyMap()
@@ -88,6 +89,8 @@ class M3uParser {
                 number = entry.tvgChno ?: (index + 1),
                 streamUrl = entry.url,
                 catchUpSupported = entry.catchUp != null,
+                catchUpDays = entry.catchUpDays ?: 0,
+                catchUpSource = entry.catchUpSource,
                 providerId = providerId
             )
         }
@@ -128,6 +131,7 @@ class M3uParser {
             tvgLogo = attributes["tvg-logo"]?.takeIf { it.isNotBlank() },
             tvgChno = attributes["tvg-chno"]?.toIntOrNull(),
             catchUp = attributes["catchup"]?.takeIf { it.isNotBlank() },
+            catchUpDays = attributes["catchup-days"]?.toIntOrNull(),
             catchUpSource = attributes["catchup-source"]?.takeIf { it.isNotBlank() },
             url = url,
             extraAttributes = attributes
