@@ -19,6 +19,8 @@ import androidx.tv.material3.*
 import com.streamvault.app.ui.components.TopNavBar
 import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.model.ContentType
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 @Composable
 fun FavoritesScreen(
     onItemClick: (streamUrl: String, title: String) -> Unit,
@@ -33,16 +35,16 @@ fun FavoritesScreen(
 
         if (uiState.isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Loading favorites...", style = MaterialTheme.typography.bodyLarge, color = OnSurface)
+                Text(stringResource(R.string.favorites_loading), style = MaterialTheme.typography.bodyLarge, color = OnSurface)
             }
         } else if (uiState.favorites.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("⭐", style = MaterialTheme.typography.displayLarge)
                     Spacer(Modifier.height(8.dp))
-                    Text("No favorites yet", style = MaterialTheme.typography.bodyLarge, color = OnSurface)
+                    Text(stringResource(R.string.favorites_no_favorites), style = MaterialTheme.typography.bodyLarge, color = OnSurface)
                     Text(
-                        "Long-press on any channel, movie, or series to add it to favorites",
+                        stringResource(R.string.favorites_empty_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = OnSurfaceDim
                     )
@@ -148,7 +150,7 @@ fun FavoritesScreen(
                             )
                             Spacer(Modifier.weight(1f))
                             if (isReorderingThis) {
-                                Text("↕ Reordering", style = MaterialTheme.typography.bodySmall, color = Primary)
+                                Text("↕ " + stringResource(R.string.favorites_reordering), style = MaterialTheme.typography.bodySmall, color = Primary)
                             } else {
                                 Text(
                                     text = item.subtitle ?: "",

@@ -10,6 +10,8 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.*
 import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.model.Provider
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 @Composable
 fun PlaylistSwitcher(
@@ -42,7 +44,7 @@ fun PlaylistSwitcher(
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    text = currentProvider?.name ?: "No Provider",
+                    text = currentProvider?.name ?: stringResource(R.string.playlist_no_provider),
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (isFocused) Primary else OnBackground
                 )

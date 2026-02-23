@@ -23,6 +23,8 @@ import androidx.compose.ui.window.Dialog
 import com.streamvault.domain.model.Program
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 @Composable
 fun ProgramHistoryDialog(
@@ -54,7 +56,7 @@ fun ProgramHistoryDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Program Archive",
+                        text = stringResource(R.string.player_archive_title),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -68,7 +70,7 @@ fun ProgramHistoryDialog(
                         modifier = Modifier.fillMaxWidth().height(200.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("No archived programs found", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.player_no_archive), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
                     LazyColumn(

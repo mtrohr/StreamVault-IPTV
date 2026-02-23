@@ -38,6 +38,8 @@ import com.streamvault.domain.model.Category
 import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.Provider
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 
 // ── Screen ─────────────────────────────────────────────────────────
@@ -64,6 +66,7 @@ fun HomeScreen(
     var pendingUnlockChannel by remember { mutableStateOf<Channel?>(null) }
     var pendingLockToggleCategory by remember { mutableStateOf<Category?>(null) }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(uiState.userMessage) {
         uiState.userMessage?.let { message ->
@@ -103,7 +106,7 @@ fun HomeScreen(
                             pendingLockToggleCategory = null
                         }
                     } else {
-                        pinError = "Incorrect PIN"
+                        pinError = context.getString(R.string.home_incorrect_pin)
                     }
                 }
             },
@@ -156,7 +159,7 @@ fun HomeScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Loading channels...",
+                        text = stringResource(R.string.home_loading_channels),
                         style = MaterialTheme.typography.bodyLarge,
                         color = OnSurface
                     )
@@ -177,7 +180,7 @@ fun HomeScreen(
                         item {
                             Column {
                                 Text(
-                                    text = "Categories",
+                                    text = stringResource(R.string.home_categories_title),
                                     style = MaterialTheme.typography.titleMedium,
                                     color = OnSurface,
                                     modifier = Modifier.padding(bottom = 8.dp, start = 8.dp)
@@ -185,7 +188,7 @@ fun HomeScreen(
                                 SearchInput(
                                     value = uiState.categorySearchQuery,
                                     onValueChange = { viewModel.updateCategorySearchQuery(it) },
-                                    placeholder = "Search categories...",
+                                    placeholder = stringResource(R.string.home_search_categories),
                                     modifier = Modifier.padding(bottom = 16.dp)
                                 )
                             }
@@ -232,7 +235,7 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = uiState.selectedCategory?.name ?: "All Channels",
+                                text = uiState.selectedCategory?.name ?: stringResource(R.string.home_all_channels),
                                 style = MaterialTheme.typography.headlineSmall,
                                 color = OnBackground
                             )
@@ -240,7 +243,7 @@ fun HomeScreen(
                             SearchInput(
                                 value = uiState.channelSearchQuery,
                                 onValueChange = { viewModel.updateChannelSearchQuery(it) },
-                                placeholder = "Search channels...",
+                                placeholder = stringResource(R.string.home_search_channels),
                                 modifier = Modifier.width(300.dp)
                             )
                         }
@@ -251,7 +254,7 @@ fun HomeScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "Loading...",
+                                    text = stringResource(R.string.home_loading),
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = OnSurface
                                 )
@@ -268,14 +271,14 @@ fun HomeScreen(
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
-                                        text = "No channels found in this category",
+                                        text = stringResource(R.string.home_no_channels_found),
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = OnSurface
                                     )
                                     val selectedCategory = uiState.selectedCategory
                                     if (selectedCategory?.isVirtual == true && selectedCategory.id == -999L) {
                                         Text(
-                                            text = "Add channels to favorites to see them here",
+                                            text = stringResource(R.string.home_add_favorites_hint),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = OnSurfaceDim,
                                             modifier = Modifier.padding(top = 4.dp)
@@ -389,16 +392,16 @@ fun HomeScreen(
 
         androidx.compose.material3.AlertDialog(
             onDismissRequest = safeDismiss,
-            title = { Text("Delete Group?") },
-            text = { Text("Are you sure you want to delete '${group.name}'? This will remove all channels from this group.") },
+            title = { Text(stringResource(R.string.home_delete_group_title)) },
+            text = { Text(stringResource(R.string.home_delete_group_body, group.name)) },
             confirmButton = {
                 TextButton(onClick = { if (canInteract) viewModel.confirmDeleteGroup() }) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.home_delete_group_confirm), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = safeDismiss) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.home_delete_group_cancel))
                 }
             }
         )

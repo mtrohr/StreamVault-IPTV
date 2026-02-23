@@ -1,5 +1,7 @@
 package com.streamvault.app.ui.screens.search
 
+import androidx.annotation.StringRes
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +42,8 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
@@ -124,11 +128,11 @@ private data class SearchFilterParams(
     val level: Int
 )
 
-enum class SearchTab(val title: String) {
-    ALL("All"),
-    LIVE("Live TV"),
-    MOVIES("Movies"),
-    SERIES("Series")
+enum class SearchTab(@StringRes val titleRes: Int) {
+    ALL(R.string.search_all),
+    LIVE(R.string.search_live_tv),
+    MOVIES(R.string.search_movies),
+    SERIES(R.string.search_series)
 }
 
 data class SearchUiState(
@@ -154,6 +158,7 @@ fun SearchScreen(
     val selectedTab by viewModel.selectedTab.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val focusManager = LocalFocusManager.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     var showPinDialog by remember { mutableStateOf(false) }
     var pinError by remember { mutableStateOf<String?>(null) }
     var pendingChannel by remember { mutableStateOf<Channel?>(null) }
@@ -182,7 +187,7 @@ fun SearchScreen(
                         pendingMovie = null
                         pendingSeries = null
                     } else {
-                        pinError = "Incorrect PIN"
+                        pinError = context.getString(R.string.search_incorrect_pin)
                     }
                 }
             },
@@ -202,7 +207,7 @@ fun SearchScreen(
         if (uiState.isEmpty) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    text = if (query.length < 2) "Type to search..." else "No results found for '$query'",
+                    text = if (query.length < 2) stringResource(R.string.search_type_to_search) else stringResource(R.string.search_no_results, query),
                     style = MaterialTheme.typography.bodyLarge,
                     color = OnSurfaceDim
                 )
@@ -218,7 +223,7 @@ fun SearchScreen(
                 if (uiState.channels.isNotEmpty()) {
                     if (selectedTab == SearchTab.ALL) {
                         item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                            SectionHeader("Live TV")
+                            SectionHeader(stringResource(R.string.search_live_tv))
                         }
                     }
                     items(uiState.channels) { channel ->
@@ -243,7 +248,7 @@ fun SearchScreen(
                 if (uiState.movies.isNotEmpty()) {
                     if (selectedTab == SearchTab.ALL) {
                          item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                            SectionHeader("Movies")
+                            SectionHeader(stringResource(R.string.search_movies))
                         }
                     }
                     items(uiState.movies) { movie ->
@@ -268,7 +273,7 @@ fun SearchScreen(
                 if (uiState.series.isNotEmpty()) {
                     if (selectedTab == SearchTab.ALL) {
                          item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                            SectionHeader("Series")
+                            SectionHeader(stringResource(R.string.search_series))
                         }
                     }
                     items(uiState.series) { series ->
@@ -327,7 +332,7 @@ fun SearchTextField(
         contentAlignment = Alignment.CenterStart
     ) {
         if (value.isEmpty() && !isFocused) {
-            Text("Search...", color = OnSurfaceDim)
+            Text(stringResource(R.string.search_hint), color = OnSurfaceDim)
         }
         BasicTextField(
             value = value,

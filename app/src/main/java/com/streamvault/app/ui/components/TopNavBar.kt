@@ -14,6 +14,8 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.*
 import com.streamvault.app.navigation.Routes
 import com.streamvault.app.ui.theme.*
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 @Composable
 fun TopNavBar(
@@ -22,12 +24,12 @@ fun TopNavBar(
     modifier: Modifier = Modifier
 ) {
     val tabs = listOf(
-        NavTab("Live TV", Routes.HOME, "📺"),
-        NavTab("Movies", Routes.MOVIES, "🎬"),
-        NavTab("Series", Routes.SERIES, "📺"),
+        NavTab(stringResource(id = R.string.nav_live_tv), Routes.HOME, "📺"),
+        NavTab(stringResource(id = R.string.nav_movies), Routes.MOVIES, "🎬"),
+        NavTab(stringResource(id = R.string.nav_series), Routes.SERIES, "📺"),
         // Search and Favorites are accessible from within the Live TV screen;
         // they don't need top-level nav slots.
-        NavTab("Settings", Routes.SETTINGS, "⚙️")
+        NavTab(stringResource(id = R.string.nav_settings), Routes.SETTINGS, "⚙️")
     )
 
     Row(
@@ -40,7 +42,7 @@ fun TopNavBar(
     ) {
         // Logo / App Name
         Text(
-            text = "StreamVault",
+            text = stringResource(id = R.string.app_name),
             style = MaterialTheme.typography.titleLarge,
             color = Primary,
             modifier = Modifier.padding(end = 32.dp)

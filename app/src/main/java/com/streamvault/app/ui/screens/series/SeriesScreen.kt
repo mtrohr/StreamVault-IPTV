@@ -15,6 +15,8 @@ import com.streamvault.app.ui.components.SeriesCard
 import com.streamvault.app.ui.components.TopNavBar
 import com.streamvault.app.ui.theme.*
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 @Composable
 fun SeriesScreen(
@@ -28,6 +30,7 @@ fun SeriesScreen(
     var pinError by remember { mutableStateOf<String?>(null) }
     var pendingSeriesId by remember { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     if (showPinDialog) {
         com.streamvault.app.ui.components.dialogs.PinDialog(
@@ -44,7 +47,7 @@ fun SeriesScreen(
                         pendingSeriesId?.let { onSeriesClick(it) }
                         pendingSeriesId = null
                     } else {
-                        pinError = "Incorrect PIN"
+                        pinError = context.getString(R.string.series_incorrect_pin)
                     }
                 }
             },
@@ -57,14 +60,14 @@ fun SeriesScreen(
 
         if (uiState.isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Loading series...", style = MaterialTheme.typography.bodyLarge, color = OnSurface)
+                Text(stringResource(R.string.series_loading), style = MaterialTheme.typography.bodyLarge, color = OnSurface)
             }
         } else if (uiState.seriesByCategory.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("📺", style = MaterialTheme.typography.displayLarge)
                     Spacer(Modifier.height(8.dp))
-                    Text("No series found", style = MaterialTheme.typography.bodyLarge, color = OnSurface)
+                    Text(stringResource(R.string.series_no_found), style = MaterialTheme.typography.bodyLarge, color = OnSurface)
                 }
             }
         } else {

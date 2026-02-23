@@ -13,6 +13,8 @@ import com.streamvault.domain.model.Category
 
 import androidx.compose.runtime.*
 import kotlinx.coroutines.delay
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 @Composable
 fun CategoryOptionsDialog(
@@ -48,11 +50,11 @@ fun CategoryOptionsDialog(
                         contentColor = MaterialTheme.colorScheme.onSurface
                     )
                 ) {
-                    Text("Set as Default Group")
+                    Text(stringResource(R.string.category_options_set_default))
                 }
 
                 // Option 2: Lock/Unlock
-                val lockText = if (category.isUserProtected) "Unlock Group" else "Lock Group"
+                val lockText = if (category.isUserProtected) stringResource(R.string.category_options_unlock) else stringResource(R.string.category_options_lock)
                 androidx.compose.material3.Button(
                     onClick = { if (canInteract) onToggleLock() },
                     modifier = Modifier.fillMaxWidth(),
@@ -74,7 +76,7 @@ fun CategoryOptionsDialog(
                             contentColor = MaterialTheme.colorScheme.onErrorContainer
                         )
                     ) {
-                        Text("Delete Group")
+                        Text(stringResource(R.string.category_options_delete))
                     }
                 }
             }
@@ -82,7 +84,7 @@ fun CategoryOptionsDialog(
         confirmButton = {},
         dismissButton = {
             TextButton(onClick = safeDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.category_options_cancel))
             }
         }
     )

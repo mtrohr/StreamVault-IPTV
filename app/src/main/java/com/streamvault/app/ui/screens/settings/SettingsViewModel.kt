@@ -25,15 +25,18 @@ class SettingsViewModel @Inject constructor(
             combine(
                 providerRepository.getProviders(),
                 preferencesRepository.lastActiveProviderId,
-                preferencesRepository.parentalControlLevel
-            ) { providers, activeId, level ->
-                Triple(providers, activeId, level)
-            }.collect { (providers, activeId, level) ->
+                preferencesRepository.parentalControlLevel,
+                preferencesRepository.appLanguage
+            ) { providers, activeId, level, language ->
+                arrayOf(providers, activeId, level, language)
+            }.collect { values ->
+                @Suppress("UNCHECKED_CAST")
                 _uiState.update {
                     it.copy(
-                        providers = providers,
-                        activeProviderId = activeId,
-                        parentalControlLevel = level
+                        providers = values[0] as List<Provider>,
+                        activeProviderId = values[1] as Long?,
+                        parentalControlLevel = values[2] as Int,
+                        appLanguage = values[3] as String
                     )
                 }
             }
@@ -52,6 +55,12 @@ class SettingsViewModel @Inject constructor(
     fun setParentalControlLevel(level: Int) {
         viewModelScope.launch {
             preferencesRepository.setParentalControlLevel(level)
+        }
+    }
+
+    fun setAppLanguage(language: String) {
+        viewModelScope.launch {
+            preferencesRepository.setAppLanguage(language)
         }
     }
 
@@ -102,5 +111,6 @@ data class SettingsUiState(
     val activeProviderId: Long? = null,
     val isSyncing: Boolean = false,
     val userMessage: String? = null,
-    val parentalControlLevel: Int = 0
+    val parentalControlLevel: Int = 0,
+    val appLanguage: String = "system"
 )

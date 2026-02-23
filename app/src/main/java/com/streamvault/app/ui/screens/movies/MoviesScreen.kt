@@ -16,6 +16,8 @@ import com.streamvault.app.ui.components.TopNavBar
 import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.model.Movie
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 @Composable
 fun MoviesScreen(
@@ -29,6 +31,7 @@ fun MoviesScreen(
     var pinError by remember { mutableStateOf<String?>(null) }
     var pendingMovie by remember { mutableStateOf<Movie?>(null) }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     if (showPinDialog) {
         com.streamvault.app.ui.components.dialogs.PinDialog(
@@ -45,7 +48,7 @@ fun MoviesScreen(
                         pendingMovie?.let { onMovieClick(it) }
                         pendingMovie = null
                     } else {
-                        pinError = "Incorrect PIN"
+                        pinError = context.getString(R.string.movies_incorrect_pin)
                     }
                 }
             },
@@ -58,14 +61,14 @@ fun MoviesScreen(
 
         if (uiState.isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Loading movies...", style = MaterialTheme.typography.bodyLarge, color = OnSurface)
+                Text(stringResource(R.string.movies_loading), style = MaterialTheme.typography.bodyLarge, color = OnSurface)
             }
         } else if (uiState.moviesByCategory.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("🎬", style = MaterialTheme.typography.displayLarge)
                     Spacer(Modifier.height(8.dp))
-                    Text("No movies found", style = MaterialTheme.typography.bodyLarge, color = OnSurface)
+                    Text(stringResource(R.string.movies_no_found), style = MaterialTheme.typography.bodyLarge, color = OnSurface)
                 }
             }
         } else {

@@ -27,6 +27,7 @@ class PreferencesRepository @Inject constructor(
         val PARENTAL_CONTROL_LEVEL = intPreferencesKey("parental_control_level")
         val PARENTAL_PIN = stringPreferencesKey("parental_pin")
         val DEFAULT_CATEGORY_ID = longPreferencesKey("default_category_id")
+        val APP_LANGUAGE = stringPreferencesKey("app_language")
     }
 
     val lastActiveProviderId: Flow<Long?> = context.dataStore.data.map { preferences ->
@@ -83,6 +84,16 @@ class PreferencesRepository @Inject constructor(
     suspend fun setDefaultCategory(categoryId: Long) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.DEFAULT_CATEGORY_ID] = categoryId
+        }
+    }
+
+    val appLanguage: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.APP_LANGUAGE] ?: "system"
+    }
+
+    suspend fun setAppLanguage(language: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.APP_LANGUAGE] = language
         }
     }
 }

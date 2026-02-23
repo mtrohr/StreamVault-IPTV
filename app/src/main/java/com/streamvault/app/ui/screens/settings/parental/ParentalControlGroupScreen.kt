@@ -8,9 +8,11 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
 import androidx.tv.material3.*
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,10 +58,10 @@ fun ParentalControlGroupScreen(
                 onClick = onBack,
                 modifier = Modifier.focusRequester(backButtonFocusRequester)
             ) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.parental_group_back))
             }
             Text(
-                text = "🛡️ Protected Groups",
+                text = "🛡️ " + stringResource(R.string.parental_group_title),
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(start = 16.dp)
@@ -88,7 +90,7 @@ fun ParentalControlGroupScreen(
                              // Optional: if focus lost via other means
                         }
                     },
-                placeholder = { Text("Search categories...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                placeholder = { Text(stringResource(R.string.parental_group_search), color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 singleLine = true,
                 keyboardActions = androidx.compose.foundation.text.KeyboardActions(
@@ -203,7 +205,7 @@ fun CategoryProtectionCard(
                 )
                 if (category.isAdult) {
                     Text(
-                        text = "Adult Category (Auto-Protected)",
+                        text = stringResource(R.string.parental_group_auto_protected),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         maxLines = 1,

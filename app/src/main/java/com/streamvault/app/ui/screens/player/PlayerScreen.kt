@@ -49,6 +49,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import com.streamvault.app.ui.components.dialogs.ProgramHistoryDialog
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 
 
@@ -210,7 +212,7 @@ fun PlayerScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Buffering...",
+                    text = stringResource(R.string.player_buffering),
                     style = MaterialTheme.typography.bodyLarge,
                     color = Color.White
                 )
@@ -225,7 +227,7 @@ fun PlayerScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "⚠️ Playback Error",
+                        text = "⚠️ " + stringResource(R.string.player_error_title),
                         style = MaterialTheme.typography.titleMedium,
                         color = ErrorColor
                     )
@@ -234,14 +236,14 @@ fun PlayerScreen(
                     // Show specific error message based on error type
                     val errorMessage = when (playerError) {
                         is PlayerError.NetworkError -> 
-                            "Stream unavailable — check your internet connection"
+                            stringResource(R.string.player_error_network)
                         is PlayerError.SourceError -> 
-                            "Stream not found or access denied"
+                            stringResource(R.string.player_error_source)
                         is PlayerError.DecoderError -> 
-                            "Unable to play this format — try changing decoder mode in Settings"
+                            stringResource(R.string.player_error_decoder)
                         is PlayerError.UnknownError -> 
-                            playerError?.message ?: "Unknown playback error"
-                        null -> "Unknown playback error"
+                            playerError?.message ?: stringResource(R.string.player_error_unknown)
+                        null -> stringResource(R.string.player_error_unknown)
                     }
                     
                     Text(
@@ -262,7 +264,7 @@ fun PlayerScreen(
                         )
                     ) {
                         Text(
-                            text = "Retry",
+                            text = stringResource(R.string.player_retry),
                             color = OnBackground,
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
                         )
@@ -271,7 +273,7 @@ fun PlayerScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     Text(
-                        text = "Or press Back to return",
+                        text = stringResource(R.string.player_error_back),
                         style = MaterialTheme.typography.bodySmall,
                         color = OnSurfaceDim
                     )
@@ -314,7 +316,7 @@ fun PlayerScreen(
                             )
                             if (contentType != "LIVE") {
                                 Text(
-                                    text = if (contentType == "MOVIE") "Movie" else "Series",
+                                    text = if (contentType == "MOVIE") stringResource(R.string.player_type_movie) else stringResource(R.string.player_type_series),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = Color.White.copy(alpha = 0.6f)
                                 )
@@ -347,7 +349,7 @@ fun PlayerScreen(
                                 )
                             ) {
                                 Text(
-                                    text = "✕ Close",
+                                    text = "✕ " + stringResource(R.string.player_close),
                                     color = Color.White,
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                 )
@@ -390,47 +392,20 @@ fun PlayerScreen(
                                     }
                                 }
                                 
-                                // Next Program Preview
-                                if (nextProgram != null) {
-                                    Column(
-                                        modifier = Modifier
-                                            .padding(end = 24.dp)
-                                            .widthIn(max = 200.dp),
-                                        horizontalAlignment = Alignment.End
-                                    ) {
-                                        Text(
-                                            text = "NEXT",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Primary,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = nextProgram?.title ?: "",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color.White.copy(alpha = 0.8f),
-                                            maxLines = 1,
-                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(nextProgram?.startTime ?: 0)),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Color.White.copy(alpha = 0.5f)
-                                        )
-                                    }
-                                }
+                                // Next Program Preview Removed (Moved to EPG Overlay)
                                 
                                 // Track selection buttons shifted here for Live
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     if (currentChannel?.catchUpSupported == true) {
-                                        QuickSettingsButton("🔄 Restart") { viewModel.restartCurrentProgram() }
-                                        QuickSettingsButton("📼 Archive") { showProgramHistory = true }
+                                        QuickSettingsButton("🔄 " + stringResource(R.string.player_restart)) { viewModel.restartCurrentProgram() }
+                                        QuickSettingsButton("📼 " + stringResource(R.string.player_archive)) { showProgramHistory = true }
                                     }
                                     QuickSettingsButton("📺 ${aspectRatio.modeName}") { viewModel.toggleAspectRatio() }
                                     if (availableSubtitleTracks.isNotEmpty()) {
-                                        QuickSettingsButton("💬 Subs") { showTrackSelection = TrackType.TEXT }
+                                        QuickSettingsButton("💬 " + stringResource(R.string.player_subs)) { showTrackSelection = TrackType.TEXT }
                                     }
                                     if (availableAudioTracks.size > 1) {
-                                        QuickSettingsButton("🔊 Audio") { showTrackSelection = TrackType.AUDIO }
+                                        QuickSettingsButton("🔊 " + stringResource(R.string.player_audio)) { showTrackSelection = TrackType.AUDIO }
                                     }
                                 }
                             }
@@ -505,10 +480,10 @@ fun PlayerScreen(
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     QuickSettingsButton("📺 ${aspectRatio.modeName}") { viewModel.toggleAspectRatio() }
                                     if (availableSubtitleTracks.isNotEmpty()) {
-                                        QuickSettingsButton("💬 Subs") { showTrackSelection = TrackType.TEXT }
+                                        QuickSettingsButton("💬 " + stringResource(R.string.player_subs)) { showTrackSelection = TrackType.TEXT }
                                     }
                                     if (availableAudioTracks.size > 1) {
-                                        QuickSettingsButton("🔊 Audio") { showTrackSelection = TrackType.AUDIO }
+                                        QuickSettingsButton("🔊 " + stringResource(R.string.player_audio)) { showTrackSelection = TrackType.AUDIO }
                                     }
                                 }
                             }
@@ -596,25 +571,17 @@ fun PlayerScreen(
                             }
                         }
                      }
-                     
-                     if (currentProgram != null) {
-                         val now = System.currentTimeMillis()
-                         val start = currentProgram?.startTime ?: 0
-                         val end = currentProgram?.endTime ?: 0
-                         if (start > 0 && end > 0) {
-                             val progress = (now - start).toFloat() / (end - start)
-                             Spacer(modifier = Modifier.height(8.dp))
-                             androidx.compose.material3.LinearProgressIndicator(
-                                 progress = { progress.coerceIn(0f, 1f) },
-                                 modifier = Modifier.fillMaxWidth().height(2.dp),
-                                 color = Primary,
-                                 trackColor = Color.White.copy(alpha = 0.2f)
-                             )
-                         }
-                     }
                  }
             }
         }
+        
+        // EPG Overlay (Right Side)
+        EpgOverlay(
+            isVisible = showControls && contentType == "LIVE",
+            currentChannel = currentChannel,
+            currentProgram = currentProgram,
+            nextProgram = nextProgram
+        )
 
         // Resolution Overlay (Top Right)
         if (showResolution && !showControls && !videoFormat.isEmpty) {
@@ -650,13 +617,13 @@ fun PlayerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Resume Playback",
+                        text = stringResource(R.string.player_resume_title),
                         style = MaterialTheme.typography.headlineMedium,
                         color = Color.White
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Do you want to resume ${resumePrompt.title} from where you left off?",
+                        text = stringResource(R.string.player_resume_desc, resumePrompt.title),
                         style = MaterialTheme.typography.bodyLarge,
                         color = TextSecondary,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -676,7 +643,7 @@ fun PlayerScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                "Start Over",
+                                stringResource(R.string.player_resume_start_over),
                                 modifier = Modifier.padding(vertical = 12.dp).fillMaxWidth(),
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                 color = Color.White
@@ -693,7 +660,7 @@ fun PlayerScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                "Resume",
+                                stringResource(R.string.player_resume),
                                 modifier = Modifier.padding(vertical = 12.dp).fillMaxWidth(),
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                 color = Color.White,
@@ -723,7 +690,7 @@ fun PlayerScreen(
                         .padding(24.dp)
                 ) {
                     Text(
-                        text = if (showTrackSelection == TrackType.AUDIO) "Select Audio Track" else "Select Subtitles",
+                        text = if (showTrackSelection == TrackType.AUDIO) stringResource(R.string.player_track_audio) else stringResource(R.string.player_track_subs),
                         style = MaterialTheme.typography.titleLarge,
                         color = Color.White,
                         modifier = Modifier.padding(bottom = 16.dp)
@@ -735,7 +702,7 @@ fun PlayerScreen(
                         if (showTrackSelection == TrackType.TEXT) {
                             item {
                                 TrackItem(
-                                    name = "Off",
+                                    name = stringResource(R.string.player_track_off),
                                     isSelected = tracks.none { it.isSelected },
                                     onClick = {
                                         viewModel.selectSubtitleTrack(null)

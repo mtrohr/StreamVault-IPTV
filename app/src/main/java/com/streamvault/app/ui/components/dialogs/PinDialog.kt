@@ -24,12 +24,14 @@ import com.streamvault.app.ui.theme.ErrorColor
 import com.streamvault.app.ui.theme.Primary
 import com.streamvault.app.ui.theme.SurfaceElevated
 import kotlinx.coroutines.delay
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 @Composable
 fun PinDialog(
     onDismissRequest: () -> Unit,
     onPinEntered: (String) -> Unit,
-    title: String = "Enter PIN",
+    title: String? = null,
     error: String? = null
 ) {
     var pin by remember { mutableStateOf("") }
@@ -65,7 +67,7 @@ fun PinDialog(
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
                 Text(
-                    text = title,
+                    text = title ?: stringResource(R.string.pin_dialog_title),
                     style = MaterialTheme.typography.titleLarge,
                     color = Color.White
                 )
@@ -119,7 +121,7 @@ fun PinDialog(
                 
                 // Cancel Button
                 TextButton(onClick = onDismissRequest) {
-                    Text("Cancel", color = Color.White.copy(alpha = 0.7f))
+                    Text(stringResource(R.string.pin_dialog_cancel), color = Color.White.copy(alpha = 0.7f))
                 }
             }
         }

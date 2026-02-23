@@ -32,6 +32,8 @@ import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.Movie
 import com.streamvault.domain.model.Series
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 // ── Focusable Card Base ────────────────────────────────────────────
 
@@ -142,7 +144,7 @@ fun ChannelCard(
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
-                text = if (isLocked) "Locked Channel" else channel.name,
+                text = if (isLocked) stringResource(R.string.card_locked_channel) else channel.name,
                 style = MaterialTheme.typography.titleSmall,
                 color = if (isFocused) TextPrimary else TextSecondary,
                 maxLines = 1,
@@ -202,7 +204,7 @@ fun ChannelCard(
                         .background(AccentRed, RoundedCornerShape(4.dp))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
-                    Text("LIVE", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    Text(stringResource(R.string.card_live_badge), style = MaterialTheme.typography.labelSmall, color = Color.White)
                 }
             }
         }
@@ -276,7 +278,7 @@ fun MovieCard(
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
-                text = if (isLocked) "Locked" else movie.name,
+                text = if (isLocked) stringResource(R.string.card_locked) else movie.name,
                 style = MaterialTheme.typography.titleSmall,
                 color = TextPrimary,
                 maxLines = 2,
@@ -394,7 +396,7 @@ fun SeriesCard(
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
-                text = if (isLocked) "Locked" else seriesName,
+                text = if (isLocked) stringResource(R.string.card_locked) else seriesName,
                 style = MaterialTheme.typography.titleSmall,
                 color = TextPrimary,
                 maxLines = 2,

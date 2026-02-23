@@ -12,6 +12,8 @@ import androidx.tv.material3.Text
 import com.streamvault.app.ui.theme.LocalSpacing
 import com.streamvault.app.ui.theme.TextPrimary
 import com.streamvault.app.ui.theme.TextTertiary
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 // ── Netflix-style horizontal category row ─────────────────────────
 
@@ -39,7 +41,7 @@ fun <T> CategoryRow(
             )
             if (onSeeAll != null) {
                 Text(
-                    text = "See All →",
+                    text = stringResource(R.string.category_see_all),
                     style = MaterialTheme.typography.labelLarge,
                     color = TextTertiary
                 )

@@ -25,6 +25,8 @@ import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.model.Episode
 import com.streamvault.domain.model.Season
 import com.streamvault.domain.model.Series
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 @Composable
 fun SeriesDetailScreen(
@@ -37,14 +39,14 @@ fun SeriesDetailScreen(
     
     if (uiState.isLoading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Loading details...", color = OnSurface)
+            Text(stringResource(R.string.series_loading_details), color = OnSurface)
         }
         return
     }
 
     if (series == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Series not found", color = ErrorColor)
+            Text(stringResource(R.string.series_not_found), color = ErrorColor)
         }
         return
     }
@@ -135,7 +137,7 @@ private fun SeriesDetailContent(
             // Seasons
             if (series.seasons.isNotEmpty()) {
                 item {
-                    Text("Seasons", style = MaterialTheme.typography.titleMedium, color = OnSurface)
+                    Text(stringResource(R.string.series_seasons), style = MaterialTheme.typography.titleMedium, color = OnSurface)
                     Spacer(modifier = Modifier.height(8.dp))
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -156,7 +158,7 @@ private fun SeriesDetailContent(
             // Episodes
             selectedSeason?.let { season ->
                 item {
-                    Text("Episodes (${season.episodes.size})", style = MaterialTheme.typography.titleMedium, color = OnSurface)
+                    Text(stringResource(R.string.series_episodes, season.episodes.size), style = MaterialTheme.typography.titleMedium, color = OnSurface)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 

@@ -30,6 +30,8 @@ import com.streamvault.app.ui.components.TopNavBar
 import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.model.Provider
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 
 @Composable
@@ -45,10 +47,12 @@ fun SettingsScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     // Parental Control State
     var showPinDialog by remember { mutableStateOf(false) }
     var showLevelDialog by remember { mutableStateOf(false) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
     var pinError by remember { mutableStateOf<String?>(null) }
     var pendingAction by remember { mutableStateOf<ParentalAction?>(null) }
 
@@ -78,7 +82,7 @@ fun SettingsScreen(
             ) {
             item {
                 Text(
-                    text = "Settings",
+                    text = stringResource(R.string.settings_title),
                     style = MaterialTheme.typography.headlineMedium,
                     color = Primary,
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -88,7 +92,7 @@ fun SettingsScreen(
             // Providers section
             item {
                 Text(
-                    text = "Providers",
+                    text = stringResource(R.string.settings_providers),
                     style = MaterialTheme.typography.titleMedium,
                     color = Primary,
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -98,7 +102,7 @@ fun SettingsScreen(
             if (uiState.providers.isEmpty()) {
                 item {
                     Text(
-                        text = "No providers configured",
+                        text = stringResource(R.string.settings_no_providers),
                         style = MaterialTheme.typography.bodyMedium,
                         color = OnSurface
                     )
@@ -143,7 +147,7 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "➕  Add Provider",
+                            text = "➕  " + stringResource(R.string.settings_add_provider),
                             style = MaterialTheme.typography.bodyLarge,
                             color = Primary
                         )
@@ -155,7 +159,7 @@ fun SettingsScreen(
             item {
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    text = "Parental Control",
+                    text = stringResource(R.string.settings_parental_control),
                     style = MaterialTheme.typography.titleMedium,
                     color = Primary,
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -173,30 +177,77 @@ fun SettingsScreen(
                 )
             }
 
-            // Decoder settings
+            // Language Settings
             item {
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    text = "Playback",
+                    text = stringResource(R.string.settings_language),
                     style = MaterialTheme.typography.titleMedium,
                     color = Primary,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
-                SettingsRow(label = "Decoder Mode", value = "Auto (HW preferred)")
-                SettingsRow(label = "Buffer Duration", value = "5 seconds")
+
+                Surface(
+                    onClick = { showLanguageDialog = true },
+                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = SurfaceElevated,
+                        focusedContainerColor = Primary.copy(alpha = 0.2f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_app_language),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = OnBackground
+                        )
+                        val languageName = when (uiState.appLanguage) {
+                            "ar" -> "العربية"
+                            "he" -> "עברית"
+                            "ru" -> "Русский"
+                            "en" -> "English"
+                            else -> stringResource(R.string.settings_system_default)
+                        }
+                        Text(
+                            text = languageName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Primary
+                        )
+                    }
+                }
+            }
+
+            // Decoder settings
+            item {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.settings_playback),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Primary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                SettingsRow(label = stringResource(R.string.settings_decoder_mode), value = stringResource(R.string.settings_decoder_auto))
+                SettingsRow(label = stringResource(R.string.settings_buffer_duration), value = stringResource(R.string.settings_buffer_5s))
             }
 
             // About section
             item {
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    text = "About",
+                    text = stringResource(R.string.settings_about),
                     style = MaterialTheme.typography.titleMedium,
                     color = Primary,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
-                SettingsRow(label = "App Version", value = "1.0.0")
-                SettingsRow(label = "Build", value = "StreamVault for Android TV")
+                SettingsRow(label = stringResource(R.string.settings_app_version), value = "1.0.0")
+                SettingsRow(label = stringResource(R.string.settings_build), value = stringResource(R.string.settings_build_desc))
             }
             }
         }
@@ -231,7 +282,7 @@ fun SettingsScreen(
                 ) {
                     CircularProgressIndicator(color = Primary)
                     Text(
-                        text = "Syncing data, please wait...",
+                        text = stringResource(R.string.settings_syncing),
                         style = MaterialTheme.typography.bodyLarge,
                         color = OnSurface
                     )
@@ -265,12 +316,12 @@ fun SettingsScreen(
                                     else -> pendingAction = null
                                 }
                             } else {
-                                pinError = "Incorrect PIN"
+                                pinError = context.getString(R.string.home_incorrect_pin)
                             }
                         }
                     }
                 },
-                title = if (pendingAction == ParentalAction.SetNewPin) "Enter New PIN" else "Enter PIN",
+                title = if (pendingAction == ParentalAction.SetNewPin) stringResource(R.string.settings_enter_new_pin) else stringResource(R.string.settings_enter_pin),
                 error = pinError
             )
         }
@@ -278,18 +329,18 @@ fun SettingsScreen(
         if (showLevelDialog) {
             AlertDialog(
                 onDismissRequest = { showLevelDialog = false },
-                title = { Text("Select Protection Level") },
+                title = { Text(stringResource(R.string.settings_select_level)) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        LevelOption(0, "OFF - No restrictions", uiState.parentalControlLevel) {
+                        LevelOption(0, stringResource(R.string.settings_level_off_desc), uiState.parentalControlLevel) {
                             viewModel.setParentalControlLevel(0)
                             showLevelDialog = false
                         }
-                        LevelOption(1, "LOCKED - Content visible, PIN required", uiState.parentalControlLevel) {
+                        LevelOption(1, stringResource(R.string.settings_level_locked_desc), uiState.parentalControlLevel) {
                             viewModel.setParentalControlLevel(1)
                             showLevelDialog = false
                         }
-                        LevelOption(2, "HIDDEN - Content hidden from all lists", uiState.parentalControlLevel) {
+                        LevelOption(2, stringResource(R.string.settings_level_hidden_desc), uiState.parentalControlLevel) {
                             viewModel.setParentalControlLevel(2)
                             showLevelDialog = false
                         }
@@ -297,7 +348,68 @@ fun SettingsScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = { showLevelDialog = false }) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.settings_cancel))
+                    }
+                }
+            )
+        }
+
+        if (showLanguageDialog) {
+            AlertDialog(
+                onDismissRequest = { showLanguageDialog = false },
+                title = { Text(stringResource(R.string.settings_select_language)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LevelOption(
+                            level = 0,
+                            text = stringResource(R.string.settings_system_default),
+                            currentLevel = if (uiState.appLanguage == "system") 0 else -1,
+                            onSelect = {
+                                viewModel.setAppLanguage("system")
+                                showLanguageDialog = false
+                            }
+                        )
+                        LevelOption(
+                            level = 1,
+                            text = "English",
+                            currentLevel = if (uiState.appLanguage == "en") 1 else -1,
+                            onSelect = {
+                                viewModel.setAppLanguage("en")
+                                showLanguageDialog = false
+                            }
+                        )
+                        LevelOption(
+                            level = 2,
+                            text = "עברית (Hebrew)",
+                            currentLevel = if (uiState.appLanguage == "he") 2 else -1,
+                            onSelect = {
+                                viewModel.setAppLanguage("he")
+                                showLanguageDialog = false
+                            }
+                        )
+                        LevelOption(
+                            level = 3,
+                            text = "العربية (Arabic)",
+                            currentLevel = if (uiState.appLanguage == "ar") 3 else -1,
+                            onSelect = {
+                                viewModel.setAppLanguage("ar")
+                                showLanguageDialog = false
+                            }
+                        )
+                        LevelOption(
+                            level = 4,
+                            text = "Русский (Russian)",
+                            currentLevel = if (uiState.appLanguage == "ru") 4 else -1,
+                            onSelect = {
+                                viewModel.setAppLanguage("ru")
+                                showLanguageDialog = false
+                            }
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showLanguageDialog = false }) {
+                        Text(stringResource(R.string.settings_cancel))
                     }
                 }
             )
@@ -347,13 +459,13 @@ private fun ParentalControlCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                Text("Protection Level", style = MaterialTheme.typography.bodyLarge, color = OnBackground)
+                Text(stringResource(R.string.settings_protection_level), style = MaterialTheme.typography.bodyLarge, color = OnBackground)
                 Text(
                     text = when(level) {
-                        0 -> "OFF"
-                        1 -> "LOCKED"
-                        2 -> "HIDDEN"
-                        else -> "UNKNOWN"
+                        0 -> stringResource(R.string.settings_level_off)
+                        1 -> stringResource(R.string.settings_level_locked)
+                        2 -> stringResource(R.string.settings_level_hidden)
+                        else -> stringResource(R.string.settings_level_unknown)
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (level == 0) ErrorColor else Primary
@@ -372,7 +484,7 @@ private fun ParentalControlCard(
                 )
             ) {
                 Text(
-                    text = "Change",
+                    text = stringResource(R.string.settings_change),
                     style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                 )
@@ -386,7 +498,7 @@ private fun ParentalControlCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Parental PIN", style = MaterialTheme.typography.bodyLarge, color = OnBackground)
+            Text(stringResource(R.string.settings_parental_pin), style = MaterialTheme.typography.bodyLarge, color = OnBackground)
             
             // Custom Focusable Button for "Change PIN"
             Surface(
@@ -400,7 +512,7 @@ private fun ParentalControlCard(
                 )
             ) {
                 Text(
-                    text = "Change PIN",
+                    text = stringResource(R.string.settings_change_pin),
                     style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                 )
@@ -420,6 +532,7 @@ private fun ProviderSettingsCard(
     onEdit: () -> Unit,
     onParentalControl: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     // Use Column layout - provider info + buttons below as separate focusable items
     Column(
         modifier = Modifier
@@ -456,7 +569,7 @@ private fun ProviderSettingsCard(
             }
             if (isActive) {
                 Text(
-                    text = "ACTIVE",
+                    text = stringResource(R.string.settings_active),
                     style = MaterialTheme.typography.labelSmall,
                     color = Primary,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
@@ -471,9 +584,9 @@ private fun ProviderSettingsCard(
         val expDate = provider.expirationDate
         val expirationText = remember(expDate) {
             when (expDate) {
-                null -> "Expiration: Unknown"
-                Long.MAX_VALUE -> "Expiration: Never"
-                else -> "Expires: " + java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(expDate))
+                null -> context.getString(R.string.settings_expiration_unknown)
+                Long.MAX_VALUE -> context.getString(R.string.settings_expiration_never)
+                else -> context.getString(R.string.settings_expires, java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(expDate)))
             }
         }
         Text(
@@ -495,7 +608,7 @@ private fun ProviderSettingsCard(
                     )
                 ) {
                     Text(
-                        text = "⚡ Connect",
+                        text = "⚡ " + stringResource(R.string.settings_connect),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color.White,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
@@ -511,7 +624,7 @@ private fun ProviderSettingsCard(
                     )
                 ) {
                     Text(
-                        text = if (isSyncing) "⟳ Syncing..." else "⟳ Sync",
+                        text = if (isSyncing) "⟳ " + stringResource(R.string.settings_syncing_btn) else "⟳ " + stringResource(R.string.settings_sync_btn),
                         style = MaterialTheme.typography.labelMedium,
                         color = Primary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
@@ -528,7 +641,7 @@ private fun ProviderSettingsCard(
                 )
             ) {
                 Text(
-                    text = "✎ Edit",
+                    text = "✎ " + stringResource(R.string.settings_edit),
                     style = MaterialTheme.typography.labelMedium,
                     color = Secondary,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
@@ -544,7 +657,7 @@ private fun ProviderSettingsCard(
                 )
             ) {
                 Text(
-                    text = "🗑 Delete",
+                    text = "🗑 " + stringResource(R.string.settings_delete),
                     style = MaterialTheme.typography.labelMedium,
                     color = ErrorColor,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
@@ -561,7 +674,7 @@ private fun ProviderSettingsCard(
                     )
                 ) {
                     Text(
-                        text = "🛡️ Parental Control",
+                        text = "🛡️ " + stringResource(R.string.settings_pc_btn),
                         style = MaterialTheme.typography.labelMedium,
                         color = Primary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)

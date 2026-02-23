@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StreamVault</string>
+    <!-- Navigation -->
+    <string name="nav_live_tv">بث مباشر</string>
+    <string name="nav_movies">أفلام</string>
+    <string name="nav_series">مسلسلات</string>
+    <string name="nav_settings">الإعدادات</string>
+
+    <!-- Welcome -->
+    <string name="welcome_enter_app">دخول التطبيق</string>
+    <string name="welcome_manage_providers">إدارة المزودين</string>
+    <string name="welcome_setup_provider">إعداد المزود</string>
+    <string name="welcome_version">v1.0.0</string>
+
+    <!-- Home -->
+    <string name="home_incorrect_pin">رمز PIN غير صحيح</string>
+    <string name="home_loading_channels">جاري تحميل القنوات...</string>
+    <string name="home_categories_title">الفئات</string>
+    <string name="home_search_categories">البحث في الفئات...</string>
+    <string name="home_all_channels">جميع القنوات</string>
+    <string name="home_search_channels">البحث في القنوات...</string>
+    <string name="home_loading">جاري التحميل...</string>
+    <string name="home_no_channels_found">لم يتم العثور على قنوات في هذه الفئة</string>
+    <string name="home_add_favorites_hint">أضف قنوات إلى المفضلة لرؤيتها هنا</string>
+    <string name="home_delete_group_title">حذف المجموعة؟</string>
+    <string name="home_delete_group_body">هل أنت متأكد أنك تريد حذف \'%1$s\'؟ سيؤدي هذا إلى إزالة جميع القنوات من هذه المجموعة.</string>
+    <string name="home_delete_group_confirm">حذف</string>
+    <string name="home_delete_group_cancel">إلغاء</string>
+
+    <!-- Dialogs -->
+    <string name="pin_dialog_title">أدخل رمز PIN</string>
+    <string name="pin_dialog_cancel">إلغاء</string>
+
+    <string name="category_options_set_default">تعيين كمجموعة افتراضية</string>
+    <string name="category_options_unlock">إلغاء قفل المجموعة</string>
+    <string name="category_options_lock">قفل المجموعة</string>
+    <string name="category_options_delete">حذف المجموعة</string>
+    <string name="category_options_cancel">إلغاء</string>
+
+    <string name="add_group_manage_title">إدارة: %1$s</string>
+    <string name="add_group_close_cd">إغلاق</string>
+    <string name="add_group_name_hint">إسم المجموعة</string>
+    <string name="add_group_cancel">إلغاء</string>
+    <string name="add_group_create">إنشاء</string>
+    <string name="add_group_remove_favorites">إزالة من المفضلة</string>
+    <string name="add_group_add_favorites">إضافة إلى المفضلة</string>
+    <string name="add_group_reorder_title">إعادة ترتيب</string>
+    <string name="add_group_move_up">تحريك لأعلى</string>
+    <string name="add_group_move_down">تحريك لأسفل</string>
+    <string name="add_group_custom_groups_title">مجموعات مخصصة</string>
+    <string name="add_group_remove_btn">إزالة</string>
+    <string name="add_group_add_btn">إضافة</string>
+    <string name="add_group_create_new_btn">إنشاء مجموعة جديدة</string>
+
+    <string name="card_locked_channel">قناة مقفلة</string>
+    <string name="card_live_badge">مباشر</string>
+    <string name="card_locked">مقفلة</string>
+
+    <string name="category_see_all">عرض الكل ←</string>
+    <string name="continue_watching_title">متابعة المشاهدة</string>
+    <string name="continue_watching_season_episode">مـ %1$d حـ %2$d</string>
+
+    <string name="playlist_no_provider">لا يوجد مزود</string>
+
+    <!-- Movies -->
+    <string name="movies_incorrect_pin">رمز PIN غير صحيح</string>
+    <string name="movies_loading">جاري تحميل الأفلام...</string>
+    <string name="movies_no_found">لم يتم العثور على أفلام</string>
+
+    <!-- Series -->
+    <string name="series_incorrect_pin">رمز PIN غير صحيح</string>
+    <string name="series_loading">جاري تحميل المسلسلات...</string>
+    <string name="series_no_found">لم يتم العثور على مسلسلات</string>
+
+    <!-- Settings -->
+    <string name="settings_title">الإعدادات</string>
+    <string name="settings_providers">المزودون</string>
+    <string name="settings_no_providers">لم يتم تكوين مزودين</string>
+    <string name="settings_add_provider">إضافة مزود</string>
+    <string name="settings_parental_control">الرقابة الأبوية</string>
+    <string name="settings_playback">التشغيل</string>
+    <string name="settings_decoder_mode">وضع فك التشفير</string>
+    <string name="settings_decoder_auto">تلقائي (يفضل الأجهزة)</string>
+    <string name="settings_buffer_duration">مدة التخزين المؤقت</string>
+    <string name="settings_buffer_5s">5 ثواني</string>
+    <string name="settings_about">حول</string>
+    <string name="settings_app_version">إصدار التطبيق</string>
+    <string name="settings_build">نسخة البناء</string>
+    <string name="settings_build_desc">StreamVault لنظام Android TV</string>
+    <string name="settings_syncing">جاري مزامنة البيانات، يرجى الانتظار...</string>
+    <string name="settings_enter_new_pin">أدخل رمز PIN جديد</string>
+    <string name="settings_enter_pin">أدخل رمز PIN</string>
+    <string name="settings_select_level">حدد مستوى الحماية</string>
+    <string name="settings_level_off_desc">إيقاف - بدون قيود</string>
+    <string name="settings_level_locked_desc">مقفل - المحتوى مرئي، مطلوب رمز PIN</string>
+    <string name="settings_level_hidden_desc">مخفي - المحتوى مخفي من جميع القوائم</string>
+    <string name="settings_cancel">إلغاء</string>
+    <string name="settings_protection_level">مستوى الحماية</string>
+    <string name="settings_level_off">إيقاف</string>
+    <string name="settings_level_locked">مقفل</string>
+    <string name="settings_level_hidden">مخفي</string>
+    <string name="settings_level_unknown">غير معروف</string>
+    <string name="settings_change">تغيير</string>
+    <string name="settings_parental_pin">رمز PIN الأبوي</string>
+    <string name="settings_change_pin">تغيير رمز PIN</string>
+    <string name="settings_expiration_unknown">الانتهاء: غير معروف</string>
+    <string name="settings_expiration_never">الانتهاء: أبداً</string>
+    <string name="settings_expires">ينتهي: %1$s</string>
+    <string name="settings_connect">اتصال</string>
+    <string name="settings_syncing_btn">جاري المزامنة...</string>
+    <string name="settings_sync_btn">مزامنة</string>
+    <string name="settings_edit">تعديل</string>
+    <string name="settings_delete">حذف</string>
+    <string name="settings_pc_btn">الرقابة الأبوية</string>
+    <string name="settings_active">نشط</string>
+
+    <!-- Favorites -->
+    <string name="favorites_loading">جاري تحميل المفضلة...</string>
+    <string name="favorites_no_favorites">لا توجد مفضلة بعد</string>
+    <string name="favorites_empty_hint">اضغط مطولاً على أي قناة، فيلم، أو مسلسل لإضافته إلى المفضلة</string>
+    <string name="favorites_reordering">إعادة ترتيب</string>
+
+    <!-- Search -->
+    <string name="search_incorrect_pin">رمز PIN غير صحيح</string>
+    <string name="search_type_to_search">اكتب للبحث...</string>
+    <string name="search_no_results">لم يتم العثور على نتائج لـ \'%1$s\'</string>
+    <string name="search_live_tv">بث مباشر</string>
+    <string name="search_movies">أفلام</string>
+    <string name="search_series">مسلسلات</string>
+    <string name="search_hint">بحث...</string>
+
+    <!-- Provider Setup -->
+    <string name="setup_title_streamvault">StreamVault</string>
+    <string name="setup_edit_provider">تعديل المزود</string>
+    <string name="setup_update_desc">قم بتحديث تفاصيل مزود IPTV الخاص بك</string>
+    <string name="setup_add_desc">أضف مزود IPTV الخاص بك</string>
+    <string name="setup_xtream">رموز Xtream</string>
+    <string name="setup_m3u">قائمة تشغيل M3U</string>
+    <string name="setup_name_hint">اسم قائمة التشغيل (اختياري)</string>
+    <string name="setup_server_hint">رابط الخادم (URL)</string>
+    <string name="setup_user_hint">اسم المستخدم</string>
+    <string name="setup_pass_hint">كلمة المرور</string>
+    <string name="setup_connecting">يتصل...</string>
+    <string name="setup_save">حفظ التغييرات</string>
+    <string name="setup_login">تسجيل الدخول</string>
+    <string name="setup_m3u_hint">رابط M3U (URL)</string>
+    <string name="setup_validating">يتحقق...</string>
+    <string name="setup_add">إضافة قائمة التشغيل</string>
+
+    <!-- Player -->
+    <string name="player_buffering">تخزين مؤقت...</string>
+    <string name="player_error_title">خطأ في التشغيل</string>
+    <string name="player_error_network">التيار غير متوفر — تحقق من اتصالك بالإنترنت</string>
+    <string name="player_error_source">لم يتم العثور على التيار أو تم رفض الوصول</string>
+    <string name="player_error_decoder">لا يمكن تشغيل هذا التنسيق — حاول تغيير وضع فك التشفير في الإعدادات</string>
+    <string name="player_error_unknown">خطأ في التشغيل غير معروف</string>
+    <string name="player_retry">إعادة المحاولة</string>
+    <string name="player_error_back">أو اضغط رجوع للعودة</string>
+    <string name="player_type_movie">فيلم</string>
+    <string name="player_type_series">مسلسل</string>
+    <string name="player_close">إغلاق</string>
+    <string name="player_next">التالي</string>
+    <string name="player_restart">إعادة التشغيل</string>
+    <string name="player_archive">الأرشيف</string>
+    <string name="player_subs">ترجمات</string>
+    <string name="player_audio">صوت</string>
+    <string name="player_resume_title">استئناف التشغيل</string>
+    <string name="player_resume_desc">هل تريد الاستمرار في متابعة %1$s من حيث توقفت؟</string>
+    <string name="player_resume_start_over">البدء من جديد</string>
+    <string name="player_resume">استئناف</string>
+    <string name="player_track_audio">اختر مسار الصوت</string>
+    <string name="player_track_subs">اختر الترجمة</string>
+    <string name="player_track_off">إيقاف</string>
+
+    <!-- Parental Control Group -->
+    <string name="parental_group_title">مجموعات محمية</string>
+    <string name="parental_group_search">البحث في الفئات...</string>
+    <string name="parental_group_auto_protected">فئة للبالغين (محمية تلقائياً)</string>
+    <string name="parental_group_back">رجوع</string>
+    <string name="search_all">الكل</string>
+    <string name="player_archive_title">أرشيف البرامج</string>
+    <string name="player_no_archive">لم يتم العثور على برامج مؤرشفة</string>
+    <string name="series_loading_details">جاري تحميل التفاصيل...</string>
+    <string name="series_not_found">لم يتم العثور على المسلسل</string>
+    <string name="series_seasons">مواسم</string>
+    <string name="series_episodes">الحلقات (%1$d)</string>
+    <string name="epg_now_playing">يعرض الآن</string>
+    <string name="epg_no_data">لا يوجد دليل برامج</string>
+    <string name="epg_up_next">التالي</string>
+</resources>

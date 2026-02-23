@@ -22,6 +22,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.*
 import com.streamvault.app.ui.theme.*
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 @Composable
 fun ProviderSetupScreen(
@@ -84,12 +86,12 @@ fun ProviderSetupScreen(
         ) {
             // Title
             Text(
-                text = if (uiState.isEditing) "Edit Provider" else "StreamVault",
+                text = if (uiState.isEditing) stringResource(R.string.setup_edit_provider) else stringResource(R.string.setup_title_streamvault),
                 style = MaterialTheme.typography.displaySmall,
                 color = Primary
             )
             Text(
-                text = if (uiState.isEditing) "Update your IPTV provider details" else "Add your IPTV provider",
+                text = if (uiState.isEditing) stringResource(R.string.setup_update_desc) else stringResource(R.string.setup_add_desc),
                 style = MaterialTheme.typography.bodyLarge,
                 color = OnSurface
             )
@@ -100,10 +102,10 @@ fun ProviderSetupScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 
                 if (!uiState.isEditing || uiState.selectedTab == 0) {
-                     TabButton("Xtream Codes", selectedTab == 0) { if (!uiState.isEditing) selectedTab = 0 }
+                     TabButton(stringResource(R.string.setup_xtream), selectedTab == 0) { if (!uiState.isEditing) selectedTab = 0 }
                 }
                 if (!uiState.isEditing || uiState.selectedTab == 1) {
-                     TabButton("M3U Playlist", selectedTab == 1) { if (!uiState.isEditing) selectedTab = 1 }
+                     TabButton(stringResource(R.string.setup_m3u), selectedTab == 1) { if (!uiState.isEditing) selectedTab = 1 }
                 }
             }
 
@@ -113,17 +115,17 @@ fun ProviderSetupScreen(
             TvTextField(
                 value = name, 
                 onValueChange = { name = it }, 
-                label = "Playlist Name (Optional)"
+                label = stringResource(R.string.setup_name_hint)
             )
 
             when (selectedTab) {
                 0 -> {
-                    TvTextField(value = serverUrl, onValueChange = { serverUrl = it }, label = "Server URL")
-                    TvTextField(value = username, onValueChange = { username = it }, label = "Username")
-                    TvTextField(value = password, onValueChange = { password = it }, label = "Password")
+                    TvTextField(value = serverUrl, onValueChange = { serverUrl = it }, label = stringResource(R.string.setup_server_hint))
+                    TvTextField(value = username, onValueChange = { username = it }, label = stringResource(R.string.setup_user_hint))
+                    TvTextField(value = password, onValueChange = { password = it }, label = stringResource(R.string.setup_pass_hint))
 
                     ActionButton(
-                        text = if (uiState.isLoading) "Connecting..." else if (uiState.isEditing) "Save Changes" else "Login",
+                        text = if (uiState.isLoading) stringResource(R.string.setup_connecting) else if (uiState.isEditing) stringResource(R.string.setup_save) else stringResource(R.string.setup_login),
                         enabled = !uiState.isLoading,
                         onClick = {
                             viewModel.loginXtream(serverUrl, username, password, name)
@@ -131,10 +133,10 @@ fun ProviderSetupScreen(
                     )
                 }
                 1 -> {
-                    TvTextField(value = m3uUrl, onValueChange = { m3uUrl = it }, label = "M3U URL")
+                    TvTextField(value = m3uUrl, onValueChange = { m3uUrl = it }, label = stringResource(R.string.setup_m3u_hint))
 
                     ActionButton(
-                        text = if (uiState.isLoading) "Validating..." else if (uiState.isEditing) "Save Changes" else "Add Playlist",
+                        text = if (uiState.isLoading) stringResource(R.string.setup_validating) else if (uiState.isEditing) stringResource(R.string.setup_save) else stringResource(R.string.setup_add),
                         enabled = !uiState.isLoading,
                         onClick = { viewModel.addM3u(m3uUrl, name) }
                     )

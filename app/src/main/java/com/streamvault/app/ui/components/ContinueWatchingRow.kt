@@ -21,6 +21,8 @@ import coil3.compose.AsyncImage
 import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.model.ContentType
 import com.streamvault.domain.model.PlaybackHistory
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
 
 /**
  * Netflix-style "Continue Watching" row backed by PlaybackHistoryRepository.
@@ -50,7 +52,7 @@ fun ContinueWatchingRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Continue Watching",
+                text = stringResource(R.string.continue_watching_title),
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary
             )
@@ -135,7 +137,7 @@ private fun ContinueWatchingTile(
                 history.seasonNumber != null && history.episodeNumber != null
             ) {
                 Text(
-                    text = "S${history.seasonNumber} E${history.episodeNumber}",
+                    text = stringResource(R.string.continue_watching_season_episode, history.seasonNumber!!, history.episodeNumber!!),
                     style = MaterialTheme.typography.labelMedium,
                     color = TextTertiary,
                     maxLines = 1

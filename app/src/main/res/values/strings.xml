@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StreamVault</string>
+
+    <!-- Navigation -->
+    <string name="nav_live_tv">Live TV</string>
+    <string name="nav_movies">Movies</string>
+    <string name="nav_series">Series</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Welcome -->
+    <string name="welcome_enter_app">Enter App</string>
+    <string name="welcome_manage_providers">Manage Providers</string>
+    <string name="welcome_setup_provider">Setup Provider</string>
+    <string name="welcome_version">v1.0.0</string>
+
+    <!-- Home -->
+    <string name="home_incorrect_pin">Incorrect PIN</string>
+    <string name="home_loading_channels">Loading channels...</string>
+    <string name="home_categories_title">Categories</string>
+    <string name="home_search_categories">Search categories...</string>
+    <string name="home_all_channels">All Channels</string>
+    <string name="home_search_channels">Search channels...</string>
+    <string name="home_loading">Loading...</string>
+    <string name="home_no_channels_found">No channels found in this category</string>
+    <string name="home_add_favorites_hint">Add channels to favorites to see them here</string>
+    <string name="home_delete_group_title">Delete Group?</string>
+    <string name="home_delete_group_body">Are you sure you want to delete \'%1$s\'? This will remove all channels from this group.</string>
+    <string name="home_delete_group_confirm">Delete</string>
+    <string name="home_delete_group_cancel">Cancel</string>
+
+    <!-- Dialogs -->
+    <string name="pin_dialog_title">Enter PIN</string>
+    <string name="pin_dialog_cancel">Cancel</string>
+
+    <string name="category_options_set_default">Set as Default Group</string>
+    <string name="category_options_unlock">Unlock Group</string>
+    <string name="category_options_lock">Lock Group</string>
+    <string name="category_options_delete">Delete Group</string>
+    <string name="category_options_cancel">Cancel</string>
+
+    <string name="add_group_manage_title">Manage: %1$s</string>
+    <string name="add_group_close_cd">Close</string>
+    <string name="add_group_name_hint">Group Name</string>
+    <string name="add_group_cancel">Cancel</string>
+    <string name="add_group_create">Create</string>
+    <string name="add_group_remove_favorites">Remove from Favorites</string>
+    <string name="add_group_add_favorites">Add to Favorites</string>
+    <string name="add_group_reorder_title">Reorder</string>
+    <string name="add_group_move_up">Move Up</string>
+    <string name="add_group_move_down">Move Down</string>
+    <string name="add_group_custom_groups_title">Custom Groups</string>
+    <string name="add_group_remove_btn">Remove</string>
+    <string name="add_group_add_btn">Add</string>
+    <string name="add_group_create_new_btn">Create New Group</string>
+
+    <string name="card_locked_channel">Locked Channel</string>
+    <string name="card_live_badge">LIVE</string>
+    <string name="card_locked">Locked</string>
+
+    <string name="category_see_all">See All →</string>
+    <string name="continue_watching_title">Continue Watching</string>
+    <string name="continue_watching_season_episode">S%1$d E%2$d</string>
+
+    <string name="playlist_no_provider">No Provider</string>
+
+    <!-- Movies -->
+    <string name="movies_incorrect_pin">Incorrect PIN</string>
+    <string name="movies_loading">Loading movies...</string>
+    <string name="movies_no_found">No movies found</string>
+
+    <!-- Series -->
+    <string name="series_incorrect_pin">Incorrect PIN</string>
+    <string name="series_loading">Loading series...</string>
+    <string name="series_no_found">No series found</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_providers">Providers</string>
+    <string name="settings_no_providers">No providers configured</string>
+    <string name="settings_add_provider">Add Provider</string>
+    <string name="settings_parental_control">Parental Control</string>
+    <string name="settings_playback">Playback</string>
+    <string name="settings_decoder_mode">Decoder Mode</string>
+    <string name="settings_decoder_auto">Auto (HW preferred)</string>
+    <string name="settings_buffer_duration">Buffer Duration</string>
+    <string name="settings_buffer_5s">5 seconds</string>
+    <string name="settings_about">About</string>
+    <string name="settings_app_version">App Version</string>
+    <string name="settings_build">Build</string>
+    <string name="settings_build_desc">StreamVault for Android TV</string>
+    <string name="settings_syncing">Syncing data, please wait...</string>
+    <string name="settings_enter_new_pin">Enter New PIN</string>
+    <string name="settings_enter_pin">Enter PIN</string>
+    <string name="settings_select_level">Select Protection Level</string>
+    <string name="settings_level_off_desc">OFF - No restrictions</string>
+    <string name="settings_level_locked_desc">LOCKED - Content visible, PIN required</string>
+    <string name="settings_level_hidden_desc">HIDDEN - Content hidden from all lists</string>
+    <string name="settings_cancel">Cancel</string>
+    <string name="settings_protection_level">Protection Level</string>
+    <string name="settings_level_off">OFF</string>
+    <string name="settings_level_locked">LOCKED</string>
+    <string name="settings_level_hidden">HIDDEN</string>
+    <string name="settings_level_unknown">UNKNOWN</string>
+    <string name="settings_change">Change</string>
+    <string name="settings_parental_pin">Parental PIN</string>
+    <string name="settings_change_pin">Change PIN</string>
+    <string name="settings_expiration_unknown">Expiration: Unknown</string>
+    <string name="settings_expiration_never">Expiration: Never</string>
+    <string name="settings_expires">Expires: %1$s</string>
+    <string name="settings_connect">Connect</string>
+    <string name="settings_syncing_btn">Syncing...</string>
+    <string name="settings_sync_btn">Sync</string>
+    <string name="settings_edit">Edit</string>
+    <string name="settings_delete">Delete</string>
+    <string name="settings_pc_btn">Parental Control</string>
+    <string name="settings_active">ACTIVE</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_app_language">App Language</string>
+    <string name="settings_system_default">System Default</string>
+    <string name="settings_select_language">Select Language</string>
+
+    <!-- Favorites -->
+    <string name="favorites_loading">Loading favorites...</string>
+    <string name="favorites_no_favorites">No favorites yet</string>
+    <string name="favorites_empty_hint">Long-press on any channel, movie, or series to add it to favorites</string>
+    <string name="favorites_reordering">Reordering</string>
+
+    <!-- Search -->
+    <string name="search_incorrect_pin">Incorrect PIN</string>
+    <string name="search_type_to_search">Type to search...</string>
+    <string name="search_no_results">No results found for \'%1$s\'</string>
+    <string name="search_live_tv">Live TV</string>
+    <string name="search_all">All</string>
+    <string name="search_movies">Movies</string>
+    <string name="search_series">Series</string>
+    <string name="search_hint">Search...</string>
+
+    <!-- Provider Setup -->
+    <string name="setup_title_streamvault">StreamVault</string>
+    <string name="setup_edit_provider">Edit Provider</string>
+    <string name="setup_update_desc">Update your IPTV provider details</string>
+    <string name="setup_add_desc">Add your IPTV provider</string>
+    <string name="setup_xtream">Xtream Codes</string>
+    <string name="setup_m3u">M3U Playlist</string>
+    <string name="setup_name_hint">Playlist Name (Optional)</string>
+    <string name="setup_server_hint">Server URL</string>
+    <string name="setup_user_hint">Username</string>
+    <string name="setup_pass_hint">Password</string>
+    <string name="setup_connecting">Connecting...</string>
+    <string name="setup_save">Save Changes</string>
+    <string name="setup_login">Login</string>
+    <string name="setup_m3u_hint">M3U URL</string>
+    <string name="setup_validating">Validating...</string>
+    <string name="setup_add">Add Playlist</string>
+
+    <!-- Player -->
+    <string name="player_buffering">Buffering...</string>
+    <string name="player_error_title">Playback Error</string>
+    <string name="player_error_network">Stream unavailable — check your internet connection</string>
+    <string name="player_error_source">Stream not found or access denied</string>
+    <string name="player_error_decoder">Unable to play this format — try changing decoder mode in Settings</string>
+    <string name="player_error_unknown">Unknown playback error</string>
+    <string name="player_retry">Retry</string>
+    <string name="player_error_back">Or press Back to return</string>
+    <string name="player_type_movie">Movie</string>
+    <string name="player_type_series">Series</string>
+    <string name="player_close">Close</string>
+    <string name="player_next">NEXT</string>
+    <string name="player_restart">Restart</string>
+    <string name="player_archive">Archive</string>
+    <string name="player_subs">Subs</string>
+    <string name="player_audio">Audio</string>
+    <string name="player_resume_title">Resume Playback</string>
+    <string name="player_resume_desc">Do you want to resume %1$s from where you left off?</string>
+    <string name="player_resume_start_over">Start Over</string>
+    <string name="player_resume">Resume</string>
+    <string name="player_track_audio">Select Audio Track</string>
+    <string name="player_track_subs">Select Subtitles</string>
+    <string name="player_track_off">Off</string>
+
+    <!-- Parental Control Group -->
+    <string name="parental_group_title">Protected Groups</string>
+    <string name="parental_group_search">Search categories...</string>
+    <string name="parental_group_auto_protected">Adult Category (Auto-Protected)</string>
+    <string name="parental_group_back">Back</string>
+    <string name="player_archive_title">Program Archive</string>
+    <string name="player_no_archive">No archived programs found</string>
+    <string name="series_loading_details">Loading details...</string>
+    <string name="series_not_found">Series not found</string>
+    <string name="series_seasons">Seasons</string>
+    <string name="series_episodes">Episodes (%1$d)</string>
+    <string name="epg_now_playing">NOW PLAYING</string>
+    <string name="epg_no_data">No EPG Data</string>
+    <string name="epg_up_next">UP NEXT</string>
+</resources>

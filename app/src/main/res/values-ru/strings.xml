@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StreamVault</string>
+    <!-- Navigation -->
+    <string name="nav_live_tv">ТВ Онлайн</string>
+    <string name="nav_movies">Фильмы</string>
+    <string name="nav_series">Сериалы</string>
+    <string name="nav_settings">Настройки</string>
+
+    <!-- Welcome -->
+    <string name="welcome_enter_app">Войти в приложение</string>
+    <string name="welcome_manage_providers">Управление провайдерами</string>
+    <string name="welcome_setup_provider">Настройка провайдера</string>
+    <string name="welcome_version">v1.0.0</string>
+
+    <!-- Home -->
+    <string name="home_incorrect_pin">Неверный ПИН-код</string>
+    <string name="home_loading_channels">Загрузка каналов...</string>
+    <string name="home_categories_title">Категории</string>
+    <string name="home_search_categories">Поиск категорий...</string>
+    <string name="home_all_channels">Все каналы</string>
+    <string name="home_search_channels">Поиск каналов...</string>
+    <string name="home_loading">Загрузка...</string>
+    <string name="home_no_channels_found">В этой категории нет каналов</string>
+    <string name="home_add_favorites_hint">Добавьте каналы в избранное, чтобы увидеть их здесь</string>
+    <string name="home_delete_group_title">Удалить группу?</string>
+    <string name="home_delete_group_body">Вы уверены, что хотите удалить \'%1$s\'? Это удалит все каналы из этой группы.</string>
+    <string name="home_delete_group_confirm">Удалить</string>
+    <string name="home_delete_group_cancel">Отмена</string>
+
+    <!-- Dialogs -->
+    <string name="pin_dialog_title">Введите ПИН-код</string>
+    <string name="pin_dialog_cancel">Отмена</string>
+
+    <string name="category_options_set_default">По умолчанию</string>
+    <string name="category_options_unlock">Разблокировать группу</string>
+    <string name="category_options_lock">Заблокировать группу</string>
+    <string name="category_options_delete">Удалить группу</string>
+    <string name="category_options_cancel">Отмена</string>
+
+    <string name="add_group_manage_title">Управление: %1$s</string>
+    <string name="add_group_close_cd">Закрыть</string>
+    <string name="add_group_name_hint">Имя группы</string>
+    <string name="add_group_cancel">Отмена</string>
+    <string name="add_group_create">Создать</string>
+    <string name="add_group_remove_favorites">Убрать из избранного</string>
+    <string name="add_group_add_favorites">Добавить в избранное</string>
+    <string name="add_group_reorder_title">Сортировка</string>
+    <string name="add_group_move_up">Вверх</string>
+    <string name="add_group_move_down">Вниз</string>
+    <string name="add_group_custom_groups_title">Свои группы</string>
+    <string name="add_group_remove_btn">Удалить</string>
+    <string name="add_group_add_btn">Добавить</string>
+    <string name="add_group_create_new_btn">Создать новую группу</string>
+
+    <string name="card_locked_channel">Канал заблокирован</string>
+    <string name="card_live_badge">ЭФИР</string>
+    <string name="card_locked">Заблокировано</string>
+
+    <string name="category_see_all">Показать все →</string>
+    <string name="continue_watching_title">Продолжить просмотр</string>
+    <string name="continue_watching_season_episode">С%1$d Э%2$d</string>
+
+    <string name="playlist_no_provider">Нет провайдера</string>
+
+    <!-- Movies -->
+    <string name="movies_incorrect_pin">Неверный ПИН-код</string>
+    <string name="movies_loading">Загрузка фильмов...</string>
+    <string name="movies_no_found">Фильмы не найдены</string>
+
+    <!-- Series -->
+    <string name="series_incorrect_pin">Неверный ПИН-код</string>
+    <string name="series_loading">Загрузка сериалов...</string>
+    <string name="series_no_found">Сериалы не найдены</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Настройки</string>
+    <string name="settings_providers">Провайдеры</string>
+    <string name="settings_no_providers">Нет провайдеров</string>
+    <string name="settings_add_provider">Добавить провайдера</string>
+    <string name="settings_parental_control">Родительский контроль</string>
+    <string name="settings_playback">Воспроизведение</string>
+    <string name="settings_decoder_mode">Режим декодера</string>
+    <string name="settings_decoder_auto">Авто</string>
+    <string name="settings_buffer_duration">Буферизация</string>
+    <string name="settings_buffer_5s">5 секунд</string>
+    <string name="settings_about">О приложении</string>
+    <string name="settings_app_version">Версия приложения</string>
+    <string name="settings_build">Сборка</string>
+    <string name="settings_build_desc">StreamVault для Android TV</string>
+    <string name="settings_syncing">Синхронизация данных...</string>
+    <string name="settings_enter_new_pin">Новый ПИН-код</string>
+    <string name="settings_enter_pin">Введите ПИН-код</string>
+    <string name="settings_select_level">Уровень защиты</string>
+    <string name="settings_level_off_desc">ВЫКЛ - Нет ограничений</string>
+    <string name="settings_level_locked_desc">БЛОК - Требуется ПИН-код</string>
+    <string name="settings_level_hidden_desc">СКРЫТО - Контент скрыт</string>
+    <string name="settings_cancel">Отмена</string>
+    <string name="settings_protection_level">Уровень защиты</string>
+    <string name="settings_level_off">ВЫКЛ</string>
+    <string name="settings_level_locked">БЛОК</string>
+    <string name="settings_level_hidden">СКРЫТО</string>
+    <string name="settings_level_unknown">НЕИЗВ.</string>
+    <string name="settings_change">Изменить</string>
+    <string name="settings_parental_pin">Родительский ПИН</string>
+    <string name="settings_change_pin">Сменить ПИН-код</string>
+    <string name="settings_expiration_unknown">Окончание: Неизвестно</string>
+    <string name="settings_expiration_never">Окончание: Никогда</string>
+    <string name="settings_expires">Истекает: %1$s</string>
+    <string name="settings_connect">Подключить</string>
+    <string name="settings_syncing_btn">Синхронизация...</string>
+    <string name="settings_sync_btn">Синхронизировать</string>
+    <string name="settings_edit">Редакт.</string>
+    <string name="settings_delete">Удалить</string>
+    <string name="settings_pc_btn">Род. контроль</string>
+    <string name="settings_active">АКТИВНО</string>
+
+    <!-- Favorites -->
+    <string name="favorites_loading">Загрузка избранного...</string>
+    <string name="favorites_no_favorites">Пока нет избранного</string>
+    <string name="favorites_empty_hint">Удерживайте канал, фильм или сериал, чтобы добавить в избранное</string>
+    <string name="favorites_reordering">Сортировка</string>
+
+    <!-- Search -->
+    <string name="search_incorrect_pin">Неверный ПИН-код</string>
+    <string name="search_type_to_search">Введите текст...</string>
+    <string name="search_no_results">Нет результатов для \'%1$s\'</string>
+    <string name="search_live_tv">ТВ Онлайн</string>
+    <string name="search_movies">Фильмы</string>
+    <string name="search_series">Сериалы</string>
+    <string name="search_hint">Поиск...</string>
+
+    <!-- Provider Setup -->
+    <string name="setup_title_streamvault">StreamVault</string>
+    <string name="setup_edit_provider">Изменить провайдера</string>
+    <string name="setup_update_desc">Обновите настройки провайдера IPTV</string>
+    <string name="setup_add_desc">Добавьте провайдера IPTV</string>
+    <string name="setup_xtream">Xtream Codes</string>
+    <string name="setup_m3u">Плейлист M3U</string>
+    <string name="setup_name_hint">Имя плейлиста (Необязательно)</string>
+    <string name="setup_server_hint">URL-адрес сервера</string>
+    <string name="setup_user_hint">Имя пользователя</string>
+    <string name="setup_pass_hint">Пароль</string>
+    <string name="setup_connecting">Подключение...</string>
+    <string name="setup_save">Сохранить</string>
+    <string name="setup_login">Войти</string>
+    <string name="setup_m3u_hint">URL-адрес M3U</string>
+    <string name="setup_validating">Проверка...</string>
+    <string name="setup_add">Добавить плейлист</string>
+
+    <!-- Player -->
+    <string name="player_buffering">Буферизация...</string>
+    <string name="player_error_title">Ошибка воспроизведения</string>
+    <string name="player_error_network">Поток недоступен — проверьте интернет-соединение</string>
+    <string name="player_error_source">Поток не найден или доступ запрещен</string>
+    <string name="player_error_decoder">Не удалось воспроизвести формат — измените режим декодера в настройках</string>
+    <string name="player_error_unknown">Неизвестная ошибка воспроизведения</string>
+    <string name="player_retry">Повторить</string>
+    <string name="player_error_back">Или нажмите Назад</string>
+    <string name="player_type_movie">Фильм</string>
+    <string name="player_type_series">Сериал</string>
+    <string name="player_close">Закрыть</string>
+    <string name="player_next">ДАЛЕЕ</string>
+    <string name="player_restart">С начала</string>
+    <string name="player_archive">Архив</string>
+    <string name="player_subs">Субтитры</string>
+    <string name="player_audio">Звук</string>
+    <string name="player_resume_title">Продолжить просмотр</string>
+    <string name="player_resume_desc">Хотите продолжить просмотр %1$s?</string>
+    <string name="player_resume_start_over">Сначала</string>
+    <string name="player_resume">Продолжить</string>
+    <string name="player_track_audio">Аудиодорожка</string>
+    <string name="player_track_subs">Субтитры</string>
+    <string name="player_track_off">Выкл.</string>
+
+    <!-- Parental Control Group -->
+    <string name="parental_group_title">Защищенные группы</string>
+    <string name="parental_group_search">Поиск категорий...</string>
+    <string name="parental_group_auto_protected">Категория 18+ (Защищена)</string>
+    <string name="parental_group_back">Назад</string>
+    <string name="search_all">Все</string>
+    <string name="player_archive_title">Архив программ</string>
+    <string name="player_no_archive">Архивные программы не найдены</string>
+    <string name="series_loading_details">Загрузка данных...</string>
+    <string name="series_not_found">Сериал не найден</string>
+    <string name="series_seasons">Сезоны</string>
+    <string name="series_episodes">Эпизоды (%1$d)</string>
+    <string name="epg_now_playing">СЕЙЧАС В ЭФИРЕ</string>
+    <string name="epg_no_data">Нет программы передач</string>
+    <string name="epg_up_next">ДАЛЕЕ</string>
+</resources>

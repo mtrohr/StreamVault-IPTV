@@ -22,6 +22,9 @@ import androidx.compose.ui.window.Dialog
 import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.Category
 
+import androidx.compose.ui.res.stringResource
+import com.streamvault.app.R
+
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.shape.CircleShape
@@ -76,7 +79,7 @@ fun AddToGroupDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Manage: ${channel.name}",
+                        text = stringResource(R.string.add_group_manage_title, channel.name),
                         style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.weight(1f)
                     )
@@ -84,7 +87,7 @@ fun AddToGroupDialog(
                         onClick = safeDismiss,
                         modifier = Modifier.focusRequester(focusRequester)
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.add_group_close_cd))
                     }
                 }
 
@@ -92,7 +95,7 @@ fun AddToGroupDialog(
                     OutlinedTextField(
                         value = newGroupName,
                         onValueChange = { newGroupName = it },
-                        label = { Text("Group Name") },
+                        label = { Text(stringResource(R.string.add_group_name_hint)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -111,7 +114,7 @@ fun AddToGroupDialog(
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(onClick = { showCreateGroup = false }) {
-                            Text("Cancel")
+                            Text(stringResource(R.string.add_group_cancel))
                         }
                         Button(onClick = {
                             if (newGroupName.isNotBlank()) {
@@ -120,7 +123,7 @@ fun AddToGroupDialog(
                                 newGroupName = ""
                             }
                         }) {
-                            Text("Create")
+                            Text(stringResource(R.string.add_group_create))
                         }
                     }
                 } else {
@@ -153,7 +156,7 @@ fun AddToGroupDialog(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = if (isFavorite) "Remove from Favorites" else "Add to Favorites",
+                                    text = if (isFavorite) stringResource(R.string.add_group_remove_favorites) else stringResource(R.string.add_group_add_favorites),
                                     color = if (isFavorite) Color.Black else Color.White
                                 )
                             }
@@ -163,7 +166,7 @@ fun AddToGroupDialog(
                         if (onMoveUp != null && onMoveDown != null) {
                             item {
                                 Text(
-                                    text = "Reorder",
+                                    text = stringResource(R.string.add_group_reorder_title),
                                     style = MaterialTheme.typography.titleMedium,
                                     modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                                 )
@@ -172,11 +175,11 @@ fun AddToGroupDialog(
                                     horizontalArrangement = Arrangement.SpaceEvenly
                                 ) {
                                     OutlinedButton(onClick = onMoveUp, modifier = Modifier.weight(1f)) {
-                                        Text("Move Up")
+                                        Text(stringResource(R.string.add_group_move_up))
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
                                     OutlinedButton(onClick = onMoveDown, modifier = Modifier.weight(1f)) {
-                                        Text("Move Down")
+                                        Text(stringResource(R.string.add_group_move_down))
                                     }
                                 }
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
@@ -186,7 +189,7 @@ fun AddToGroupDialog(
                         item {
                             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                             Text(
-                                text = "Custom Groups",
+                                text = stringResource(R.string.add_group_custom_groups_title),
                                 style = MaterialTheme.typography.titleMedium,
                                 modifier = Modifier.padding(bottom = 8.dp)
                             )
@@ -223,7 +226,7 @@ fun AddToGroupDialog(
                                         contentColor = if (isMember) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                 ) {
-                                    Text(if (isMember) "Remove" else "Add")
+                                    Text(if (isMember) stringResource(R.string.add_group_remove_btn) else stringResource(R.string.add_group_add_btn))
                                 }
                             }
                         }
@@ -236,7 +239,7 @@ fun AddToGroupDialog(
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Create New Group")
+                                Text(stringResource(R.string.add_group_create_new_btn))
                             }
                         }
                     }

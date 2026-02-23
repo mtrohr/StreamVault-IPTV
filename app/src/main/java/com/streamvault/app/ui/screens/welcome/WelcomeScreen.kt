@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -93,7 +94,7 @@ fun WelcomeScreen(
                         containerColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
-                    Text("Enter App", fontSize = 18.sp)
+                    Text(stringResource(id = R.string.welcome_enter_app), fontSize = 18.sp)
                 }
                 
                 OutlinedButton(
@@ -106,7 +107,7 @@ fun WelcomeScreen(
                     ),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f))
                 ) {
-                    Text("Manage Providers")
+                    Text(stringResource(id = R.string.welcome_manage_providers))
                 }
             } else {
                 Button(
@@ -118,14 +119,14 @@ fun WelcomeScreen(
                         containerColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
-                    Text("Setup Provider", fontSize = 18.sp)
+                    Text(stringResource(id = R.string.welcome_setup_provider), fontSize = 18.sp)
                 }
             }
         }
         
         // Version info at bottom
         Text(
-            text = "v1.0.0",
+            text = stringResource(id = R.string.welcome_version),
             style = MaterialTheme.typography.labelMedium,
             color = Color.White.copy(alpha = 0.3f),
             modifier = Modifier
