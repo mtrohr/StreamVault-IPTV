@@ -25,7 +25,8 @@ object DatabaseModule {
         )
             .addMigrations(
                 StreamVaultDatabase.MIGRATION_2_3,
-                StreamVaultDatabase.MIGRATION_3_4
+                StreamVaultDatabase.MIGRATION_3_4,
+                StreamVaultDatabase.MIGRATION_4_5
             )
             // NOTE: fallbackToDestructiveMigration() intentionally removed.
             // All future schema changes MUST add a corresponding Migration in StreamVaultDatabase.

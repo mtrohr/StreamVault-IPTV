@@ -31,7 +31,7 @@ data class ProviderEntity(
     tableName = "channels",
     indices = [
         Index(value = ["provider_id"]),
-        Index(value = ["category_id"]),
+        Index(value = ["provider_id", "category_id"]),
         Index(value = ["provider_id", "stream_id"], unique = true)
     ]
 )
@@ -59,7 +59,7 @@ data class ChannelEntity(
     tableName = "movies",
     indices = [
         Index(value = ["provider_id"]),
-        Index(value = ["category_id"]),
+        Index(value = ["provider_id", "category_id"]),
         Index(value = ["provider_id", "stream_id"], unique = true)
     ]
 )
@@ -96,7 +96,7 @@ data class MovieEntity(
     tableName = "series",
     indices = [
         Index(value = ["provider_id"]),
-        Index(value = ["category_id"]),
+        Index(value = ["provider_id", "category_id"]),
         Index(value = ["provider_id", "series_id"], unique = true)
     ]
 )
@@ -198,8 +198,8 @@ data class ProgramEntity(
     tableName = "favorites",
     indices = [
         Index(value = ["content_id", "content_type", "group_id"], unique = true),
-        Index(value = ["group_id"]),
-        Index(value = ["position"])
+        Index(value = ["content_type", "group_id"]),
+        Index(value = ["group_id", "position"])
     ]
 )
 data class FavoriteEntity(

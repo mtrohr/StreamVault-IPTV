@@ -21,7 +21,7 @@ import com.streamvault.data.local.entity.*
         PlaybackHistoryEntity::class,
         SyncMetadataEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true   // ← was false; schema JSON now tracked in version control
 )
 abstract class StreamVaultDatabase : RoomDatabase() {
@@ -106,6 +106,29 @@ abstract class StreamVaultDatabase : RoomDatabase() {
                     SELECT id, 'SERIES_EPISODE', provider_id, title, watch_progress, last_watched_at, series_id, season_number, episode_number
                     FROM episodes WHERE watch_progress > 0
                 """)
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Note: Room auto-generates index names as 'index_tableName_columnNames'
+                // Channels
+                database.execSQL("DROP INDEX IF EXISTS index_channels_category_id")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_channels_provider_id_category_id ON channels(provider_id, category_id)")
+                
+                // Movies
+                database.execSQL("DROP INDEX IF EXISTS index_movies_category_id")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_movies_provider_id_category_id ON movies(provider_id, category_id)")
+                
+                // Series
+                database.execSQL("DROP INDEX IF EXISTS index_series_category_id")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_series_provider_id_category_id ON series(provider_id, category_id)")
+                
+                // Favorites
+                database.execSQL("DROP INDEX IF EXISTS index_favorites_group_id")
+                database.execSQL("DROP INDEX IF EXISTS index_favorites_position")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_content_type_group_id ON favorites(content_type, group_id)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_group_id_position ON favorites(group_id, position)")
             }
         }
     }

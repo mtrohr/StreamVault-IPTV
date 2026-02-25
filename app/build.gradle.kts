@@ -100,4 +100,10 @@ dependencies {
     // Core
     implementation(libs.core.ktx)
     implementation(libs.coroutines.android)
+
+    // Test
+    testImplementation(libs.junit)
+    testImplementation(libs.truth)
+    testImplementation(libs.coroutines.test)
+    testImplementation(libs.mockito.kotlin)
 }

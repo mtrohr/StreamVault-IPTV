@@ -1,0 +1,67 @@
+package com.streamvault.data.local
+
+import android.content.Context
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.streamvault.data.local.dao.MovieDao
+import com.streamvault.data.local.dao.PlaybackHistoryDao
+import com.streamvault.data.local.entity.MovieEntity
+import com.streamvault.data.local.entity.PlaybackHistoryEntity
+import kotlinx.coroutines.test.runTest
+import org.junit.After
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import com.google.common.truth.Truth.assertThat
+import java.io.IOException
+
+@RunWith(AndroidJUnit4::class)
+class MovieDaoTest {
+    private lateinit var db: StreamVaultDatabase
+    private lateinit var movieDao: MovieDao
+    private lateinit var historyDao: PlaybackHistoryDao
+
+    @Before
+    fun createDb() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        db = Room.inMemoryDatabaseBuilder(
+            context, StreamVaultDatabase::class.java
+        ).build()
+        movieDao = db.movieDao()
+        historyDao = db.playbackHistoryDao()
+    }
+
+    @After
+    @Throws(IOException::class)
+    fun closeDb() {
+        db.close()
+    }
+
+    @Test
+    fun testRestoreWatchProgress() = runTest {
+        // 1. Insert history for a movie. Use contentId = 1L
+        val history = PlaybackHistoryEntity(
+            contentId = 1L,
+            contentType = "MOVIE",
+            providerId = 1L,
+            resumePositionMs = 5000L,
+            lastWatchedAt = 10000L
+        )
+        historyDao.insertOrUpdate(history)
+
+        // 2. Replace movies in provider 1. Give it ID 1L
+        val movie = MovieEntity(
+            id = 1L, // MUST MATCH contentId in history
+            name = "Test Movie",
+            providerId = 1L,
+            watchProgress = 0L // default
+        )
+        movieDao.replaceAll(1L, listOf(movie))
+
+        // 3. Verify watch progress was restored from history during replaceAll
+        val restoredMovie = movieDao.getById(1L)
+        assertThat(restoredMovie).isNotNull()
+        assertThat(restoredMovie?.watchProgress).isEqualTo(5000L)
+    }
+}

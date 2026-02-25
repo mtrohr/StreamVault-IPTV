@@ -265,6 +265,6 @@ class SyncManagerTest {
     ) = M3uParser.M3uEntry(
         name = "Test", groupTitle = group,
         tvgId = null, tvgName = null, tvgLogo = null, tvgChno = null,
-        catchUp = null, catchUpSource = null, url = url
+        catchUp = null, catchUpDays = null, catchUpSource = null, url = url
     )
 }
