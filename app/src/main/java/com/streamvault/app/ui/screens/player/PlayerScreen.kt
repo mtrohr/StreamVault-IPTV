@@ -10,6 +10,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.animation.*
@@ -80,6 +83,10 @@ fun PlayerScreen(
     val showZapOverlay by viewModel.showZapOverlay.collectAsState()
     val resumePrompt by viewModel.resumePrompt.collectAsState()
     
+    val showChannelListOverlay by viewModel.showChannelListOverlay.collectAsState()
+    val showEpgOverlay by viewModel.showEpgOverlay.collectAsState()
+    val currentChannelList by viewModel.currentChannelList.collectAsState()
+    
     val availableAudioTracks by viewModel.availableAudioTracks.collectAsState()
     val availableSubtitleTracks by viewModel.availableSubtitleTracks.collectAsState()
     val aspectRatio by viewModel.aspectRatio.collectAsState()
@@ -90,6 +97,8 @@ fun PlayerScreen(
     var showProgramHistory by remember { mutableStateOf(false) }
     
     val focusRequester = remember { FocusRequester() }
+    val layoutDirection = LocalLayoutDirection.current
+    val isRtl = layoutDirection == LayoutDirection.Rtl
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -140,23 +149,34 @@ fun PlayerScreen(
                             true
                         }
                         KeyEvent.KEYCODE_DPAD_LEFT -> {
-                            viewModel.seekBackward()
+                            if (contentType == "LIVE" && !showChannelListOverlay && !showEpgOverlay) {
+                                if (isRtl) viewModel.openEpgOverlay() else viewModel.openChannelListOverlay()
+                            } else if (!showChannelListOverlay && !showEpgOverlay) {
+                                if (isRtl) viewModel.seekForward() else viewModel.seekBackward()
+                            }
                             true
                         }
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            viewModel.seekForward()
+                            if (contentType == "LIVE" && !showChannelListOverlay && !showEpgOverlay) {
+                                if (isRtl) viewModel.openChannelListOverlay() else viewModel.openEpgOverlay()
+                            } else if (!showChannelListOverlay && !showEpgOverlay) {
+                                if (isRtl) viewModel.seekBackward() else viewModel.seekForward()
+                            }
                             true
                         }
                         KeyEvent.KEYCODE_DPAD_UP -> {
-                            viewModel.playNext()
+                            if (!showChannelListOverlay && !showEpgOverlay) viewModel.playNext()
                             true
                         }
                         KeyEvent.KEYCODE_DPAD_DOWN -> {
-                            viewModel.playPrevious()
+                            if (!showChannelListOverlay && !showEpgOverlay) viewModel.playPrevious()
                             true
                         }
                         KeyEvent.KEYCODE_BACK -> {
-                            if (showTrackSelection != null) {
+                            if (showChannelListOverlay || showEpgOverlay) {
+                                viewModel.closeOverlays()
+                                true
+                            } else if (showTrackSelection != null) {
                                 showTrackSelection = null
                                 true
                             } else {
@@ -731,6 +751,34 @@ fun PlayerScreen(
                 }
             }
         }
+
+        // --- Overlays ---
+        AnimatedVisibility(
+            visible = showChannelListOverlay,
+            enter = slideInHorizontally(initialOffsetX = { if (isRtl) it else -it }),
+            exit = slideOutHorizontally(targetOffsetX = { if (isRtl) it else -it }),
+            modifier = Modifier.align(if (isRtl) Alignment.TopEnd else Alignment.TopStart).fillMaxHeight().width(350.dp)
+        ) {
+            ChannelListOverlay(
+                channels = currentChannelList,
+                currentChannelId = internalChannelId,
+                onSelectChannel = { channelId -> viewModel.zapToChannel(channelId) },
+                onDismiss = { viewModel.closeOverlays() }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = showEpgOverlay,
+            enter = slideInHorizontally(initialOffsetX = { if (isRtl) -it else it }),
+            exit = slideOutHorizontally(targetOffsetX = { if (isRtl) -it else it }),
+            modifier = Modifier.align(if (isRtl) Alignment.TopStart else Alignment.TopEnd).fillMaxHeight().width(400.dp)
+        ) {
+            EpgOverlay(
+                currentProgram = currentProgram,
+                nextProgram = nextProgram,
+                onDismiss = { viewModel.closeOverlays() }
+            )
+        }
     }
 }
 
@@ -761,6 +809,166 @@ private fun TrackItem(
             )
             if (isSelected) {
                 Text("✓", color = Primary, style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+    }
+}
+
+@Composable
+fun ChannelListOverlay(
+    channels: List<com.streamvault.domain.model.Channel>,
+    currentChannelId: Long,
+    onSelectChannel: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        val index = channels.indexOfFirst { it.id == currentChannelId }
+        if (index != -1) {
+            listState.scrollToItem(index)
+        }
+        focusRequester.requestFocus()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.9f))
+            .onKeyEvent { event ->
+                if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                    if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK) {
+                        onDismiss()
+                        true
+                    } else false
+                } else false
+            }
+            .focusRequester(focusRequester)
+            .focusable(),
+    ) {
+        androidx.compose.foundation.lazy.LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = 32.dp, bottom = 32.dp)
+        ) {
+            item {
+                Text(
+                    text = "Channels",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Primary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+                )
+            }
+            items(channels.size) { index ->
+                val channel = channels[index]
+                val isSelected = channel.id == currentChannelId
+                var isFocused by remember { mutableStateOf(false) }
+
+                Surface(
+                    onClick = { onSelectChannel(channel.id) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .onFocusChanged { isFocused = it.isFocused },
+                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = if (isSelected) Primary.copy(alpha = 0.2f) else Color.Transparent,
+                        focusedContainerColor = SurfaceHighlight
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = channel.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (isSelected || isFocused) Color.White else OnSurfaceDim,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EpgOverlay(
+    currentProgram: Program?,
+    nextProgram: Program?,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.9f))
+            .onKeyEvent { event ->
+                if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                    if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK) {
+                        onDismiss()
+                        true
+                    } else false
+                } else false
+            }
+            .focusRequester(focusRequester)
+            .focusable()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            Text(
+                text = "Advanced EPG",
+                style = MaterialTheme.typography.titleLarge,
+                color = Primary
+            )
+            
+            if (currentProgram != null) {
+                Column {
+                    Text("Now Playing", style = MaterialTheme.typography.labelMedium, color = Primary)
+                    Spacer(Modifier.height(8.dp))
+                    Text(currentProgram.title, style = MaterialTheme.typography.titleMedium, color = Color.White)
+                    Text(
+                        "${formatTime(currentProgram.startTime)} - ${formatTime(currentProgram.endTime)}", 
+                        style = MaterialTheme.typography.bodyMedium, color = TextSecondary
+                    )
+                    if (!currentProgram.description.isNullOrEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            currentProgram.description!!, 
+                            style = MaterialTheme.typography.bodyMedium, color = OnSurfaceDim,
+                            maxLines = 8, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            } else {
+                Text("No EPG Information", color = OnSurfaceDim)
+            }
+            
+            if (nextProgram != null) {
+                androidx.compose.material3.HorizontalDivider(color = SurfaceVariant)
+                Column {
+                    Text("Up Next", style = MaterialTheme.typography.labelMedium, color = Primary)
+                    Spacer(Modifier.height(8.dp))
+                    Text(nextProgram.title, style = MaterialTheme.typography.titleMedium, color = Color.White)
+                    Text(
+                        "${formatTime(nextProgram.startTime)} - ${formatTime(nextProgram.endTime)}", 
+                        style = MaterialTheme.typography.bodyMedium, color = TextSecondary
+                    )
+                }
             }
         }
     }
@@ -810,6 +1018,11 @@ private fun TransportButton(
             )
         }
     }
+}
+
+private fun formatTime(ms: Long): String {
+    val formatter = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+    return formatter.format(java.util.Date(ms))
 }
 
 private fun formatDuration(ms: Long): String {

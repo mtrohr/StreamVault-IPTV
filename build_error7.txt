@@ -1,0 +1,180 @@
+﻿> Task :domain:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :domain:compileKotlin UP-TO-DATE
+> Task :domain:compileJava NO-SOURCE
+> Task :domain:processResources NO-SOURCE
+> Task :domain:classes UP-TO-DATE
+> Task :domain:jar UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :data:preBuild UP-TO-DATE
+> Task :data:preDebugBuild UP-TO-DATE
+> Task :data:writeDebugAarMetadata UP-TO-DATE
+> Task :player:preBuild UP-TO-DATE
+> Task :player:preDebugBuild UP-TO-DATE
+> Task :player:writeDebugAarMetadata UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :data:generateDebugResValues UP-TO-DATE
+> Task :data:generateDebugResources UP-TO-DATE
+> Task :data:packageDebugResources UP-TO-DATE
+> Task :player:generateDebugResValues UP-TO-DATE
+> Task :player:generateDebugResources UP-TO-DATE
+> Task :player:packageDebugResources UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :data:extractDeepLinksDebug UP-TO-DATE
+> Task :data:processDebugManifest UP-TO-DATE
+> Task :player:extractDeepLinksDebug UP-TO-DATE
+> Task :player:processDebugManifest UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :data:compileDebugLibraryResources UP-TO-DATE
+> Task :data:parseDebugLocalResources UP-TO-DATE
+> Task :data:generateDebugRFile UP-TO-DATE
+> Task :player:compileDebugLibraryResources UP-TO-DATE
+> Task :player:parseDebugLocalResources UP-TO-DATE
+> Task :player:generateDebugRFile UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :data:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :data:kspDebugKotlin UP-TO-DATE
+> Task :data:compileDebugKotlin UP-TO-DATE
+> Task :data:javaPreCompileDebug UP-TO-DATE
+> Task :data:compileDebugJavaWithJavac UP-TO-DATE
+> Task :data:transformDebugClassesWithAsm UP-TO-DATE
+> Task :data:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :data:preDebugUnitTestBuild UP-TO-DATE
+> Task :data:generateDebugUnitTestStubRFile UP-TO-DATE
+> Task :data:kspDebugUnitTestKotlin UP-TO-DATE
+> Task :data:compileDebugUnitTestKotlin UP-TO-DATE
+> Task :data:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :data:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :data:copyRoomSchemas NO-SOURCE
+> Task :player:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :player:kspDebugKotlin UP-TO-DATE
+> Task :player:compileDebugKotlin UP-TO-DATE
+> Task :player:javaPreCompileDebug UP-TO-DATE
+> Task :player:compileDebugJavaWithJavac UP-TO-DATE
+> Task :player:transformDebugClassesWithAsm UP-TO-DATE
+> Task :player:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :app:kspDebugKotlin UP-TO-DATE
+> Task :app:compileDebugKotlin UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :data:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :player:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :app:hiltAggregateDepsDebug UP-TO-DATE
+> Task :app:hiltJavaCompileDebug UP-TO-DATE
+> Task :app:transformDebugClassesWithAsm UP-TO-DATE
+> Task :app:bundleDebugClassesToRuntimeJar UP-TO-DATE
+> Task :app:processDebugJavaRes UP-TO-DATE
+> Task :app:bundleDebugClassesToCompileJar UP-TO-DATE
+> Task :app:kspDebugUnitTestKotlin UP-TO-DATE
+> Task :app:compileDebugUnitTestKotlin UP-TO-DATE
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:hiltAggregateDepsDebugUnitTest UP-TO-DATE
+> Task :app:hiltJavaCompileDebugUnitTest NO-SOURCE
+> Task :app:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :app:transformDebugUnitTestClassesWithAsm UP-TO-DATE
+> Task :data:processDebugJavaRes UP-TO-DATE
+> Task :player:processDebugJavaRes UP-TO-DATE
+.\gradlew : Could not write standard input to Gradle Test Executor 2.
+At line:1 char:1
++ .\gradlew testDebugUnitTest 2>&1 | Out-File -Encoding utf8 build_erro ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Could not write...est Executor 2.:String) [] 
+   , RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+java.io.IOException: The pipe is being closed
+	at java.base/java.io.FileOutputStream.writeBytes(Native Method)
+	at java.base/java.io.FileOutputStream.write(FileOutputStream.java:367)
+	at java.base/java.io.BufferedOutputStream.flushBuffer(BufferedOutputStream.java:125)
+	at java.base/java.io.BufferedOutputStream.implFlush(BufferedOutputStream.java:252)
+	at java.base/java.io.BufferedOutputStream.flush(BufferedOutputStream.java:240)
+	at org.gradle.process.internal.streams.ExecOutputHandleRunner.writeBuffer(ExecOutputHandl
+eRunner.java:98)
+	at org.gradle.process.internal.streams.ExecOutputHandleRunner.forwardContent(ExecOutputHa
+ndleRunner.java:85)
+	at org.gradle.process.internal.streams.ExecOutputHandleRunner.run(ExecOutputHandleRunner.
+java:64)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(Executo
+rPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.j
+ava:48)
+	at 
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at 
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+> Task :app:testDebugUnitTest FAILED
+Error: Could not find or load main class GX;C:\Program Files\NVIDIA GPU Computing 
+Toolkit\CUDA\v12.4\bin;C:\Program Files\NVIDIA GPU Computing 
+Toolkit\CUDA\v12.4\libnvvp;C:\Program Files\Common Files\Oracle\Java\javapath;C:\WINDOWS\s
+ystem32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:
+\WINDOWS\System32\OpenSSH\;C:\Program Files\dotnet\;C:\Program Files (x86)\NVIDIA 
+Corporation\PhysX\Common;C:\tools\cuda\bin;C:\Program Files\NVIDIA GPU Computing 
+Toolkit\CUDA\v11.2\include;C:\Program Files\NVIDIA GPU Computing 
+Toolkit\CUDA\v11.2\extras\CUPTI\lib64;C:\Program Files\Git\cmd;C:\Program Files\Git 
+LFS;C:\Program Files\Microsoft SQL Server\150\Tools\Binn\;C:\WINDOWS\system32;C:\WINDOWS;C
+:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\Op
+enSSH\;C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\;C:\Program 
+Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\Program 
+Files\Docker\Docker\resources\bin;C:\Program Files\NVIDIA Corporation\NVIDIA 
+app\NvDLISR;C:\Program Files\NVIDIA Corporation\Nsight Compute 2024.1.0\;C:\Program 
+Files\NVIDIA Corporation\NVIDIA NvDLISR;C:\Program Files\nodejs\;C:\Users\david\AppData\Lo
+cal\Programs\Python\Python312\Scripts\;C:\Users\david\AppData\Local\Programs\Python\Python
+312\;C:\Users\david\AppData\Local\Microsoft\WindowsApps;C:\Users\david\AppData\Local\Progr
+ams\Microsoft VS Code\bin;C:\Users\david\AppData\Local\GitHubDesktop\bin;C:\Program 
+Files\heroku\bin;C:\ghcup\bin;C:\MinGW\bin;E:\IntelliJ IDEA 2023.3.5\bin;C:\Users\david\.d
+otnet\tools;C:\Users\david\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.W
+inget.Source_8wekyb3d8bbwe\ffmpeg-8.0-full_build\bin;C:\Users\david\AppData\Roaming\npm;X:
+\Antigravity\bin;.;C:\Users\david\.gemini\antigravity\scratch\iptv-player\app\src\testDebu
+g\jniLibs;C:\Users\david\.gemini\antigravity\scratch\iptv-player\app\src\test\jniLibs
+Caused by: java.lang.ClassNotFoundException: GX;C:\Program Files\NVIDIA GPU Computing 
+Toolkit\CUDA\v12/4\bin;C:\Program Files\NVIDIA GPU Computing 
+Toolkit\CUDA\v12/4\libnvvp;C:\Program Files\Common Files\Oracle\Java\javapath;C:\WINDOWS\s
+ystem32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1/0\;C:
+\WINDOWS\System32\OpenSSH\;C:\Program Files\dotnet\;C:\Program Files (x86)\NVIDIA 
+Corporation\PhysX\Common;C:\tools\cuda\bin;C:\Program Files\NVIDIA GPU Computing 
+Toolkit\CUDA\v11/2\include;C:\Program Files\NVIDIA GPU Computing 
+Toolkit\CUDA\v11/2\extras\CUPTI\lib64;C:\Program Files\Git\cmd;C:\Program Files\Git 
+LFS;C:\Program Files\Microsoft SQL Server\150\Tools\Binn\;C:\WINDOWS\system32;C:\WINDOWS;C
+:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1/0\;C:\WINDOWS\System32\Op
+enSSH\;C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\;C:\Program 
+Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\Program 
+Files\Docker\Docker\resources\bin;C:\Program Files\NVIDIA Corporation\NVIDIA 
+app\NvDLISR;C:\Program Files\NVIDIA Corporation\Nsight Compute 2024/1/0\;C:\Program 
+Files\NVIDIA Corporation\NVIDIA NvDLISR;C:\Program Files\nodejs\;C:\Users\david\AppData\Lo
+cal\Programs\Python\Python312\Scripts\;C:\Users\david\AppData\Local\Programs\Python\Python
+312\;C:\Users\david\AppData\Local\Microsoft\WindowsApps;C:\Users\david\AppData\Local\Progr
+ams\Microsoft VS Code\bin;C:\Users\david\AppData\Local\GitHubDesktop\bin;C:\Program 
+Files\heroku\bin;C:\ghcup\bin;C:\MinGW\bin;E:\IntelliJ IDEA 2023/3/5\bin;C:\Users\david\/d
+otnet\tools;C:\Users\david\AppData\Local\Microsoft\WinGet\Packages\Gyan/FFmpeg_Microsoft/W
+inget/Source_8wekyb3d8bbwe\ffmpeg-8/0-full_build\bin;C:\Users\david\AppData\Roaming\npm;X:
+\Antigravity\bin;/;C:\Users\david\/gemini\antigravity\scratch\iptv-player\app\src\testDebu
+g\jniLibs;C:\Users\david\/gemini\antigravity\scratch\iptv-player\app\src\test\jniLibs
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:testDebugUnitTest'.
+> Process 'Gradle Test Executor 2' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 4s
+70 actionable tasks: 1 executed, 69 up-to-date

@@ -65,6 +65,32 @@ class PlayerViewModel @Inject constructor(
     private val _aspectRatio = MutableStateFlow(AspectRatio.FIT)
     val aspectRatio: StateFlow<AspectRatio> = _aspectRatio.asStateFlow()
 
+    private val _showChannelListOverlay = MutableStateFlow(false)
+    val showChannelListOverlay: StateFlow<Boolean> = _showChannelListOverlay.asStateFlow()
+
+    private val _showEpgOverlay = MutableStateFlow(false)
+    val showEpgOverlay: StateFlow<Boolean> = _showEpgOverlay.asStateFlow()
+
+    private val _currentChannelList = MutableStateFlow<List<com.streamvault.domain.model.Channel>>(emptyList())
+    val currentChannelList: StateFlow<List<com.streamvault.domain.model.Channel>> = _currentChannelList.asStateFlow()
+
+    fun openChannelListOverlay() {
+        _showChannelListOverlay.value = true
+        _showEpgOverlay.value = false
+        _showControls.value = false
+    }
+
+    fun openEpgOverlay() {
+        _showEpgOverlay.value = true
+        _showChannelListOverlay.value = false
+        _showControls.value = false
+    }
+
+    fun closeOverlays() {
+        _showChannelListOverlay.value = false
+        _showEpgOverlay.value = false
+    }
+
     // Zapping state
     private var channelList: List<com.streamvault.domain.model.Channel> = emptyList()
     private var currentChannelIndex = -1
@@ -241,6 +267,7 @@ class PlayerViewModel @Inject constructor(
             
             flows.collect { channels ->
                 channelList = channels
+                _currentChannelList.value = channels
                 // Recalculate index based on initial ID or URL
                 if (initialChannelId != -1L) {
                     currentChannelIndex = channelList.indexOfFirst { it.id == initialChannelId }
@@ -281,6 +308,15 @@ class PlayerViewModel @Inject constructor(
         
         val prevIndex = if (currentChannelIndex - 1 < 0) channelList.size - 1 else currentChannelIndex - 1
         changeChannel(prevIndex)
+    }
+
+    fun zapToChannel(channelId: Long) {
+        if (channelList.isEmpty()) return
+        val index = channelList.indexOfFirst { it.id == channelId }
+        if (index != -1) {
+            changeChannel(index)
+            closeOverlays()
+        }
     }
 
     private fun changeChannel(index: Int) {

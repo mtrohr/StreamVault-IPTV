@@ -7,6 +7,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -17,6 +20,7 @@ import com.streamvault.app.ui.theme.*
 import androidx.compose.ui.res.stringResource
 import com.streamvault.app.R
 
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun TopNavBar(
     currentRoute: String,
@@ -32,11 +36,20 @@ fun TopNavBar(
         NavTab(stringResource(id = R.string.nav_settings), Routes.SETTINGS, "⚙️")
     )
 
+    val focusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(56.dp)
-            .padding(horizontal = 32.dp),
+            .padding(horizontal = 32.dp)
+            .focusProperties {
+                enter = {
+                    val activeTabRoute = tabs.firstOrNull { it.route == currentRoute }?.route
+                    val activeRequester = focusRequesters[activeTabRoute]
+                    activeRequester ?: FocusRequester.Default
+                }
+            },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -49,9 +62,11 @@ fun TopNavBar(
         )
 
         tabs.forEach { tab ->
+            val requester = focusRequesters.getOrPut(tab.route) { FocusRequester() }
             NavTabButton(
                 text = "${tab.icon} ${tab.label}",
                 isSelected = currentRoute == tab.route,
+                modifier = Modifier.focusRequester(requester),
                 onClick = {
                     if (currentRoute != tab.route) {
                         onNavigate(tab.route)
@@ -66,6 +81,7 @@ fun TopNavBar(
 private fun NavTabButton(
     text: String,
     isSelected: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }

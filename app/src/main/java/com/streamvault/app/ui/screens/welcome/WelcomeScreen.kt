@@ -51,6 +51,12 @@ fun WelcomeScreen(
 ) {
     val hasProviders by viewModel.hasProviders.collectAsState()
 
+    LaunchedEffect(hasProviders) {
+        if (hasProviders) {
+            onNavigateToHome()
+        }
+    }
+
     Box(
         modifier = Modifier.fillMaxSize()
     ) {

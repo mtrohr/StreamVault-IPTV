@@ -249,8 +249,8 @@ fun SettingsScreen(
                 SettingsRow(label = stringResource(R.string.settings_app_version), value = "1.0.0")
                 SettingsRow(label = stringResource(R.string.settings_build), value = stringResource(R.string.settings_build_desc))
             }
-            }
         }
+    }
 
 
     SnackbarHost(

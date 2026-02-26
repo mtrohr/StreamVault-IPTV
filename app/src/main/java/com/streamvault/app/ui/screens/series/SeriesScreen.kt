@@ -9,6 +9,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.*
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.ui.focus.onFocusChanged
+import com.streamvault.app.navigation.Routes
 import com.streamvault.app.ui.components.CategoryRow
 import com.streamvault.app.ui.components.ContinueWatchingRow
 import com.streamvault.app.ui.components.SeriesCard
@@ -83,6 +92,47 @@ fun SeriesScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 32.dp)
             ) {
+                item {
+                    Surface(
+                        onClick = { onNavigate(Routes.SEARCH) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 32.dp, vertical = 8.dp),
+                        shape = ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = SurfaceElevated,
+                            focusedContainerColor = Primary.copy(alpha = 0.2f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("🔍", style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.width(16.dp))
+                            Text(stringResource(R.string.search_hint), color = OnSurfaceDim, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+
+                val heroSeries = uiState.seriesByCategory.values.flatten().firstOrNull()
+                if (heroSeries != null) {
+                    item {
+                        SeriesHeroBanner(
+                            series = heroSeries,
+                            onClick = {
+                                val isLocked = (heroSeries.isAdult || heroSeries.isUserProtected) && uiState.parentalControlLevel == 1
+                                if (isLocked) {
+                                    pendingSeriesId = heroSeries.id
+                                    showPinDialog = true
+                                } else {
+                                    onSeriesClick(heroSeries.id)
+                                }
+                            }
+                        )
+                    }
+                }
+
                 // Continue Watching row (shown first, only if non-empty)
                 item(key = "continue_watching") {
                     ContinueWatchingRow(
@@ -109,6 +159,87 @@ fun SeriesScreen(
                             }
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SeriesHeroBanner(
+    series: com.streamvault.domain.model.Series,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(400.dp)
+            .padding(horizontal = 32.dp, vertical = 16.dp)
+            .onFocusChanged { isFocused = it.isFocused },
+        shape = ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = androidx.tv.material3.Border(BorderStroke(2.dp, Primary))
+        )
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = series.posterUrl ?: series.backdropUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Gradient
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f)),
+                            startY = 200f
+                        )
+                    )
+            )
+
+            // Content
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(32.dp)
+            ) {
+                Text(
+                    text = series.name,
+                    style = MaterialTheme.typography.displayMedium,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(8.dp))
+                if (!series.plot.isNullOrEmpty()) {
+                    Text(
+                        text = series.plot!!,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextSecondary,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth(0.6f)
+                    )
+                    Spacer(Modifier.height(16.dp))
+                }
+                
+                // Play Button
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .background(if (isFocused) Primary else Color.White, androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                        .padding(horizontal = 24.dp, vertical = 8.dp)
+                ) {
+                    Text("▶", color = if (isFocused) Color.White else Color.Black)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.player_resume).substringBefore(" "), color = if (isFocused) Color.White else Color.Black, style = MaterialTheme.typography.titleMedium) // "Play" fallback
                 }
             }
         }
