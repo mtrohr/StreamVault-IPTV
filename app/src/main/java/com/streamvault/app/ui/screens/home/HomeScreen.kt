@@ -334,9 +334,13 @@ fun HomeScreen(
                             LazyVerticalGrid(
                                 columns = GridCells.Adaptive(minSize = 180.dp),
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 32.dp),
-                                verticalArrangement = Arrangement.spacedBy(16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                contentPadding = PaddingValues(
+                                    start = LocalSpacing.current.safeHoriz, 
+                                    end = LocalSpacing.current.safeHoriz, 
+                                    bottom = LocalSpacing.current.safeBottom
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(LocalSpacing.current.sm),
+                                horizontalArrangement = Arrangement.spacedBy(LocalSpacing.current.sm)
                             ) {
                                 items(20) {
                                     SkeletonCard(
@@ -411,9 +415,13 @@ fun HomeScreen(
                                             } else false
                                         } else false
                                     },
-                                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 32.dp),
-                                verticalArrangement = Arrangement.spacedBy(16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                contentPadding = PaddingValues(
+                                    start = LocalSpacing.current.safeHoriz, 
+                                    end = LocalSpacing.current.safeHoriz, 
+                                    bottom = LocalSpacing.current.safeBottom
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(LocalSpacing.current.sm),
+                                horizontalArrangement = Arrangement.spacedBy(LocalSpacing.current.sm)
                             ) {
                                 items(
                                     items = uiState.filteredChannels,

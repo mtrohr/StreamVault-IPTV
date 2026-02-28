@@ -83,8 +83,8 @@
 > Task :player:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :app:mergeDebugJniLibFolders UP-TO-DATE
 > Task :data:mergeDebugJniLibFolders UP-TO-DATE
-> Task :data:mergeDebugNativeLibs NO-SOURCE
 > Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :data:mergeDebugNativeLibs NO-SOURCE
 > Task :data:copyDebugJniLibsProjectOnly UP-TO-DATE
 > Task :player:mergeDebugJniLibFolders UP-TO-DATE
 > Task :player:mergeDebugNativeLibs NO-SOURCE
@@ -119,10 +119,7 @@
 > Task :player:bundleDebugAar UP-TO-DATE
 > Task :player:assembleDebug UP-TO-DATE
 > Task :app:kspDebugKotlin
-
 > Task :app:compileDebugKotlin
-w: file:///C:/Users/david/.gemini/antigravity/scratch/iptv-player/app/src/main/java/com/streamvault/app/ui/screens/search/SearchScreen.kt:81:7 This declaration needs opt-in. Its usage should be marked with '@kotlinx.coroutines.ExperimentalCoroutinesApi' or '@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)'
-
 > Task :app:compileDebugJavaWithJavac UP-TO-DATE
 > Task :app:hiltAggregateDepsDebug UP-TO-DATE
 > Task :app:hiltJavaCompileDebug UP-TO-DATE
@@ -136,5 +133,5 @@ w: file:///C:/Users/david/.gemini/antigravity/scratch/iptv-player/app/src/main/j
 > Task :app:createDebugApkListingFileRedirect UP-TO-DATE
 > Task :app:assembleDebug
 
-BUILD SUCCESSFUL in 19s
+BUILD SUCCESSFUL in 10s
 106 actionable tasks: 6 executed, 100 up-to-date

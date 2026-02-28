@@ -13,7 +13,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.BorderStroke
 import androidx.tv.material3.*
 import com.streamvault.app.navigation.Routes
 import com.streamvault.app.ui.theme.*
@@ -28,12 +30,10 @@ fun TopNavBar(
     modifier: Modifier = Modifier
 ) {
     val tabs = listOf(
-        NavTab(stringResource(id = R.string.nav_live_tv), Routes.HOME, "📺"),
-        NavTab(stringResource(id = R.string.nav_movies), Routes.MOVIES, "🎬"),
-        NavTab(stringResource(id = R.string.nav_series), Routes.SERIES, "📺"),
-        // Search and Favorites are accessible from within the Live TV screen;
-        // they don't need top-level nav slots.
-        NavTab(stringResource(id = R.string.nav_settings), Routes.SETTINGS, "⚙️")
+        NavTab(stringResource(id = R.string.nav_live_tv), Routes.HOME),
+        NavTab(stringResource(id = R.string.nav_movies), Routes.MOVIES),
+        NavTab(stringResource(id = R.string.nav_series), Routes.SERIES),
+        NavTab(stringResource(id = R.string.nav_settings), Routes.SETTINGS)
     )
 
     val focusRequesters = remember { mutableMapOf<String, FocusRequester>() }
@@ -41,8 +41,8 @@ fun TopNavBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(56.dp)
-            .padding(horizontal = 32.dp)
+            .height(64.dp) // Premium height
+            .padding(horizontal = LocalSpacing.current.safeHoriz) // Premium 48dp overscan
             .focusProperties {
                 enter = {
                     val activeTabRoute = tabs.firstOrNull { it.route == currentRoute }?.route
@@ -51,28 +51,32 @@ fun TopNavBar(
                 }
             },
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(LocalSpacing.current.lg) // Premium 32dp spacing
     ) {
         // Logo / App Name
         Text(
             text = stringResource(id = R.string.app_name),
             style = MaterialTheme.typography.titleLarge,
             color = Primary,
-            modifier = Modifier.padding(end = 32.dp)
+            modifier = Modifier.padding(end = LocalSpacing.current.lg)
         )
 
-        tabs.forEach { tab ->
-            val requester = focusRequesters.getOrPut(tab.route) { FocusRequester() }
-            NavTabButton(
-                text = "${tab.icon} ${tab.label}",
-                isSelected = currentRoute == tab.route,
-                modifier = Modifier.focusRequester(requester),
-                onClick = {
-                    if (currentRoute != tab.route) {
-                        onNavigate(tab.route)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(LocalSpacing.current.sm)
+        ) {
+            tabs.forEach { tab ->
+                val requester = focusRequesters.getOrPut(tab.route) { FocusRequester() }
+                NavTabButton(
+                    text = tab.label,
+                    isSelected = currentRoute == tab.route,
+                    modifier = Modifier.focusRequester(requester),
+                    onClick = {
+                        if (currentRoute != tab.route) {
+                            onNavigate(tab.route)
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     }
 }
@@ -87,45 +91,57 @@ private fun NavTabButton(
     var isFocused by remember { mutableStateOf(false) }
 
     val scale by animateFloatAsState(
-        targetValue = if (isFocused) 1.05f else 1f,
-        animationSpec = tween(durationMillis = 150),
+        targetValue = if (isFocused) 1.03f else 1f, // Premium subtle scale
+        animationSpec = tween(durationMillis = 200),
         label = "tabScale"
     )
 
     val backgroundColor = when {
-        isSelected -> Primary.copy(alpha = 0.2f)
+        isSelected -> Primary.copy(alpha = 0.15f) // Cleaner selection tint
         isFocused -> SurfaceElevated
         else -> Color.Transparent
     }
 
     val textColor = when {
         isSelected -> Primary
-        isFocused -> OnBackground
-        else -> OnSurface
+        isFocused -> TextPrimary // High contrast white
+        else -> TextSecondary // Muted inactive
     }
 
     Surface(
         onClick = onClick,
-        modifier = Modifier
-            .scale(scale)
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .onFocusChanged { isFocused = it.isFocused },
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)), // Premium 12dp
         colors = ClickableSurfaceDefaults.colors(
             containerColor = backgroundColor,
             focusedContainerColor = SurfaceElevated
+        ),
+        border = ClickableSurfaceDefaults.border(
+            border = Border.None,
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, FocusBorder), // Premium White Focus
+                shape = RoundedCornerShape(12.dp)
+            )
         )
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.titleSmall, // 16sp, robust TV font
             color = textColor,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            modifier = Modifier.padding(
+                horizontal = LocalSpacing.current.md, 
+                vertical = LocalSpacing.current.xs
+            )
         )
     }
 }
 
 private data class NavTab(
     val label: String,
-    val route: String,
-    val icon: String
+    val route: String
 )

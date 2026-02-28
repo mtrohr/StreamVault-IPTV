@@ -9,18 +9,18 @@ val PrimaryVariant   = PrimaryLight        // legacy alias
 val PrimaryDark      = Color(0xFF4A42DB)
 val PrimaryGlow      = Color(0x336C63FF)   // 20% opacity glow ring
 
-// ── Backgrounds — Layered depth system ────────────────────────────
-val BackgroundDeep   = Color(0xFF050508)   // Deepest — behind everything
-val Background       = Color(0xFF0D0D12)   // Slight blue tint
-val Surface          = Color(0xFF16161F)   // Card surfaces
-val SurfaceElevated  = Color(0xFF1E1E2A)   // Modals, overlays, sidebar
-val SurfaceHighlight = Color(0xFF282838)   // Selected/hovered
+// ── TV-Optimized Backgrounds — Cinematic Depth ──────────────────
+val BackgroundDeep   = Color(0xFF09090E)   // Ultra Deep — behind everything
+val Background       = Color(0xFF0D0D12)   // Legacy alias fallback
+val Surface          = Color(0xFF14141E)   // Standard Card surfaces
+val SurfaceElevated  = Color(0xFF1E1E2D)   // Modals, overlays, sidebars
+val SurfaceHighlight = Color(0xFF2A2A3D)   // Soft selection indication
 val SurfaceVariant   = SurfaceElevated
 
-// ── Text — 4-tier hierarchy ───────────────────────────────────────
-val TextPrimary      = Color(0xFFF0F0F5)   // Titles, high emphasis
-val TextSecondary    = Color(0xFFB8B8C8)   // Descriptions, metadata
-val TextTertiary     = Color(0xFF7A7A8E)   // Timestamps, counts
+// ── TV-Optimized Text — Massive Readability ───────────────────────
+val TextPrimary      = Color(0xFFFFFFFF)   // Absolute White for core data
+val TextSecondary    = Color(0xFFA0A0B0)   // Sub-titles / descriptions
+val TextTertiary     = Color(0xFF656575)   // Low priority metadata
 val TextDisabled     = Color(0xFF4A4A58)   // Disabled states
 
 // Legacy aliases kept for compatibility
@@ -32,7 +32,7 @@ val OnSurfaceDim     = TextTertiary
 // ── Accents ────────────────────────────────────────────────────────
 val AccentRed        = Color(0xFFFF4B6A)   // Live indicator, errors
 val AccentGreen      = Color(0xFF2DD881)   // Success, online
-val AccentAmber      = Color(0xFFFFA742)   // Warnings, badges
+val AccentAmber      = Color(0xFFFFA742)   // Warnings, badges (Reorder drag)
 val AccentCyan       = Color(0xFF00D4FF)   // EPG progress, info
 
 // Legacy aliases
@@ -43,12 +43,12 @@ val SuccessColor     = AccentGreen
 val LiveIndicator    = AccentRed
 val WarningColor     = AccentAmber
 
-// ── Gradient Overlays ─────────────────────────────────────────────
-val GradientOverlayTop    = Color(0xCC000005)   // 80% opacity
-val GradientOverlayBottom = Color(0xE6000005)   // 90% opacity
+// ── Cinematic Gradient Overlays ───────────────────────────────────
+val GradientOverlayTop    = Color(0x99050508)   // 60% opacity for cleaner fade
+val GradientOverlayBottom = Color(0xE6050508)   // 90% opacity for solid dark-read
 
-// ── Card & Focus ──────────────────────────────────────────────────
-val FocusBorder             = Primary
+// ── TV Focus System ───────────────────────────────────────────────
+val FocusBorder             = Color(0xFFF0F0F5) // HIGH CONTRAST WHITE for 10-foot legibility
 val CardBackground          = Surface
 val ProgressBar             = Primary
-val ProgressBarBackground   = Color(0xFF333344)
+val ProgressBarBackground   = Color(0xFF1E1E2D)

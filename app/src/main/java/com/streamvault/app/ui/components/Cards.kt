@@ -13,6 +13,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -51,17 +53,20 @@ fun FocusableCard(
     var isFocused by remember { mutableStateOf(false) }
 
     // In reorder mode, only the dragging item scales. Otherwise grid is static.
-    val targetScale = if (isDragging) 1.08f else if (isFocused && !isReorderMode) 1.08f else 1f
-    
     val scale by animateFloatAsState(
-        targetValue = targetScale,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
-        label = "cardScale"
+        targetValue = if (isFocused) {
+            if (isReorderMode && !isDragging) 1f else 1.05f // PREMIUM: 1.05x instead of 1.08x
+        } else {
+            if (isDragging) 1.05f else 1f
+        },
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing), // PREMIUM: 200ms
+        label = "scale"
     )
+
     val shadowElevation by animateFloatAsState(
-        targetValue = if (isFocused || isDragging) 24f else 0f,
-        animationSpec = tween(200, easing = FastOutSlowInEasing),
-        label = "cardShadow"
+        targetValue = if (isDragging) 16f else if (isFocused) 8f else 0f, // PREMIUM: Down from 24dp to 8dp
+        animationSpec = tween(durationMillis = 200),
+        label = "elevation"
     )
 
     Surface(
@@ -74,9 +79,11 @@ fun FocusableCard(
                 scaleX = scale
                 scaleY = scale
                 this.shadowElevation = shadowElevation
+                shape = RoundedCornerShape(12.dp)
+                clip = false
             }
             .onFocusChanged { isFocused = it.isFocused },
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)), // PREMIUM: 12dp
         colors = ClickableSurfaceDefaults.colors(
             containerColor = CardBackground,
             focusedContainerColor = SurfaceHighlight
@@ -84,14 +91,14 @@ fun FocusableCard(
         border = ClickableSurfaceDefaults.border(
             border = Border(
                 border = BorderStroke(0.dp, Color.Transparent),
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(12.dp) // PREMIUM: 12dp
             ),
             focusedBorder = Border(
                 border = BorderStroke(
-                    width = if (isDragging) 4.dp else 2.dp, 
-                    color = if (isDragging) AccentAmber else Primary
+                    width = if (isDragging) 4.dp else 3.dp, // PREMIUM: 3dp border
+                    color = if (isDragging) AccentAmber else FocusBorder // PREMIUM: FocusBorder (White)
                 ),
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(12.dp) // PREMIUM: 12dp
             )
         )
     ) {

@@ -232,15 +232,19 @@ fun MoviesScreen(
                     // Netflix-style rows (All categories view)
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 32.dp)
+                        contentPadding = PaddingValues(
+                            start = LocalSpacing.current.safeHoriz, 
+                            end = LocalSpacing.current.safeHoriz, 
+                            bottom = LocalSpacing.current.safeBottom
+                        )
                     ) {
                         item {
                             Surface(
                                 onClick = { onNavigate(Routes.SEARCH) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 32.dp, vertical = 8.dp),
-                                shape = ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
+                                    .padding(vertical = LocalSpacing.current.md),
+                                shape = ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)),
                                 colors = ClickableSurfaceDefaults.colors(
                                     containerColor = SurfaceElevated,
                                     focusedContainerColor = Primary.copy(alpha = 0.2f)
