@@ -38,10 +38,11 @@ class PlayerViewModel @Inject constructor(
     private val channelRepository: ChannelRepository,
     private val favoriteRepository: com.streamvault.domain.repository.FavoriteRepository,
     private val playbackHistoryRepository: PlaybackHistoryRepository,
-    private val providerRepository: com.streamvault.domain.repository.ProviderRepository
+    private val providerRepository: com.streamvault.domain.repository.ProviderRepository,
+    private val preferencesRepository: com.streamvault.data.preferences.PreferencesRepository
 ) : ViewModel() {
 
-    private val _showControls = MutableStateFlow(true)
+    private val _showControls = MutableStateFlow(false)
     val showControls: StateFlow<Boolean> = _showControls.asStateFlow()
 
     private val _showZapOverlay = MutableStateFlow(false)
@@ -83,7 +84,66 @@ class PlayerViewModel @Inject constructor(
     private val _showChannelInfoOverlay = MutableStateFlow(false)
     val showChannelInfoOverlay: StateFlow<Boolean> = _showChannelInfoOverlay.asStateFlow()
 
+    private val _showDiagnostics = MutableStateFlow(false)
+    val showDiagnostics: StateFlow<Boolean> = _showDiagnostics.asStateFlow()
+
     private var channelInfoHideJob: Job? = null
+    private val triedAlternativeStreams = mutableSetOf<String>()
+
+    init {
+        viewModelScope.launch {
+            playerEngine.error.collect { error ->
+                if (error != null) {
+                    handlePlaybackError(error)
+                }
+            }
+        }
+        viewModelScope.launch {
+            playerEngine.playbackState.collect { state ->
+                if (state == PlaybackState.READY && currentContentType == ContentType.LIVE) {
+                    _currentChannel.value?.let { channel ->
+                        if (channel.errorCount > 0) {
+                            channelRepository.resetChannelErrorCount(channel.id)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun handlePlaybackError(error: PlayerError) {
+        // Only auto-switch for live TV
+        if (currentContentType != ContentType.LIVE) return
+        
+        // Only for network or source errors (potential broken links)
+        if (error is PlayerError.NetworkError || error is PlayerError.SourceError) {
+            val channel = _currentChannel.value ?: return
+            
+            viewModelScope.launch {
+                // 1. Mark as broken in DB
+                channelRepository.incrementChannelErrorCount(channel.id)
+                
+                // 2. Try alternative streams
+                val nextStream = channel.alternativeStreams.firstOrNull { 
+                    it !in triedAlternativeStreams && it != currentStreamUrl 
+                }
+                
+                if (nextStream != null) {
+                    triedAlternativeStreams.add(nextStream)
+                    android.util.Log.d("PlayerVM", "Switching to alternative stream: $nextStream")
+                    
+                    val streamInfo = com.streamvault.domain.model.StreamInfo(
+                        url = nextStream,
+                        streamType = com.streamvault.domain.model.StreamType.UNKNOWN
+                    )
+                    playerEngine.prepare(streamInfo)
+                    playerEngine.play()
+                } else {
+                    android.util.Log.e("PlayerVM", "No more alternative streams for channel: ${channel.name}")
+                }
+            }
+        }
+    }
 
     fun openChannelListOverlay() {
         _showChannelListOverlay.value = true
@@ -106,7 +166,7 @@ class PlayerViewModel @Inject constructor(
         _showControls.value = false
         channelInfoHideJob?.cancel()
         channelInfoHideJob = viewModelScope.launch {
-            delay(8000)
+            delay(3000)
             _showChannelInfoOverlay.value = false
         }
     }
@@ -123,9 +183,14 @@ class PlayerViewModel @Inject constructor(
         channelInfoHideJob?.cancel()
     }
 
+    fun toggleDiagnostics() {
+        _showDiagnostics.value = !_showDiagnostics.value
+    }
+
     // Zapping state
     private var channelList: List<com.streamvault.domain.model.Channel> = emptyList()
     private var currentChannelIndex = -1
+    private var previousChannelIndex = -1
     private var currentCategoryId: Long = -1
     private var currentProviderId: Long = -1L
     private var currentContentId: Long = -1L
@@ -138,14 +203,19 @@ class PlayerViewModel @Inject constructor(
     private var controlsHideJob: Job? = null
     private var progressTrackingJob: Job? = null
     private var zapOverlayJob: Job? = null
+    private var aspectRatioJob: Job? = null
     
     val playerError: StateFlow<PlayerError?> = playerEngine.error
         .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), null)
 
     val videoFormat: StateFlow<VideoFormat> = playerEngine.videoFormat
     
+    val playerStats = playerEngine.playerStats
     val availableAudioTracks = playerEngine.availableAudioTracks
     val availableSubtitleTracks = playerEngine.availableSubtitleTracks
+
+    private val _availableVideoQualities = MutableStateFlow<List<com.streamvault.player.PlayerTrack>>(emptyList())
+    val availableVideoQualities: StateFlow<List<com.streamvault.player.PlayerTrack>> = _availableVideoQualities.asStateFlow()
 
     fun selectAudioTrack(trackId: String) {
         playerEngine.selectAudioTrack(trackId)
@@ -153,6 +223,19 @@ class PlayerViewModel @Inject constructor(
 
     fun selectSubtitleTrack(trackId: String?) {
         playerEngine.selectSubtitleTrack(trackId)
+    }
+
+    fun selectVideoQuality(url: String) {
+        prepare(
+            streamUrl = url,
+            epgChannelId = _currentChannel.value?.epgChannelId,
+            internalChannelId = currentContentId,
+            categoryId = currentCategoryId,
+            providerId = currentProviderId,
+            isVirtual = isVirtualCategory,
+            contentType = currentContentType.name,
+            title = currentTitle
+        )
     }
 
     fun prepare(
@@ -170,11 +253,19 @@ class PlayerViewModel @Inject constructor(
         currentContentId = internalChannelId
         currentTitle = title
         currentContentType = try { ContentType.valueOf(contentType) } catch (e: Exception) { ContentType.LIVE }
+        
+        // Reset tried streams for manual switch
+        triedAlternativeStreams.clear()
+        triedAlternativeStreams.add(streamUrl)
+        
         val streamInfo = com.streamvault.domain.model.StreamInfo(
             url = streamUrl,
             streamType = com.streamvault.domain.model.StreamType.UNKNOWN
         )
         playerEngine.prepare(streamInfo)
+        
+        // Show context info on entry for both Live and VOD
+        openChannelInfoOverlay()
         
         // 1. Check for Resume Position for VODs
         if (currentContentType != ContentType.LIVE && currentContentId != -1L && currentProviderId != -1L) {
@@ -211,6 +302,55 @@ class PlayerViewModel @Inject constructor(
         
         // Fetch EPG if ID provided
         fetchEpg(epgChannelId)
+
+        // Load Aspect Ratio safely (fallback to FIT if none saved)
+        aspectRatioJob?.cancel()
+        _aspectRatio.value = AspectRatio.FIT
+        if (internalChannelId != -1L) {
+            aspectRatioJob = viewModelScope.launch {
+                preferencesRepository.getAspectRatioForChannel(internalChannelId).collect { savedRatio ->
+                    _aspectRatio.value = try {
+                        savedRatio?.let { AspectRatio.valueOf(it) } ?: AspectRatio.FIT
+                    } catch (e: Exception) {
+                        AspectRatio.FIT
+                    }
+                }
+            }
+            
+            // Fetch Channel for tracking alternative streams (video qualities)
+            viewModelScope.launch {
+                val channel = channelRepository.getChannel(internalChannelId)
+                _currentChannel.value = channel
+                if (channel != null && channel.alternativeStreams.isNotEmpty()) {
+                    val tracks = mutableListOf<com.streamvault.player.PlayerTrack>()
+                    tracks.add(
+                        com.streamvault.player.PlayerTrack(
+                            id = channel.streamUrl,
+                            name = "Primary / Default",
+                            language = null,
+                            type = com.streamvault.player.TrackType.VIDEO,
+                            isSelected = streamUrl == channel.streamUrl
+                        )
+                    )
+                    channel.alternativeStreams.forEachIndexed { index, altUrl ->
+                        tracks.add(
+                            com.streamvault.player.PlayerTrack(
+                                id = altUrl,
+                                name = "Alternative ${index + 1}",
+                                language = null,
+                                type = com.streamvault.player.TrackType.VIDEO,
+                                isSelected = streamUrl == altUrl
+                            )
+                        )
+                    }
+                    _availableVideoQualities.value = tracks as List<com.streamvault.player.PlayerTrack> // Ensure cast
+                } else {
+                    _availableVideoQualities.value = emptyList()
+                }
+            }
+        } else {
+             _availableVideoQualities.value = emptyList()
+        }
 
         // 2. Start Progress Tracking for VODs
         startProgressTracking()
@@ -366,7 +506,15 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    fun zapToLastChannel() {
+        if (channelList.isEmpty() || previousChannelIndex == -1) return
+        changeChannel(previousChannelIndex)
+    }
+
     private fun changeChannel(index: Int) {
+        if (currentChannelIndex != -1 && currentChannelIndex != index) {
+            previousChannelIndex = currentChannelIndex
+        }
         val channel = channelList[index]
         currentChannelIndex = index
         _currentChannel.value = channel
@@ -382,9 +530,15 @@ class PlayerViewModel @Inject constructor(
         
         fetchEpg(channel.epgChannelId)
         
-        // Show Zap Overlay
+        // Show Zap Overlay & Brief Info
         _showZapOverlay.value = true
-        _showControls.value = false // Hide full controls
+        _showControls.value = false 
+        openChannelInfoOverlay()
+        
+        // Reset tried streams for manual switch
+        triedAlternativeStreams.clear()
+        triedAlternativeStreams.add(channel.streamUrl)
+        
         hideZapOverlayAfterDelay()
     }
 
@@ -399,10 +553,18 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun toggleAspectRatio() {
-        _aspectRatio.value = when (_aspectRatio.value) {
+        val nextRatio = when (_aspectRatio.value) {
             AspectRatio.FIT -> AspectRatio.FILL
             AspectRatio.FILL -> AspectRatio.ZOOM
             AspectRatio.ZOOM -> AspectRatio.FIT
+        }
+        _aspectRatio.value = nextRatio
+
+        // Save instantly if we have a valid channel ID
+        if (currentContentId != -1L) {
+            viewModelScope.launch {
+                preferencesRepository.setAspectRatioForChannel(currentContentId, nextRatio.name)
+            }
         }
     }
 

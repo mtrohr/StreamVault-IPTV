@@ -43,15 +43,7 @@ class ChannelRepositoryImpl @Inject constructor(
                 entities
             }
             
-            filtered.map { entity ->
-                val domain = entity.toDomain()
-                // If category is unlocked, mark channel as NOT protected/ADULT for this session
-                if (entity.categoryId != null && unlockedCats.contains(entity.categoryId)) {
-                    domain.copy(isUserProtected = false, isAdult = false)
-                } else {
-                    domain
-                }
-            }
+            groupAndMapChannels(filtered, unlockedCats)
         }
 
     override fun getChannelsByCategory(providerId: Long, categoryId: Long): Flow<List<Channel>> =
@@ -75,15 +67,7 @@ class ChannelRepositoryImpl @Inject constructor(
                 entities
             }
             
-            filtered.map { entity ->
-                val domain = entity.toDomain()
-                // If category is unlocked, mark channel as NOT protected/ADULT for this session
-                if (entity.categoryId != null && unlockedCats.contains(entity.categoryId)) {
-                    domain.copy(isUserProtected = false, isAdult = false)
-                } else {
-                    domain
-                }
-            }
+            groupAndMapChannels(filtered, unlockedCats)
         }
 
     override fun getCategories(providerId: Long): Flow<List<Category>> =
@@ -142,14 +126,7 @@ class ChannelRepositoryImpl @Inject constructor(
                 entities
             }
             
-             filtered.map { entity ->
-                val domain = entity.toDomain()
-                if (entity.categoryId != null && unlockedCats.contains(entity.categoryId)) {
-                    domain.copy(isUserProtected = false, isAdult = false)
-                } else {
-                    domain
-                }
-            }
+             groupAndMapChannels(filtered, unlockedCats)
         }
 
     override suspend fun getChannel(channelId: Long): Channel? =
@@ -169,4 +146,34 @@ class ChannelRepositoryImpl @Inject constructor(
 
     override fun getChannelsByIds(ids: List<Long>): Flow<List<Channel>> =
         channelDao.getByIds(ids).map { entities -> entities.map { it.toDomain() } }
+
+    override suspend fun incrementChannelErrorCount(channelId: Long) {
+        channelDao.incrementErrorCount(channelId)
+    }
+
+    override suspend fun resetChannelErrorCount(channelId: Long) {
+        channelDao.resetErrorCount(channelId)
+    }
+
+    private fun groupAndMapChannels(entities: List<ChannelEntity>, unlockedCats: Set<Long>): List<Channel> {
+        return entities.groupBy { 
+            if (it.logicalGroupId.isNotBlank()) it.logicalGroupId else it.id.toString() 
+        }.values.map { group ->
+            // Sort group to pick the primary channel based on reliability and name length
+            val sortedGroup = group.sortedWith(compareBy({ it.errorCount }, { it.name.length }))
+            val primaryEntity = sortedGroup.first()
+            val alternativeStreams = sortedGroup.drop(1).map { it.streamUrl }
+            
+            val domain = primaryEntity.toDomain().copy(
+                alternativeStreams = alternativeStreams
+            )
+            
+            // If category is unlocked, mark channel as NOT protected/ADULT for this session
+            if (primaryEntity.categoryId != null && unlockedCats.contains(primaryEntity.categoryId)) {
+                domain.copy(isUserProtected = false, isAdult = false)
+            } else {
+                domain
+            }
+        }
+    }
 }

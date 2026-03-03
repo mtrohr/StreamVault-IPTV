@@ -6,6 +6,7 @@
     <string name="nav_live_tv">Live TV</string>
     <string name="nav_movies">Movies</string>
     <string name="nav_series">Series</string>
+    <string name="nav_epg">TV Guide</string>
     <string name="nav_settings">Settings</string>
 
     <!-- Welcome -->
@@ -122,6 +123,10 @@
     <string name="settings_system_default">System Default</string>
     <string name="settings_select_language">Select Language</string>
 
+    <string name="settings_backup_restore">Backup &amp; Restore</string>
+    <string name="settings_backup_data">Export Data</string>
+    <string name="settings_restore_data">Import Data</string>
+
     <!-- Favorites -->
     <string name="favorites_loading">Loading favorites...</string>
     <string name="favorites_no_favorites">No favorites yet</string>
@@ -180,6 +185,7 @@
     <string name="player_track_audio">Select Audio Track</string>
     <string name="player_track_subs">Select Subtitles</string>
     <string name="player_track_off">Off</string>
+    <string name="player_video_quality">Video Quality</string>
 
     <!-- Parental Control Group -->
     <string name="parental_group_title">Protected Groups</string>

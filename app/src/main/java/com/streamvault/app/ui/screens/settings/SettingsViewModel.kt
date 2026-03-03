@@ -11,10 +11,13 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+import com.streamvault.domain.manager.BackupManager
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val providerRepository: ProviderRepository,
-    private val preferencesRepository: PreferencesRepository
+    private val preferencesRepository: PreferencesRepository,
+    private val backupManager: BackupManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -103,6 +106,36 @@ class SettingsViewModel @Inject constructor(
 
     fun userMessageShown() {
         _uiState.update { it.copy(userMessage = null) }
+    }
+
+    fun exportConfig(uriString: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSyncing = true) }
+            val result = backupManager.exportConfig(uriString)
+            _uiState.update { state ->
+                state.copy(
+                    isSyncing = false,
+                    userMessage = if (result is Result.Error)
+                        "Export failed: ${result.message}"
+                    else "Configuration exported successfully"
+                )
+            }
+        }
+    }
+
+    fun importConfig(uriString: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSyncing = true) }
+            val result = backupManager.importConfig(uriString)
+            _uiState.update { state ->
+                state.copy(
+                    isSyncing = false,
+                    userMessage = if (result is Result.Error)
+                        "Import failed: ${result.message}"
+                    else "Configuration imported successfully"
+                )
+            }
+        }
     }
 }
 

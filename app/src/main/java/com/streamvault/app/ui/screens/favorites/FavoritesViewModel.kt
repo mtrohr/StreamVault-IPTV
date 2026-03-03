@@ -81,7 +81,7 @@ class FavoritesViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            favoriteRepository.getGroups().collect { groups ->
+            favoriteRepository.getGroups(ContentType.LIVE).collect { groups ->
                 _uiState.update { it.copy(groups = groups) }
             }
         }

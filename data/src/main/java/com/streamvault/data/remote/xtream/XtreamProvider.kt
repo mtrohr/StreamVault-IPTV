@@ -3,6 +3,7 @@ package com.streamvault.data.remote.xtream
 import com.streamvault.data.remote.dto.*
 import com.streamvault.domain.model.*
 import com.streamvault.domain.provider.IptvProvider
+import com.streamvault.domain.util.ChannelNormalizer
 import java.util.Base64
 
 /**
@@ -264,7 +265,11 @@ class XtreamProvider(
 
     override suspend fun buildCatchUpUrl(streamId: Long, start: Long, end: Long): String? {
         val baseUrl = serverUrl.trimEnd('/')
-        return "$baseUrl/timeshift/$username/$password/${end - start}/$start/$streamId.ts"
+        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd:HH-mm", java.util.Locale.getDefault())
+        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC") // Xtream servers typically use UTC for EPG timeshifts
+        val formattedStart = dateFormat.format(java.util.Date(start * 1000L))
+        val durationMinutes = (end - start) / 60
+        return "$baseUrl/timeshift/$username/$password/$durationMinutes/$formattedStart/$streamId.ts"
     }
 
     // ── Mappers ────────────────────────────────────────────────────
@@ -301,7 +306,8 @@ class XtreamProvider(
             providerId = providerId,
             streamUrl = "$serverUrl/live/$username/$password/$streamId.ts",
             isAdult = isCatAdult,
-            isUserProtected = false
+            isUserProtected = false,
+            logicalGroupId = ChannelNormalizer.getLogicalGroupId(name, providerId)
         )
     }
 

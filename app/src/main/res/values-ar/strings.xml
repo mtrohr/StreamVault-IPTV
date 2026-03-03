@@ -190,4 +190,5 @@
     <string name="epg_now_playing">يعرض الآن</string>
     <string name="epg_no_data">لا يوجد دليل برامج</string>
     <string name="epg_up_next">التالي</string>
+    <string name="player_video_quality">جودة الفيديو</string>
 </resources>

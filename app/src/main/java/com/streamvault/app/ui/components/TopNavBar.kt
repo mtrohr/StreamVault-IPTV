@@ -33,6 +33,7 @@ fun TopNavBar(
         NavTab(stringResource(id = R.string.nav_live_tv), Routes.HOME),
         NavTab(stringResource(id = R.string.nav_movies), Routes.MOVIES),
         NavTab(stringResource(id = R.string.nav_series), Routes.SERIES),
+        NavTab(stringResource(id = R.string.nav_epg), Routes.EPG),
         NavTab(stringResource(id = R.string.nav_settings), Routes.SETTINGS)
     )
 

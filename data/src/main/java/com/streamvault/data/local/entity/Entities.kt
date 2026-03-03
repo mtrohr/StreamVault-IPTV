@@ -32,7 +32,8 @@ data class ProviderEntity(
     indices = [
         Index(value = ["provider_id"]),
         Index(value = ["provider_id", "category_id"]),
-        Index(value = ["provider_id", "stream_id"], unique = true)
+        Index(value = ["provider_id", "stream_id"], unique = true),
+        Index(value = ["logical_group_id"])
     ]
 )
 data class ChannelEntity(
@@ -52,7 +53,9 @@ data class ChannelEntity(
     val catchUpSource: String? = null,
     @ColumnInfo(name = "provider_id") val providerId: Long = 0,
     @ColumnInfo(name = "is_adult") val isAdult: Boolean = false,
-    @ColumnInfo(name = "is_user_protected") val isUserProtected: Boolean = false
+    @ColumnInfo(name = "is_user_protected") val isUserProtected: Boolean = false,
+    @ColumnInfo(name = "logical_group_id") val logicalGroupId: String = "",
+    @ColumnInfo(name = "error_count") val errorCount: Int = 0
 )
 
 @Entity(
@@ -222,7 +225,8 @@ data class VirtualGroupEntity(
     val name: String,
     @ColumnInfo(name = "icon_emoji") val iconEmoji: String? = null,
     val position: Int = 0,
-    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis()
+    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "content_type") val contentType: String = "LIVE"
 )
 
 data class CategoryCount(

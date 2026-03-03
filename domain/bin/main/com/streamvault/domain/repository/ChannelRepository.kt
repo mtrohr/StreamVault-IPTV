@@ -14,6 +14,8 @@ interface ChannelRepository {
     suspend fun getStreamUrl(channel: Channel): Result<String>
     suspend fun refreshChannels(providerId: Long): Result<Unit>
     fun getChannelsByIds(ids: List<Long>): Flow<List<Channel>>
+    suspend fun incrementChannelErrorCount(channelId: Long)
+    suspend fun resetChannelErrorCount(channelId: Long)
 
     companion object {
         const val ALL_CHANNELS_ID = -1_000_000L

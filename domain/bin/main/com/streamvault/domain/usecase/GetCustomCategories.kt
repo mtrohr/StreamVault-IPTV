@@ -10,11 +10,11 @@ import javax.inject.Inject
 class GetCustomCategories @Inject constructor(
     private val favoriteRepository: FavoriteRepository
 ) {
-    operator fun invoke(): Flow<List<Category>> {
+    operator fun invoke(contentType: ContentType = ContentType.LIVE): Flow<List<Category>> {
         return kotlinx.coroutines.flow.combine(
-            favoriteRepository.getGroups(),
-            favoriteRepository.getGlobalLiveFavoriteCount(),
-            favoriteRepository.getGroupLiveFavoriteCounts()
+            favoriteRepository.getGroups(contentType),
+            favoriteRepository.getGlobalFavoriteCount(contentType),
+            favoriteRepository.getGroupFavoriteCounts(contentType)
         ) { groups, globalCount, groupCounts ->
             try {
                 println("GetCustomCategories: Processing ${groups.size} groups. Global: $globalCount, Counts: ${groupCounts.size}")
@@ -23,7 +23,7 @@ class GetCustomCategories @Inject constructor(
                     Category(
                         id = -group.id, // Use negative ID for virtual groups
                         name = group.name,
-                        type = ContentType.LIVE,
+                        type = contentType,
                         isVirtual = true,
                         count = groupCounts.getOrDefault(group.id, 0)
                     )
@@ -33,7 +33,7 @@ class GetCustomCategories @Inject constructor(
                 categories.add(0, Category(
                     id = -999L, // Special ID for "All Favorites"
                     name = "★ Favorites",
-                    type = ContentType.LIVE,
+                    type = contentType,
                     isVirtual = true,
                     count = globalCount
                 ))

@@ -200,15 +200,15 @@ class HomeViewModel @Inject constructor(
         val epgIds = channels.mapNotNull { it.epgChannelId }.distinct()
 
         epgJob = viewModelScope.launch {
-            val programs = if (epgIds.isNotEmpty()) {
-                epgRepository.getNowPlayingForChannels(epgIds).firstOrNull() ?: emptyList()
+            val programMap = if (epgIds.isNotEmpty()) {
+                epgRepository.getNowPlayingForChannels(epgIds).firstOrNull() ?: emptyMap()
             } else {
-                emptyList()
+                emptyMap()
             }
-            val programMap = programs.associateBy { it.channelId }
 
             val enrichedChannels = channels.map { channel ->
-                val program = channel.epgChannelId?.let { programMap[it] }
+                val programList = channel.epgChannelId?.let { programMap[it] }
+                val program = programList?.firstOrNull()
                 if (program != null) channel.copy(currentProgram = program) else channel
             }
 
@@ -252,7 +252,7 @@ class HomeViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            favoriteRepository.createGroup(trimmed)
+            favoriteRepository.createGroup(trimmed, contentType = ContentType.LIVE)
             _uiState.update { it.copy(userMessage = "Group '$trimmed' created") }
         }
     }

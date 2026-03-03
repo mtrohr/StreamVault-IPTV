@@ -17,6 +17,7 @@ interface PlayerEngine {
     val duration: StateFlow<Long>
     val videoFormat: StateFlow<VideoFormat>
     val error: Flow<PlayerError?>
+    val playerStats: StateFlow<PlayerStats>
 
     // Tracks
     val availableAudioTracks: StateFlow<List<PlayerTrack>>
@@ -46,6 +47,15 @@ enum class PlaybackState {
     ENDED,
     ERROR
 }
+
+data class PlayerStats(
+    val videoCodec: String = "Unknown",
+    val audioCodec: String = "Unknown",
+    val videoBitrate: Int = 0,
+    val droppedFrames: Int = 0,
+    val width: Int = 0,
+    val height: Int = 0
+)
 
 sealed class PlayerError(val message: String) {
     class NetworkError(message: String) : PlayerError(message)

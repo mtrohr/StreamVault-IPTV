@@ -22,6 +22,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.tv.material3.*
 import com.streamvault.app.ui.theme.*
 import androidx.compose.ui.res.stringResource
@@ -34,6 +40,52 @@ fun ProviderSetupScreen(
     viewModel: ProviderSetupViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    var name by remember { mutableStateOf("") }
+    var m3uUrl by remember { mutableStateOf("") }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: android.net.Uri? ->
+        if (uri != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    if (inputStream != null) {
+                        var fileName = "Local_Playlist"
+                        val cursor = context.contentResolver.query(uri, null, null, null, null)
+                        cursor?.use {
+                            if (it.moveToFirst()) {
+                                val displayNameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                if (displayNameIndex != -1) {
+                                    val displayName = it.getString(displayNameIndex)
+                                    if (displayName.contains(".")) {
+                                        fileName = displayName.substringBeforeLast(".")
+                                    } else {
+                                        fileName = displayName
+                                    }
+                                }
+                            }
+                        }
+
+                        val outFile = java.io.File(context.filesDir, "m3u_${System.currentTimeMillis()}.m3u")
+                        outFile.outputStream().use { out ->
+                            inputStream.copyTo(out)
+                        }
+
+                        withContext(Dispatchers.Main) {
+                            m3uUrl = "file://${outFile.absolutePath}"
+                            if (name.isEmpty()) name = fileName
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
 
     // Navigate on success
     LaunchedEffect(uiState.loginSuccess) {
@@ -46,11 +98,9 @@ fun ProviderSetupScreen(
     // }
 
     var selectedTab by remember { mutableStateOf(0) } // 0 = Xtream, 1 = M3U
-    var name by remember { mutableStateOf("") }
     var serverUrl by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var m3uUrl by remember { mutableStateOf("") }
 
     // Initialize state from ViewModel if editing
     LaunchedEffect(editProviderId) {
@@ -137,6 +187,12 @@ fun ProviderSetupScreen(
                 }
                 1 -> {
                     TvTextField(value = m3uUrl, onValueChange = { m3uUrl = it }, label = stringResource(R.string.setup_m3u_hint))
+
+                    ActionButton(
+                        text = "Select Local File",
+                        enabled = !uiState.isLoading,
+                        onClick = { filePickerLauncher.launch(arrayOf("*/*")) }
+                    )
 
                     ActionButton(
                         text = if (uiState.isLoading) stringResource(R.string.setup_validating) else if (uiState.isEditing) stringResource(R.string.setup_save) else stringResource(R.string.setup_add),

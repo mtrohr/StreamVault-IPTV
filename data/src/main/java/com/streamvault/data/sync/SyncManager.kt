@@ -205,16 +205,19 @@ class SyncManager @Inject constructor(
             withContext(Dispatchers.IO) {
                 Log.d(TAG, "Starting M3U refresh for ${provider.name}")
                 progress(onProgress, "Downloading Playlist…")
-                val url = provider.m3uUrl.ifBlank { provider.serverUrl }
-                val response = okHttpClient.newCall(Request.Builder().url(url).build()).execute()
+                val urlStr = provider.m3uUrl.ifBlank { provider.serverUrl }
+                val inputStream = if (urlStr.startsWith("file://")) {
+                    java.io.File(java.net.URI(urlStr)).inputStream()
+                } else {
+                    val response = okHttpClient.newCall(Request.Builder().url(urlStr).build()).execute()
+                    if (!response.isSuccessful) {
+                        throw Exception("Failed to download M3U: HTTP ${response.code}")
+                    }
+                    response.body?.byteStream() ?: throw Exception("Empty M3U response")
+                }
 
-            if (!response.isSuccessful) {
-                throw Exception("Failed to download M3U: HTTP ${response.code}")
-            }
-            val body = response.body ?: throw Exception("Empty M3U response")
-
-            progress(onProgress, "Parsing Playlist…")
-            val entries = body.byteStream().use { m3uParser.parse(it) }
+                progress(onProgress, "Parsing Playlist…")
+                val entries = inputStream.use { m3uParser.parse(it) }
             Log.d(TAG, "Parsed ${entries.size} M3U entries")
 
             val liveEntries = entries.filter { !isVodEntry(it) }

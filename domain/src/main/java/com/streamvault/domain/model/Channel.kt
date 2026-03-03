@@ -18,5 +18,8 @@ data class Channel(
     val currentProgram: Program? = null,
     val nextProgram: Program? = null,
     val isAdult: Boolean = false,
-    val isUserProtected: Boolean = false
+    val isUserProtected: Boolean = false,
+    val logicalGroupId: String = "",
+    val errorCount: Int = 0,
+    val alternativeStreams: List<String> = emptyList()
 )

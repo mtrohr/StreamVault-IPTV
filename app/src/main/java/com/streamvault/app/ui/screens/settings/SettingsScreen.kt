@@ -24,6 +24,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
 import com.streamvault.app.ui.components.dialogs.PinDialog
 import com.streamvault.app.ui.components.TopNavBar
@@ -55,6 +57,18 @@ fun SettingsScreen(
     var showLanguageDialog by remember { mutableStateOf(false) }
     var pinError by remember { mutableStateOf<String?>(null) }
     var pendingAction by remember { mutableStateOf<ParentalAction?>(null) }
+
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        uri?.let { viewModel.exportConfig(it.toString()) }
+    }
+
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { viewModel.importConfig(it.toString()) }
+    }
 
 
 
@@ -219,6 +233,55 @@ fun SettingsScreen(
                             text = languageName,
                             style = MaterialTheme.typography.bodyMedium,
                             color = Primary
+                        )
+                    }
+                }
+            }
+
+            // Backup & Restore settings
+            item {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.settings_backup_restore),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Primary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Surface(
+                        onClick = { createDocumentLauncher.launch("streamvault_backup.json") },
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = SurfaceElevated,
+                            focusedContainerColor = Primary.copy(alpha = 0.2f)
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = "💾 " + stringResource(R.string.settings_backup_data),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = OnBackground,
+                            modifier = Modifier.padding(16.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                    
+                    Surface(
+                        onClick = { openDocumentLauncher.launch(arrayOf("application/json")) },
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = SurfaceElevated,
+                            focusedContainerColor = Primary.copy(alpha = 0.2f)
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = "📂 " + stringResource(R.string.settings_restore_data),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = OnBackground,
+                            modifier = Modifier.padding(16.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
                 }

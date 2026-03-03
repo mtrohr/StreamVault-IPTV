@@ -17,6 +17,9 @@ import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.DecoderReuseEvaluation
+import androidx.media3.common.Format
 import com.streamvault.domain.model.DecoderMode
 import com.streamvault.domain.model.StreamInfo
 import com.streamvault.domain.model.StreamType
@@ -64,6 +67,9 @@ class Media3PlayerEngine @Inject constructor(
     private val _availableSubtitleTracks = MutableStateFlow<List<PlayerTrack>>(emptyList())
     override val availableSubtitleTracks: StateFlow<List<PlayerTrack>> = _availableSubtitleTracks.asStateFlow()
 
+    private val _playerStats = MutableStateFlow(PlayerStats())
+    override val playerStats: StateFlow<PlayerStats> = _playerStats.asStateFlow()
+
     private fun getOrCreatePlayer(): ExoPlayer {
         return exoPlayer ?: createPlayer().also { exoPlayer = it }
     }
@@ -82,6 +88,44 @@ class Media3PlayerEngine @Inject constructor(
         return ExoPlayer.Builder(context, renderersFactory)
             .build()
             .apply {
+                addAnalyticsListener(object : AnalyticsListener {
+                    override fun onVideoInputFormatChanged(
+                        eventTime: AnalyticsListener.EventTime,
+                        format: Format,
+                        decoderReuseEvaluation: DecoderReuseEvaluation?
+                    ) {
+                        _playerStats.update { 
+                            it.copy(
+                                videoCodec = format.sampleMimeType ?: format.codecs ?: it.videoCodec,
+                                videoBitrate = format.bitrate.takeIf { b -> b > 0 } ?: it.videoBitrate,
+                                width = format.width.takeIf { w -> w > 0 } ?: it.width,
+                                height = format.height.takeIf { h -> h > 0 } ?: it.height
+                            ) 
+                        }
+                    }
+
+                    override fun onAudioInputFormatChanged(
+                        eventTime: AnalyticsListener.EventTime,
+                        format: Format,
+                        decoderReuseEvaluation: DecoderReuseEvaluation?
+                    ) {
+                        _playerStats.update { 
+                            it.copy(
+                                audioCodec = format.sampleMimeType ?: format.codecs ?: it.audioCodec
+                            ) 
+                        }
+                    }
+
+                    override fun onDroppedVideoFrames(
+                        eventTime: AnalyticsListener.EventTime,
+                        droppedFrames: Int,
+                        elapsedMs: Long
+                    ) {
+                        _playerStats.update { 
+                            it.copy(droppedFrames = it.droppedFrames + droppedFrames) 
+                        }
+                    }
+                })
                 addListener(object : Player.Listener {
                     override fun onPlaybackStateChanged(state: Int) {
                         _playbackState.value = when (state) {
@@ -168,6 +212,7 @@ class Media3PlayerEngine @Inject constructor(
     override fun prepare(streamInfo: StreamInfo) {
         val player = getOrCreatePlayer()
         _error.tryEmit(null)
+        _playerStats.value = PlayerStats() // reset stats
 
         val dataSourceFactory = createDataSourceFactory(streamInfo)
         val streamType = streamInfo.streamType.takeIf { it != StreamType.UNKNOWN }

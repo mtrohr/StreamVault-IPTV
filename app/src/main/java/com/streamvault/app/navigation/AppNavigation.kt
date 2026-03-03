@@ -24,6 +24,7 @@ object Routes {
     const val MOVIES = "movies"
     const val SERIES = "series"
     const val FAVORITES = "favorites"
+    const val EPG = "epg"
     const val SETTINGS = "settings"
     const val PLAYER = "player/{streamUrl}?title={title}&channelId={channelId}&internalId={internalId}&categoryId={categoryId}&providerId={providerId}&isVirtual={isVirtual}&contentType={contentType}"
     const val SEARCH = "search"
@@ -185,6 +186,19 @@ fun AppNavigation() {
                     }
                 },
                 currentRoute = Routes.FAVORITES
+            )
+        }
+
+        composable(Routes.EPG) {
+            com.streamvault.app.ui.screens.epg.FullEpgScreen(
+                currentRoute = Routes.EPG,
+                onNavigate = { route ->
+                    navController.navigate(route) {
+                        popUpTo(Routes.HOME) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
             )
         }
 

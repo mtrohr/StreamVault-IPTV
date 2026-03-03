@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.*
@@ -195,15 +196,60 @@ fun SearchScreen(
         )
     }
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp)
+            .padding(24.dp),
+        horizontalArrangement = Arrangement.spacedBy(32.dp)
     ) {
-// ... (omitted SearchTextField and FilterChips) ...
-        Spacer(modifier = Modifier.height(24.dp))
+        // Left Side: Keyboard & Filters
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            // Fake Search Text Field (Display Only)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .background(SurfaceElevated, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (query.isEmpty()) {
+                    Text(stringResource(R.string.search_hint), color = OnSurfaceDim)
+                } else {
+                    Text(query, color = OnBackground, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
 
-        // Results
+            com.streamvault.app.ui.components.TvKeyboard(
+                onKeyPress = { viewModel.onQueryChange(query + it) },
+                onDelete = { if (query.isNotEmpty()) viewModel.onQueryChange(query.dropLast(1)) },
+                onClear = { viewModel.onQueryChange("") },
+                onDone = { focusManager.clearFocus() }
+            )
+
+            androidx.compose.foundation.lazy.LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(SearchTab.values().toList()) { tab ->
+                    FilterChip(
+                        selected = tab == selectedTab,
+                        onClick = { viewModel.onTabSelected(tab) },
+                        colors = FilterChipDefaults.colors(
+                            selectedContainerColor = Primary,
+                            selectedContentColor = Color.White
+                        )
+                    ) {
+                        Text(stringResource(tab.titleRes))
+                    }
+                }
+            }
+        }
+
+        // Right Side: Results
+        Box(modifier = Modifier.weight(2.5f).fillMaxHeight()) {
         if (uiState.isEmpty) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
@@ -297,6 +343,8 @@ fun SearchScreen(
         }
     }
 }
+}
+
 
 @Composable
 fun SectionHeader(title: String) {
@@ -306,44 +354,4 @@ fun SectionHeader(title: String) {
         color = Primary,
         modifier = Modifier.padding(vertical = 8.dp)
     )
-}
-
-@Composable
-fun SearchTextField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    onDone: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .background(if (isFocused) Surface else SurfaceElevated, RoundedCornerShape(8.dp))
-            .border(
-                width = if (isFocused) 2.dp else 1.dp,
-                color = if (isFocused) Primary else SurfaceHighlight,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .clickable { focusRequester.requestFocus() }
-            .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.CenterStart
-    ) {
-        if (value.isEmpty() && !isFocused) {
-            Text(stringResource(R.string.search_hint), color = OnSurfaceDim)
-        }
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(focusRequester)
-                .onFocusChanged { isFocused = it.isFocused },
-            textStyle = MaterialTheme.typography.bodyLarge.copy(color = OnBackground),
-            singleLine = true,
-            cursorBrush = SolidColor(Primary)
-        )
-    }
 }

@@ -8,11 +8,12 @@ import kotlinx.coroutines.flow.Flow
 
 interface FavoriteRepository {
     fun getFavorites(contentType: ContentType? = null): Flow<List<Favorite>>
+    fun getAllFavorites(contentType: ContentType): Flow<List<Favorite>>
     fun getFavoritesByGroup(groupId: Long): Flow<List<Favorite>>
-    fun getGroups(): Flow<List<VirtualGroup>>
+    fun getGroups(contentType: ContentType): Flow<List<VirtualGroup>>
 
-    fun getGlobalLiveFavoriteCount(): Flow<Int>
-    fun getGroupLiveFavoriteCounts(): Flow<Map<Long, Int>>
+    fun getGlobalFavoriteCount(contentType: ContentType): Flow<Int>
+    fun getGroupFavoriteCounts(contentType: ContentType): Flow<Map<Long, Int>>
 
     suspend fun addFavorite(contentId: Long, contentType: ContentType, groupId: Long? = null): Result<Unit>
     suspend fun removeFavorite(contentId: Long, contentType: ContentType, groupId: Long? = null): Result<Unit>
@@ -22,7 +23,7 @@ interface FavoriteRepository {
     
     suspend fun getGroupMemberships(contentId: Long, contentType: ContentType): List<Long>
 
-    suspend fun createGroup(name: String, iconEmoji: String? = null): Result<VirtualGroup>
+    suspend fun createGroup(name: String, iconEmoji: String? = null, contentType: ContentType): Result<VirtualGroup>
     suspend fun deleteGroup(groupId: Long): Result<Unit>
     suspend fun renameGroup(groupId: Long, newName: String): Result<Unit>
 }

@@ -20,8 +20,8 @@ import com.streamvault.app.R
 fun CategoryOptionsDialog(
     category: Category,
     onDismissRequest: () -> Unit,
-    onSetAsDefault: () -> Unit,
-    onToggleLock: () -> Unit,
+    onSetAsDefault: (() -> Unit)? = null,
+    onToggleLock: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
     onReorderChannels: (() -> Unit)? = null
 ) {
@@ -43,11 +43,13 @@ fun CategoryOptionsDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 
                 // Option 1: Set as Default
-                androidx.tv.material3.Button(
-                    onClick = { if (canInteract) onSetAsDefault() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(stringResource(R.string.category_options_set_default))
+                if (onSetAsDefault != null) {
+                    androidx.tv.material3.Button(
+                        onClick = { if (canInteract) onSetAsDefault() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.category_options_set_default))
+                    }
                 }
 
                 // Option 2: Reorder Channels (only for virtual/custom categories)
@@ -66,12 +68,14 @@ fun CategoryOptionsDialog(
                 }
 
                 // Option 3: Lock/Unlock
-                val lockText = if (category.isUserProtected) stringResource(R.string.category_options_unlock) else stringResource(R.string.category_options_lock)
-                androidx.tv.material3.Button(
-                    onClick = { if (canInteract) onToggleLock() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(lockText)
+                if (onToggleLock != null) {
+                    val lockText = if (category.isUserProtected) stringResource(R.string.category_options_unlock) else stringResource(R.string.category_options_lock)
+                    androidx.tv.material3.Button(
+                        onClick = { if (canInteract) onToggleLock() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(lockText)
+                    }
                 }
 
                 // Option 4: Delete (Optional)

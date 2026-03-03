@@ -74,6 +74,12 @@ interface ChannelDao {
 
     @Query("UPDATE channels SET is_user_protected = :isProtected WHERE category_id = :categoryId")
     suspend fun updateProtectionStatus(categoryId: Long, isProtected: Boolean)
+
+    @Query("UPDATE channels SET error_count = error_count + 1 WHERE id = :id")
+    suspend fun incrementErrorCount(id: Long)
+
+    @Query("UPDATE channels SET error_count = 0 WHERE id = :id")
+    suspend fun resetErrorCount(id: Long)
 }
 
 @Dao
@@ -266,17 +272,20 @@ interface FavoriteDao {
     @Query("SELECT * FROM favorites WHERE content_type = :contentType AND group_id IS NULL ORDER BY position ASC")
     fun getGlobalByType(contentType: String): Flow<List<FavoriteEntity>>
 
+    @Query("SELECT * FROM favorites WHERE content_type = :contentType ORDER BY position ASC")
+    fun getAllByType(contentType: String): Flow<List<FavoriteEntity>>
+
     @Query("SELECT * FROM favorites WHERE group_id = :groupId ORDER BY position ASC")
     fun getByGroup(groupId: Long): Flow<List<FavoriteEntity>>
 
     @Query("SELECT * FROM favorites WHERE content_id = :contentId AND content_type = :contentType AND (:groupId IS NULL AND group_id IS NULL OR group_id = :groupId) LIMIT 1")
     suspend fun get(contentId: Long, contentType: String, groupId: Long?): FavoriteEntity?
 
-    @Query("SELECT COUNT(*) FROM favorites WHERE group_id IS NULL AND content_type = 'LIVE'")
-    fun getGlobalLiveCount(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM favorites WHERE group_id IS NULL AND content_type = :contentType")
+    fun getGlobalFavoriteCount(contentType: String): Flow<Int>
 
-    @Query("SELECT group_id as category_id, COUNT(*) as item_count FROM favorites WHERE group_id IS NOT NULL AND content_type = 'LIVE' GROUP BY group_id")
-    fun getGroupLiveCounts(): Flow<List<CategoryCount>>
+    @Query("SELECT group_id as category_id, COUNT(*) as item_count FROM favorites WHERE group_id IS NOT NULL AND content_type = :contentType GROUP BY group_id")
+    fun getGroupFavoriteCounts(contentType: String): Flow<List<CategoryCount>>
 
     @Query("SELECT group_id FROM favorites WHERE content_id = :contentId AND content_type = :contentType AND group_id IS NOT NULL")
     suspend fun getGroupMemberships(contentId: Long, contentType: String): List<Long>
@@ -299,8 +308,8 @@ interface FavoriteDao {
 
 @Dao
 interface VirtualGroupDao {
-    @Query("SELECT * FROM virtual_groups ORDER BY position ASC")
-    fun getAll(): Flow<List<VirtualGroupEntity>>
+    @Query("SELECT * FROM virtual_groups WHERE content_type = :contentType ORDER BY position ASC")
+    fun getByType(contentType: String): Flow<List<VirtualGroupEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(group: VirtualGroupEntity): Long

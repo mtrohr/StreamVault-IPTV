@@ -96,4 +96,18 @@ class PreferencesRepository @Inject constructor(
             preferences[PreferencesKeys.APP_LANGUAGE] = language
         }
     }
+
+    fun getAspectRatioForChannel(channelId: Long): Flow<String?> {
+        val key = stringPreferencesKey("aspect_ratio_$channelId")
+        return context.dataStore.data.map { preferences ->
+            preferences[key]
+        }
+    }
+
+    suspend fun setAspectRatioForChannel(channelId: Long, ratio: String) {
+        val key = stringPreferencesKey("aspect_ratio_$channelId")
+        context.dataStore.edit { preferences ->
+            preferences[key] = ratio
+        }
+    }
 }

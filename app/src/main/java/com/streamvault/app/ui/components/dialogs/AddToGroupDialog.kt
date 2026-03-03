@@ -35,7 +35,7 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun AddToGroupDialog(
-    channel: Channel,
+    contentTitle: String,
     groups: List<Category>, // Only custom groups
     isFavorite: Boolean,
     memberOfGroups: List<Long>,
@@ -77,7 +77,7 @@ fun AddToGroupDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = stringResource(R.string.add_group_manage_title, channel.name),
+                        text = stringResource(R.string.add_group_manage_title, contentTitle),
                         style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.weight(1f)
                     )

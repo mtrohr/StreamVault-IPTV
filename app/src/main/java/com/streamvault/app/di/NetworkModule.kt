@@ -10,6 +10,8 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
@@ -35,16 +37,20 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideXtreamApiService(okHttpClient: OkHttpClient): XtreamApiService =
+    fun provideXtreamApiService(okHttpClient: OkHttpClient, gson: Gson): XtreamApiService =
         Retrofit.Builder()
             // Base URL will be overridden per-request by the provider
             .baseUrl("https://placeholder.invalid/")
             .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
             .create(XtreamApiService::class.java)
 
     @Provides
     @Singleton
     fun provideXmltvParser(): XmltvParser = XmltvParser()
+
+    @Provides
+    @Singleton
+    fun provideGson(): Gson = GsonBuilder().create()
 }

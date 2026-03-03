@@ -56,7 +56,9 @@ fun ChannelEntity.toDomain() = Channel(
     catchUpSource = catchUpSource,
     providerId = providerId,
     isAdult = isAdult,
-    isUserProtected = isUserProtected
+    isUserProtected = isUserProtected,
+    logicalGroupId = logicalGroupId,
+    errorCount = errorCount
 )
 
 fun Channel.toEntity() = ChannelEntity(
@@ -75,7 +77,9 @@ fun Channel.toEntity() = ChannelEntity(
     catchUpSource = catchUpSource,
     providerId = providerId,
     isAdult = isAdult,
-    isUserProtected = isUserProtected
+    isUserProtected = isUserProtected,
+    logicalGroupId = logicalGroupId,
+    errorCount = errorCount
 )
 
 // ── Movie ──────────────────────────────────────────────────────────
@@ -299,7 +303,8 @@ fun VirtualGroupEntity.toDomain() = VirtualGroup(
     name = name,
     iconEmoji = iconEmoji,
     position = position,
-    createdAt = createdAt
+    createdAt = createdAt,
+    contentType = try { ContentType.valueOf(contentType) } catch (_: Exception) { ContentType.LIVE }
 )
 
 fun VirtualGroup.toEntity() = VirtualGroupEntity(
@@ -307,7 +312,8 @@ fun VirtualGroup.toEntity() = VirtualGroupEntity(
     name = name,
     iconEmoji = iconEmoji,
     position = position,
-    createdAt = createdAt
+    createdAt = createdAt,
+    contentType = contentType.name
 )
 
 // ── Playback History ───────────────────────────────────────────────

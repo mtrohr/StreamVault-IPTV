@@ -3,6 +3,10 @@ package com.streamvault.app.ui.screens.series
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,10 +21,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import com.streamvault.app.navigation.Routes
 import com.streamvault.app.ui.components.CategoryRow
 import com.streamvault.app.ui.components.ContinueWatchingRow
@@ -31,7 +38,11 @@ import com.streamvault.app.ui.theme.*
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.streamvault.app.R
+import androidx.compose.foundation.border
+import com.streamvault.app.ui.components.ReorderTopBar
+import com.streamvault.app.ui.components.dialogs.DeleteGroupDialog
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SeriesScreen(
     onSeriesClick: (Long) -> Unit,
@@ -70,7 +81,15 @@ fun SeriesScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        TopNavBar(currentRoute = currentRoute, onNavigate = onNavigate)
+        if (uiState.isReorderMode && uiState.reorderCategory != null) {
+            ReorderTopBar(
+                categoryName = uiState.reorderCategory!!.name,
+                onSave = { viewModel.saveReorder() },
+                onCancel = { viewModel.exitCategoryReorderMode() }
+            )
+        } else {
+            TopNavBar(currentRoute = currentRoute, onNavigate = onNavigate)
+        }
 
         if (uiState.isLoading) {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -195,6 +214,7 @@ fun SeriesScreen(
                         val count = uiState.seriesByCategory[categoryName]?.size ?: 0
                         Surface(
                             onClick = { viewModel.selectCategory(categoryName) },
+                            onLongClick = { viewModel.showCategoryOptions(categoryName) },
                             shape = ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
                             colors = ClickableSurfaceDefaults.colors(
                                 containerColor = if (isSelected) Primary.copy(alpha = 0.15f) else Color.Transparent,
@@ -301,6 +321,9 @@ fun SeriesScreen(
                                         } else {
                                             onSeriesClick(series.id)
                                         }
+                                    },
+                                    onLongClick = {
+                                        viewModel.onShowDialog(series)
                                     }
                                 )
                             }
@@ -309,11 +332,38 @@ fun SeriesScreen(
                 } else {
                     // Filtered grid for selected category
                     val filteredSeries = uiState.seriesByCategory[uiState.selectedCategory] ?: emptyList()
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp)
+                    val activeSeries = if (uiState.isReorderMode) uiState.filteredSeries else filteredSeries
+                    
+                    var draggingSeries by remember { mutableStateOf<com.streamvault.domain.model.Series?>(null) }
+                    
+                    LaunchedEffect(uiState.isReorderMode) {
+                        if (!uiState.isReorderMode) {
+                            draggingSeries = null
+                        }
+                    }
+
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 240.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .onPreviewKeyEvent { event ->
+                                if (uiState.isReorderMode && event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN) {
+                                    if (event.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_BACK) {
+                                        if (draggingSeries != null) {
+                                            draggingSeries = null
+                                            true
+                                        } else {
+                                            viewModel.exitCategoryReorderMode()
+                                            true
+                                        }
+                                    } else false
+                                } else false
+                            },
+                        contentPadding = PaddingValues(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        item {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
                             Text(
                                 text = uiState.selectedCategory ?: "",
                                 style = MaterialTheme.typography.headlineSmall,
@@ -322,34 +372,82 @@ fun SeriesScreen(
                                 modifier = Modifier.padding(bottom = 16.dp)
                             )
                         }
-                        // Grid of series in rows of 6
-                        val chunkedSeries = filteredSeries.chunked(6)
-                        items(chunkedSeries.size) { rowIndex ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                chunkedSeries[rowIndex].forEach { series ->
-                                    val isLocked = (series.isAdult || series.isUserProtected) && uiState.parentalControlLevel == 1
-                                    SeriesCard(
-                                        series = series,
-                                        isLocked = isLocked,
-                                        onClick = {
-                                            if (isLocked) {
-                                                pendingSeriesId = series.id
-                                                showPinDialog = true
-                                            } else {
-                                                onSeriesClick(series.id)
+                        
+                        gridItems(
+                            items = activeSeries,
+                            key = { it.id }
+                        ) { series ->
+                            val isLocked = (series.isAdult || series.isUserProtected) && uiState.parentalControlLevel == 1
+                            val isDraggingThis = draggingSeries == series
+
+                            SeriesCard(
+                                series = series,
+                                isLocked = isLocked,
+                                isReorderMode = uiState.isReorderMode,
+                                isDragging = isDraggingThis,
+                                onClick = {
+                                    if (uiState.isReorderMode) {
+                                        draggingSeries = if (isDraggingThis) null else series
+                                    } else if (isLocked) {
+                                        pendingSeriesId = series.id
+                                        showPinDialog = true
+                                    } else {
+                                        onSeriesClick(series.id)
+                                    }
+                                },
+                                onLongClick = {
+                                    if (!uiState.isReorderMode) {
+                                        viewModel.onShowDialog(series)
+                                    }
+                                },
+                                modifier = Modifier.onPreviewKeyEvent { event ->
+                                    if (uiState.isReorderMode && isDraggingThis && event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN) {
+                                        when (event.nativeKeyEvent.keyCode) {
+                                            android.view.KeyEvent.KEYCODE_DPAD_LEFT,
+                                            android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                                                viewModel.moveItemUp(series)
+                                                true
                                             }
+                                            android.view.KeyEvent.KEYCODE_DPAD_RIGHT,
+                                            android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                                                viewModel.moveItemDown(series)
+                                                true
+                                            }
+                                            else -> false
                                         }
-                                    )
+                                    } else false
                                 }
-                            }
+                            )
                         }
                     }
                 }
             }
         }
+    }
+
+    if (uiState.showDialog && uiState.selectedSeriesForDialog != null) {
+        val series = uiState.selectedSeriesForDialog!!
+        com.streamvault.app.ui.components.dialogs.AddToGroupDialog(
+            contentTitle = series.name,
+            groups = uiState.categories.filter { it.isVirtual && it.id != -999L },
+            isFavorite = series.isFavorite,
+            memberOfGroups = uiState.dialogGroupMemberships,
+            onDismiss = { viewModel.onDismissDialog() },
+            onToggleFavorite = {
+                if (series.isFavorite) viewModel.removeFavorite(series) else viewModel.addFavorite(series)
+            },
+            onAddToGroup = { group -> viewModel.addToGroup(series, group) },
+            onRemoveFromGroup = { group -> viewModel.removeFromGroup(series, group) },
+            onCreateGroup = { name -> viewModel.createCustomGroup(name) }
+        )
+    }
+
+    if (uiState.showDeleteGroupDialog && uiState.groupToDelete != null) {
+        DeleteGroupDialog(
+            groupName = uiState.groupToDelete!!.name,
+            onDismissRequest = { viewModel.cancelDeleteGroup() },
+            onConfirmDelete = { viewModel.confirmDeleteGroup() }
+        )
     }
 }
 

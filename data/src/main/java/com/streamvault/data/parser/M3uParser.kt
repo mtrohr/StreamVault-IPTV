@@ -2,6 +2,7 @@ package com.streamvault.data.parser
 
 import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.Movie
+import com.streamvault.domain.util.ChannelNormalizer
 import java.io.BufferedReader
 import java.io.InputStream
 import java.io.InputStreamReader
@@ -91,7 +92,8 @@ class M3uParser {
                 catchUpSupported = entry.catchUp != null,
                 catchUpDays = entry.catchUpDays ?: 0,
                 catchUpSource = entry.catchUpSource,
-                providerId = providerId
+                providerId = providerId,
+                logicalGroupId = ChannelNormalizer.getLogicalGroupId(entry.name, providerId)
             )
         }
     }

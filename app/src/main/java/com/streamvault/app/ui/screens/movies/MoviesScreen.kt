@@ -3,6 +3,10 @@ package com.streamvault.app.ui.screens.movies
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,10 +21,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import com.streamvault.app.navigation.Routes
 import com.streamvault.app.ui.components.CategoryRow
 import com.streamvault.app.ui.components.ContinueWatchingRow
@@ -33,7 +40,11 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.streamvault.app.R
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.foundation.border
+import com.streamvault.app.ui.components.ReorderTopBar
+import com.streamvault.app.ui.components.dialogs.DeleteGroupDialog
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MoviesScreen(
     onMovieClick: (Movie) -> Unit,
@@ -72,7 +83,15 @@ fun MoviesScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        TopNavBar(currentRoute = currentRoute, onNavigate = onNavigate)
+        if (uiState.isReorderMode && uiState.reorderCategory != null) {
+            ReorderTopBar(
+                categoryName = uiState.reorderCategory!!.name,
+                onSave = { viewModel.saveReorder() },
+                onCancel = { viewModel.exitCategoryReorderMode() }
+            )
+        } else {
+            TopNavBar(currentRoute = currentRoute, onNavigate = onNavigate)
+        }
 
         if (uiState.isLoading) {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -196,6 +215,7 @@ fun MoviesScreen(
                         val count = uiState.moviesByCategory[categoryName]?.size ?: 0
                         Surface(
                             onClick = { viewModel.selectCategory(categoryName) },
+                            onLongClick = { viewModel.showCategoryOptions(categoryName) },
                             shape = ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
                             colors = ClickableSurfaceDefaults.colors(
                                 containerColor = if (isSelected) Primary.copy(alpha = 0.15f) else Color.Transparent,
@@ -310,6 +330,9 @@ fun MoviesScreen(
                                         } else {
                                             onMovieClick(movie)
                                         }
+                                    },
+                                    onLongClick = {
+                                        viewModel.onShowDialog(movie)
                                     }
                                 )
                             }
@@ -318,11 +341,38 @@ fun MoviesScreen(
                 } else {
                     // Filtered grid for selected category
                     val filteredMovies = uiState.moviesByCategory[uiState.selectedCategory] ?: emptyList()
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp)
+                    val activeMovies = if (uiState.isReorderMode) uiState.filteredMovies else filteredMovies
+                    
+                    var draggingMovie by remember { mutableStateOf<Movie?>(null) }
+                    
+                    LaunchedEffect(uiState.isReorderMode) {
+                        if (!uiState.isReorderMode) {
+                            draggingMovie = null
+                        }
+                    }
+
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 240.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .onPreviewKeyEvent { event ->
+                                if (uiState.isReorderMode && event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN) {
+                                    if (event.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_BACK) {
+                                        if (draggingMovie != null) {
+                                            draggingMovie = null
+                                            true
+                                        } else {
+                                            viewModel.exitCategoryReorderMode()
+                                            true
+                                        }
+                                    } else false
+                                } else false
+                            },
+                        contentPadding = PaddingValues(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        item {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
                             Text(
                                 text = uiState.selectedCategory ?: "",
                                 style = MaterialTheme.typography.headlineSmall,
@@ -331,34 +381,99 @@ fun MoviesScreen(
                                 modifier = Modifier.padding(bottom = 16.dp)
                             )
                         }
-                        // Grid of movies in rows of 4 (wider 16:9 cards)
-                        val chunkedMovies = filteredMovies.chunked(4)
-                        items(chunkedMovies.size) { rowIndex ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                chunkedMovies[rowIndex].forEach { movie ->
-                                    val isLocked = (movie.isAdult || movie.isUserProtected) && uiState.parentalControlLevel == 1
-                                    MovieCard(
-                                        movie = movie,
-                                        isLocked = isLocked,
-                                        onClick = {
-                                            if (isLocked) {
-                                                pendingMovie = movie
-                                                showPinDialog = true
-                                            } else {
-                                                onMovieClick(movie)
+                        
+                        gridItems(
+                            items = activeMovies,
+                            key = { it.id }
+                        ) { movie ->
+                            val isLocked = (movie.isAdult || movie.isUserProtected) && uiState.parentalControlLevel == 1
+                            val isDraggingThis = draggingMovie == movie
+
+                            MovieCard(
+                                movie = movie,
+                                isLocked = isLocked,
+                                isReorderMode = uiState.isReorderMode,
+                                isDragging = isDraggingThis,
+                                onClick = {
+                                    if (uiState.isReorderMode) {
+                                        draggingMovie = if (isDraggingThis) null else movie
+                                    } else if (isLocked) {
+                                        pendingMovie = movie
+                                        showPinDialog = true
+                                    } else {
+                                        onMovieClick(movie)
+                                    }
+                                },
+                                onLongClick = {
+                                    if (!uiState.isReorderMode) {
+                                        viewModel.onShowDialog(movie)
+                                    }
+                                },
+                                modifier = Modifier.onPreviewKeyEvent { event ->
+                                    if (uiState.isReorderMode && isDraggingThis && event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN) {
+                                        when (event.nativeKeyEvent.keyCode) {
+                                            android.view.KeyEvent.KEYCODE_DPAD_LEFT,
+                                            android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                                                viewModel.moveItemUp(movie)
+                                                true
                                             }
+                                            android.view.KeyEvent.KEYCODE_DPAD_RIGHT,
+                                            android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                                                viewModel.moveItemDown(movie)
+                                                true
+                                            }
+                                            else -> false
                                         }
-                                    )
+                                    } else false
                                 }
-                            }
+                            )
                         }
                     }
                 }
             }
         }
+    }
+
+    if (uiState.showDialog && uiState.selectedMovieForDialog != null) {
+        val movie = uiState.selectedMovieForDialog!!
+        com.streamvault.app.ui.components.dialogs.AddToGroupDialog(
+            contentTitle = movie.name,
+            groups = uiState.categories.filter { it.isVirtual && it.id != -999L },
+            isFavorite = movie.isFavorite,
+            memberOfGroups = uiState.dialogGroupMemberships,
+            onDismiss = { viewModel.onDismissDialog() },
+            onToggleFavorite = {
+                if (movie.isFavorite) viewModel.removeFavorite(movie) else viewModel.addFavorite(movie)
+            },
+            onAddToGroup = { group -> viewModel.addToGroup(movie, group) },
+            onRemoveFromGroup = { group -> viewModel.removeFromGroup(movie, group) },
+            onCreateGroup = { name -> viewModel.createCustomGroup(name) }
+        )
+    }
+
+    if (uiState.selectedCategoryForOptions != null) {
+        val category = uiState.selectedCategoryForOptions!!
+        com.streamvault.app.ui.components.dialogs.CategoryOptionsDialog(
+            category = category,
+            onDismissRequest = { viewModel.dismissCategoryOptions() },
+            onDelete = if (category.isVirtual && category.id != -999L) {
+                {
+                    viewModel.dismissCategoryOptions()
+                    viewModel.requestDeleteGroup(category)
+                }
+            } else null,
+            onReorderChannels = if (category.isVirtual) {
+                { viewModel.enterCategoryReorderMode(category) }
+            } else null
+        )
+    }
+
+    if (uiState.showDeleteGroupDialog && uiState.groupToDelete != null) {
+        DeleteGroupDialog(
+            groupName = uiState.groupToDelete!!.name,
+            onDismissRequest = { viewModel.cancelDeleteGroup() },
+            onConfirmDelete = { viewModel.confirmDeleteGroup() }
+        )
     }
 }
 

@@ -21,7 +21,7 @@ import com.streamvault.data.local.entity.*
         PlaybackHistoryEntity::class,
         SyncMetadataEntity::class
     ],
-    version = 5,
+    version = 7,
     exportSchema = true   // ← was false; schema JSON now tracked in version control
 )
 abstract class StreamVaultDatabase : RoomDatabase() {
@@ -129,6 +129,20 @@ abstract class StreamVaultDatabase : RoomDatabase() {
                 database.execSQL("DROP INDEX IF EXISTS index_favorites_position")
                 database.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_content_type_group_id ON favorites(content_type, group_id)")
                 database.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_group_id_position ON favorites(group_id, position)")
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE virtual_groups ADD COLUMN content_type TEXT NOT NULL DEFAULT 'LIVE'")
+            }
+        }
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE channels ADD COLUMN logical_group_id TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE channels ADD COLUMN error_count INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_channels_logical_group_id ON channels(logical_group_id)")
             }
         }
     }

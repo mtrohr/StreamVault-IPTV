@@ -209,6 +209,15 @@ fun ChannelCard(
                         Text("★", style = MaterialTheme.typography.labelSmall, color = Color.Black)
                     }
                 }
+                if (channel.errorCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .background(AccentRed, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    ) {
+                        Text("⚠️", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    }
+                }
                 if (channel.catchUpSupported) {
                     Box(
                         modifier = Modifier
@@ -246,7 +255,9 @@ fun MovieCard(
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
     isLocked: Boolean = false,
-    watchProgress: Float = 0f   // 0..1 from playback history
+    watchProgress: Float = 0f,   // 0..1 from playback history
+    isReorderMode: Boolean = false,
+    isDragging: Boolean = false
 ) {
     FocusableCard(
         onClick = onClick,
@@ -332,20 +343,37 @@ fun MovieCard(
             )
         }
 
-        // Rating badge top-right
-        if (movie.rating > 0f && !isLocked) {
-            Box(
+        // Top-right badges
+        if (!isLocked) {
+            Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(6.dp)
-                    .background(PrimaryGlow, RoundedCornerShape(4.dp))
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                    .padding(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = String.format("%.1f", movie.rating),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White
-                )
+                if (movie.isFavorite) {
+                    Box(
+                        modifier = Modifier
+                            .background(AccentAmber, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    ) {
+                        Text("★", style = MaterialTheme.typography.labelSmall, color = Color.Black)
+                    }
+                }
+                if (movie.rating > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .background(PrimaryGlow, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = String.format("%.1f", movie.rating),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White
+                        )
+                    }
+                }
             }
         }
     }
@@ -361,7 +389,9 @@ fun SeriesCard(
     onLongClick: (() -> Unit)? = null,
     isLocked: Boolean = false,
     watchProgress: Float = 0f,
-    subtitle: String? = null   // e.g. "12 episodes" — caller provides to avoid type collision
+    subtitle: String? = null,   // e.g. "12 episodes" — caller provides to avoid type collision
+    isReorderMode: Boolean = false,
+    isDragging: Boolean = false
 ) {
     val posterUrl = series.posterUrl
     val seriesName = series.name
@@ -442,6 +472,19 @@ fun SeriesCard(
                 color = AccentCyan,
                 trackColor = Color.Transparent
             )
+        }
+
+        // Top-right badges
+        if (series.isFavorite && !isLocked) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .background(AccentAmber, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 5.dp, vertical = 2.dp)
+            ) {
+                Text("★", style = MaterialTheme.typography.labelSmall, color = Color.Black)
+            }
         }
     }
 }

@@ -48,6 +48,9 @@ abstract class RepositoryModule {
     @Binds @Singleton
     abstract fun bindSyncMetadataRepository(impl: SyncMetadataRepositoryImpl): SyncMetadataRepository
 
+    @Binds @Singleton
+    abstract fun bindBackupManager(impl: com.streamvault.data.manager.BackupManagerImpl): com.streamvault.domain.manager.BackupManager
+
     companion object {
         // PreferencesRepository is provided by @Inject constructor
 

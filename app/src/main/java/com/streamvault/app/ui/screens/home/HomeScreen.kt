@@ -491,7 +491,7 @@ fun HomeScreen(
         val channel = uiState.selectedChannelForDialog!!
         val context = androidx.compose.ui.platform.LocalContext.current
         com.streamvault.app.ui.components.dialogs.AddToGroupDialog(
-            channel = channel,
+            contentTitle = channel.name,
             groups = uiState.categories.filter { it.isVirtual && it.id != -999L },
             isFavorite = channel.isFavorite, // This is now Global Favorite status
             memberOfGroups = uiState.dialogGroupMemberships,

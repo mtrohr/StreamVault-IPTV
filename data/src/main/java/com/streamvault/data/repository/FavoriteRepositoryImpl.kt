@@ -27,17 +27,21 @@ class FavoriteRepositoryImpl @Inject constructor(
         return flow.map { entities -> entities.map { it.toDomain() } }
     }
 
+    override fun getAllFavorites(contentType: ContentType): Flow<List<Favorite>> =
+        favoriteDao.getAllByType(contentType.name)
+            .map { entities -> entities.map { it.toDomain() } }
+
     override fun getFavoritesByGroup(groupId: Long): Flow<List<Favorite>> =
         favoriteDao.getByGroup(groupId).map { entities -> entities.map { it.toDomain() } }
 
-    override fun getGroups(): Flow<List<VirtualGroup>> =
-        virtualGroupDao.getAll().map { entities -> entities.map { it.toDomain() } }
+    override fun getGroups(contentType: ContentType): Flow<List<VirtualGroup>> =
+        virtualGroupDao.getByType(contentType.name).map { entities -> entities.map { it.toDomain() } }
 
-    override fun getGlobalLiveFavoriteCount(): Flow<Int> =
-        favoriteDao.getGlobalLiveCount()
+    override fun getGlobalFavoriteCount(contentType: ContentType): Flow<Int> =
+        favoriteDao.getGlobalFavoriteCount(contentType.name)
 
-    override fun getGroupLiveFavoriteCounts(): Flow<Map<Long, Int>> =
-        favoriteDao.getGroupLiveCounts()
+    override fun getGroupFavoriteCounts(contentType: ContentType): Flow<Map<Long, Int>> =
+        favoriteDao.getGroupFavoriteCounts(contentType.name)
             .map { list -> list.associate { it.categoryId to it.item_count } }
 
     override suspend fun addFavorite(
@@ -82,14 +86,15 @@ class FavoriteRepositoryImpl @Inject constructor(
     override suspend fun getGroupMemberships(contentId: Long, contentType: ContentType): List<Long> =
         favoriteDao.getGroupMemberships(contentId, contentType.name)
 
-    override suspend fun createGroup(name: String, iconEmoji: String?): Result<VirtualGroup> = try {
+    override suspend fun createGroup(name: String, iconEmoji: String?, contentType: ContentType): Result<VirtualGroup> = try {
         val id = virtualGroupDao.insert(
             com.streamvault.data.local.entity.VirtualGroupEntity(
                 name = name,
-                iconEmoji = iconEmoji
+                iconEmoji = iconEmoji,
+                contentType = contentType.name
             )
         )
-        Result.success(VirtualGroup(id = id, name = name, iconEmoji = iconEmoji))
+        Result.success(VirtualGroup(id = id, name = name, iconEmoji = iconEmoji, contentType = contentType))
     } catch (e: Exception) {
         Result.error("Failed to create group: ${e.message}", e)
     }

@@ -14,5 +14,6 @@ data class VirtualGroup(
     val name: String,
     val iconEmoji: String? = null,
     val position: Int = 0,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val contentType: ContentType = ContentType.LIVE
 )
