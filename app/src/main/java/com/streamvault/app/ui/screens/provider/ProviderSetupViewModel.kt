@@ -41,11 +41,16 @@ class ProviderSetupViewModel @Inject constructor(
                         username = provider.username,
                         password = provider.password,
                         m3uUrl = provider.m3uUrl,
-                        selectedTab = if (provider.type == ProviderType.M3U) 1 else 0
+                        selectedTab = if (provider.type == ProviderType.M3U) 1 else 0,
+                        m3uTab = if (provider.m3uUrl.startsWith("file://")) 1 else 0
                     )
                 }
             }
         }
+    }
+
+    fun updateM3uTab(tab: Int) {
+        _uiState.update { it.copy(m3uTab = tab) }
     }
 
     fun loginXtream(serverUrl: String, username: String, password: String, name: String) {
@@ -96,7 +101,7 @@ class ProviderSetupViewModel @Inject constructor(
         _uiState.update { it.copy(validationError = null, error = null) }
 
         if (url.isBlank()) {
-            _uiState.update { it.copy(validationError = "Please enter M3U URL") }
+            _uiState.update { it.copy(validationError = if (_uiState.value.m3uTab == 0) "Please enter M3U URL" else "Please select a file") }
             return
         }
 
@@ -114,7 +119,7 @@ class ProviderSetupViewModel @Inject constructor(
                 }
                 is Result.Error -> {
                     _uiState.update {
-                        it.copy(isLoading = false, error = "Could not validate playlist URL: ${result.message}", syncProgress = null)
+                        it.copy(isLoading = false, error = "Could not validate playlist: ${result.message}", syncProgress = null)
                     }
                 }
                 is Result.Loading -> { /* no-op */ }
@@ -134,6 +139,7 @@ data class ProviderSetupState(
     val existingProviderId: Long? = null,
     // Pre-fill data
     val selectedTab: Int = 0,
+    val m3uTab: Int = 0, // 0 = URL, 1 = File
     val name: String = "",
     val serverUrl: String = "",
     val username: String = "",

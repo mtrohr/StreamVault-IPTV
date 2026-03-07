@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StreamVault</string>
+    <string name="nav_live_tv">Ζωντανή τηλεόραση</string>
+    <string name="nav_movies">Ταινίες</string>
+    <string name="nav_series">Σειρές</string>
+    <string name="nav_epg">Οδηγός TV</string>
+    <string name="nav_settings">Ρυθμίσεις</string>
+    <string name="home_loading_channels">Φόρτωση καναλιών...</string>
+    <string name="home_all_channels">Όλα τα κανάλια</string>
+    <string name="home_loading">Φόρτωση...</string>
+    <string name="pin_dialog_title">Εισαγωγή PIN</string>
+    <string name="pin_dialog_cancel">Άκυρο</string>
+    <string name="card_live_badge">ΖΩΝΤΑΝΑ</string>
+    <string name="settings_language">Γλώσσα</string>
+    <string name="settings_app_language">Γλώσσα εφαρμογής</string>
+    <string name="settings_system_default">Προεπιλογή συστήματος</string>
+    <string name="settings_select_language">Επιλογή γλώσσας</string>
+    <string name="search_hint">Αναζήτηση...</string>
+    <string name="player_buffering">Φόρτωση...</string>
+    <string name="player_retry">Επανάληψη</string>
+    <string name="player_close">Κλείσιμο</string>
+    <string name="player_subs">Υπότιτλοι</string>
+    <string name="player_audio">Ήχος</string>
+    <string name="epg_now_playing">ΤΩΡΑ</string>
+    <string name="epg_no_data">Δεν υπάρχουν δεδομένα EPG</string>
+    <string name="multiview_add_to_split">Προσθήκη στην κατανεμημένη οθόνη</string>
+    <string name="multiview_queued">Προστέθηκε στην κατανεμημένη οθόνη ✓</string>
+    <string name="multiview_planner_title">Ουρά κατανεμημένης οθόνης</string>
+    <string name="multiview_planner_clear">Διαγραφή όλων</string>
+    <string name="multiview_planner_launch">Εκκίνηση κατανεμημένης οθόνης</string>
+    <string name="multiview_empty_slot">Κενή θέση</string>
+    <string name="multiview_stream_error">Σφάλμα ροής</string>
+    <string name="multiview_nav">Κατανεμημένη οθόνη</string>
+    <string name="settings_cancel">Άκυρο</string>
+    <string name="settings_edit">Επεξεργασία</string>
+    <string name="settings_delete">Διαγραφή</string>
+    <string name="series_seasons">Σεζόν</string>
+    <string name="series_episodes">Επεισόδια (%1$d)</string>
+</resources>

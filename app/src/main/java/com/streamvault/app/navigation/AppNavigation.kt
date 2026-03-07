@@ -8,7 +8,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.streamvault.app.ui.screens.favorites.FavoritesScreen
 import com.streamvault.app.ui.screens.favorites.FavoriteUiModel
-
+import com.streamvault.app.ui.screens.multiview.MultiViewScreen
 import com.streamvault.app.ui.screens.home.HomeScreen
 import com.streamvault.app.ui.screens.movies.MoviesScreen
 import com.streamvault.app.ui.screens.player.PlayerScreen
@@ -31,6 +31,7 @@ object Routes {
     const val SERIES_DETAIL = "series_detail/{seriesId}"
     const val WELCOME = "welcome"
     const val PARENTAL_CONTROL_GROUPS = "parental_control_groups/{providerId}"
+    const val MULTI_VIEW = "multi_view"
 
 
     fun providerSetup(providerId: Long? = null) = "provider_setup?providerId=${providerId ?: -1L}"
@@ -317,6 +318,12 @@ fun AppNavigation() {
                          contentType = "SERIES_EPISODE"
                      ))
                 },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.MULTI_VIEW) {
+            MultiViewScreen(
                 onBack = { navController.popBackStack() }
             )
         }

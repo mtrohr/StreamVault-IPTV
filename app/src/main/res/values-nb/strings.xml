@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StreamVault</string>
+    <string name="nav_live_tv">Direkte TV</string>
+    <string name="nav_movies">Filmer</string>
+    <string name="nav_series">Serier</string>
+    <string name="nav_epg">TV-guide</string>
+    <string name="nav_settings">Innstillinger</string>
+    <string name="home_loading_channels">Laster kanaler...</string>
+    <string name="home_all_channels">Alle kanaler</string>
+    <string name="home_loading">Laster...</string>
+    <string name="pin_dialog_title">Angi PIN</string>
+    <string name="pin_dialog_cancel">Avbryt</string>
+    <string name="card_live_badge">DIREKTE</string>
+    <string name="settings_language">Språk</string>
+    <string name="settings_app_language">Appspråk</string>
+    <string name="settings_system_default">Systemstandard</string>
+    <string name="settings_select_language">Velg språk</string>
+    <string name="search_hint">Søk...</string>
+    <string name="player_buffering">Buffrer...</string>
+    <string name="player_retry">Prøv igjen</string>
+    <string name="player_close">Lukk</string>
+    <string name="player_subs">Undertekster</string>
+    <string name="player_audio">Lyd</string>
+    <string name="multiview_add_to_split">Legg til i delt skjerm</string>
+    <string name="multiview_queued">Lagt til i delt skjerm ✓</string>
+    <string name="multiview_planner_title">Kø for delt skjerm</string>
+    <string name="multiview_planner_clear">Tøm alt</string>
+    <string name="multiview_planner_launch">Start delt skjerm</string>
+    <string name="multiview_empty_slot">Tom spor</string>
+    <string name="multiview_stream_error">Strømmingsfeil</string>
+    <string name="multiview_nav">Delt skjerm</string>
+    <string name="settings_cancel">Avbryt</string>
+    <string name="settings_edit">Rediger</string>
+    <string name="settings_delete">Slett</string>
+    <string name="series_seasons">Sesonger</string>
+    <string name="series_episodes">Episoder (%1$d)</string>
+</resources>

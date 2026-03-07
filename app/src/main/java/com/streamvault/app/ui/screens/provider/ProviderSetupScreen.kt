@@ -186,13 +186,45 @@ fun ProviderSetupScreen(
                     )
                 }
                 1 -> {
-                    TvTextField(value = m3uUrl, onValueChange = { m3uUrl = it }, label = stringResource(R.string.setup_m3u_hint))
+                    // Sub-tabs for M3U: URL vs File
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    ) {
+                        TabButton(
+                            text = "URL",
+                            isSelected = uiState.m3uTab == 0,
+                            onClick = { viewModel.updateM3uTab(0) }
+                        )
+                        TabButton(
+                            text = "File",
+                            isSelected = uiState.m3uTab == 1,
+                            onClick = { viewModel.updateM3uTab(1) }
+                        )
+                    }
 
-                    ActionButton(
-                        text = "Select Local File",
-                        enabled = !uiState.isLoading,
-                        onClick = { filePickerLauncher.launch(arrayOf("*/*")) }
-                    )
+                    if (uiState.m3uTab == 0) {
+                        TvTextField(
+                            value = m3uUrl,
+                            onValueChange = { m3uUrl = it },
+                            label = stringResource(R.string.setup_m3u_hint)
+                        )
+                    } else {
+                        TvTextField(
+                            value = if (m3uUrl.startsWith("file://")) m3uUrl.substringAfterLast("/") else m3uUrl,
+                            onValueChange = { /* read only */ },
+                            label = "Selected File",
+                            modifier = Modifier.clickable { filePickerLauncher.launch(arrayOf("*/*")) }
+                        )
+                        
+                        ActionButton(
+                            text = "Select Local File",
+                            enabled = !uiState.isLoading,
+                            onClick = { filePickerLauncher.launch(arrayOf("*/*")) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     ActionButton(
                         text = if (uiState.isLoading) stringResource(R.string.setup_validating) else if (uiState.isEditing) stringResource(R.string.setup_save) else stringResource(R.string.setup_add),

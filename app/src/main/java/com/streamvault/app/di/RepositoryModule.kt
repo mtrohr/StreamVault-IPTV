@@ -1,16 +1,11 @@
 package com.streamvault.app.di
 
-import android.content.Context
-import com.streamvault.data.preferences.PreferencesRepository
 import com.streamvault.data.repository.*
 import com.streamvault.domain.repository.*
-import com.streamvault.player.Media3PlayerEngine
-import com.streamvault.player.PlayerEngine
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
@@ -40,9 +35,6 @@ abstract class RepositoryModule {
     abstract fun bindCategoryRepository(impl: CategoryRepositoryImpl): CategoryRepository
 
     @Binds @Singleton
-    abstract fun bindPlayerEngine(impl: Media3PlayerEngine): PlayerEngine
-
-    @Binds @Singleton
     abstract fun bindPlaybackHistoryRepository(impl: PlaybackHistoryRepositoryImpl): PlaybackHistoryRepository
 
     @Binds @Singleton
@@ -52,8 +44,6 @@ abstract class RepositoryModule {
     abstract fun bindBackupManager(impl: com.streamvault.data.manager.BackupManagerImpl): com.streamvault.domain.manager.BackupManager
 
     companion object {
-        // PreferencesRepository is provided by @Inject constructor
-
         @Provides
         @Singleton
         fun provideM3uParser(): com.streamvault.data.parser.M3uParser {

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StreamVault</string>
+    <string name="nav_live_tv">Trực tiếp TV</string>
+    <string name="nav_movies">Phim</string>
+    <string name="nav_series">Series</string>
+    <string name="nav_epg">Lịch TV</string>
+    <string name="nav_settings">Cài đặt</string>
+    <string name="home_loading_channels">Đang tải kênh...</string>
+    <string name="home_all_channels">Tất cả kênh</string>
+    <string name="home_loading">Đang tải...</string>
+    <string name="pin_dialog_title">Nhập PIN</string>
+    <string name="pin_dialog_cancel">Hủy</string>
+    <string name="card_live_badge">TRỰC TIẾP</string>
+    <string name="settings_language">Ngôn ngữ</string>
+    <string name="settings_app_language">Ngôn ngữ ứng dụng</string>
+    <string name="settings_system_default">Mặc định hệ thống</string>
+    <string name="settings_select_language">Chọn ngôn ngữ</string>
+    <string name="search_hint">Tìm kiếm...</string>
+    <string name="player_buffering">Đang tải...</string>
+    <string name="player_retry">Thử lại</string>
+    <string name="player_close">Đóng</string>
+    <string name="player_subs">Phụ đề</string>
+    <string name="player_audio">Âm thanh</string>
+    <string name="epg_now_playing">ĐANG PHÁT</string>
+    <string name="epg_no_data">Không có dữ liệu EPG</string>
+    <string name="multiview_add_to_split">Thêm vào màn hình phân chia</string>
+    <string name="multiview_queued">Đã thêm vào màn hình phân chia ✓</string>
+    <string name="multiview_planner_title">Hàng đợi màn hình phân chia</string>
+    <string name="multiview_planner_clear">Xóa tất cả</string>
+    <string name="multiview_planner_launch">Khởi động màn hình phân chia</string>
+    <string name="multiview_empty_slot">Vị trí trống</string>
+    <string name="multiview_stream_error">Lỗi luồng</string>
+    <string name="multiview_nav">Màn hình phân chia</string>
+    <string name="settings_cancel">Hủy</string>
+    <string name="settings_edit">Sửa</string>
+    <string name="settings_delete">Xóa</string>
+    <string name="series_seasons">Mùa</string>
+    <string name="series_episodes">Tập (%1$d)</string>
+</resources>

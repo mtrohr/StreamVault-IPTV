@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StreamVault</string>
+    <string name="nav_live_tv">Live TV</string>
+    <string name="nav_movies">Elokuvat</string>
+    <string name="nav_series">Sarjat</string>
+    <string name="nav_epg">TV-opas</string>
+    <string name="nav_settings">Asetukset</string>
+    <string name="home_loading_channels">Ladataan kanavia...</string>
+    <string name="home_all_channels">Kaikki kanavat</string>
+    <string name="pin_dialog_title">Syötä PIN</string>
+    <string name="pin_dialog_cancel">Peruuta</string>
+    <string name="card_live_badge">LIVE</string>
+    <string name="settings_language">Kieli</string>
+    <string name="settings_app_language">Sovelluksen kieli</string>
+    <string name="settings_system_default">Järjestelmän oletus</string>
+    <string name="settings_select_language">Valitse kieli</string>
+    <string name="search_hint">Hae...</string>
+    <string name="player_buffering">Puskuroidaan...</string>
+    <string name="player_retry">Yritä uudelleen</string>
+    <string name="player_close">Sulje</string>
+    <string name="player_subs">Tekstitykset</string>
+    <string name="player_audio">Ääni</string>
+    <string name="multiview_add_to_split">Lisää jaettuun näyttöön</string>
+    <string name="multiview_queued">Lisätty jaettuun näyttöön ✓</string>
+    <string name="multiview_planner_title">Jaetun näytön jono</string>
+    <string name="multiview_planner_clear">Tyhjennä kaikki</string>
+    <string name="multiview_planner_launch">Käynnistä jaettu näyttö</string>
+    <string name="multiview_empty_slot">Tyhjä paikka</string>
+    <string name="multiview_stream_error">Virtausvirhe</string>
+    <string name="multiview_nav">Jaettu näyttö</string>
+    <string name="settings_cancel">Peruuta</string>
+    <string name="settings_edit">Muokkaa</string>
+    <string name="settings_delete">Poista</string>
+    <string name="series_seasons">Kaudet</string>
+    <string name="series_episodes">Jaksot (%1$d)</string>
+</resources>

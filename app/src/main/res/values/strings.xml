@@ -201,4 +201,15 @@
     <string name="epg_now_playing">NOW PLAYING</string>
     <string name="epg_no_data">No EPG Data</string>
     <string name="epg_up_next">UP NEXT</string>
+
+    <!-- Multi-View / Split Screen -->
+    <string name="multiview_add_to_split">Add to Split Screen</string>
+    <string name="multiview_queued">Added to Split Screen ✓</string>
+    <string name="multiview_planner_title">Split Screen Queue</string>
+    <string name="multiview_planner_empty">No channels queued yet.\nLong-press a channel to add it.</string>
+    <string name="multiview_planner_clear">Clear All</string>
+    <string name="multiview_planner_launch">Launch Split Screen</string>
+    <string name="multiview_empty_slot">Empty Slot</string>
+    <string name="multiview_stream_error">Stream Error</string>
+    <string name="multiview_nav">Split Screen</string>
 </resources>

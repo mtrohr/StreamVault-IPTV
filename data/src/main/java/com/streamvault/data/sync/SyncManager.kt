@@ -217,84 +217,98 @@ class SyncManager @Inject constructor(
                 }
 
                 progress(onProgress, "Parsing Playlist…")
-                val entries = inputStream.use { m3uParser.parse(it) }
-            Log.d(TAG, "Parsed ${entries.size} M3U entries")
+                val parseResult = inputStream.use { m3uParser.parse(it) }
+                val entries = parseResult.entries
+                val header = parseResult.header
+                Log.d(TAG, "Parsed ${entries.size} M3U entries")
 
-            val liveEntries = entries.filter { !isVodEntry(it) }
-            val vodEntries = entries.filter { isVodEntry(it) }
+                // Auto-update EPG URL from header if missing
+                if (provider.epgUrl.isBlank() && !header.tvgUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Auto-discovered EPG URL from header: ${header.tvgUrl}")
+                    providerDao.updateEpgUrl(provider.id, header.tvgUrl)
+                }
 
-            // ── Categories ──────────────────────────────────────
-            val liveGroups = liveEntries.map { it.groupTitle }.distinct()
-            val vodGroups = vodEntries.map { it.groupTitle }.distinct()
+                val liveEntries = entries.filter { !isVodEntry(it) }
+                val vodEntries = entries.filter { isVodEntry(it) }
 
-            val liveCategories = liveGroups.mapIndexed { i, name ->
-                CategoryEntity(categoryId = (i + 1).toLong(), name = name,
-                    parentId = 0, type = "LIVE", providerId = provider.id)
-            }
-            val vodCategories = vodGroups.mapIndexed { i, name ->
-                CategoryEntity(categoryId = (i + 10_000).toLong(), name = name,
-                    parentId = 0, type = "MOVIE", providerId = provider.id)
-            }
+                // ── Categories ──────────────────────────────────────
+                val liveGroups = liveEntries.map { it.groupTitle }.distinct()
+                val vodGroups = vodEntries.map { it.groupTitle }.distinct()
 
-            progress(onProgress, "Saving Channels…")
-            categoryDao.replaceAll(provider.id, "LIVE", liveCategories)
-            categoryDao.replaceAll(provider.id, "MOVIE", vodCategories)
+                val liveCategories = liveGroups.mapIndexed { i, name ->
+                    CategoryEntity(categoryId = (i + 1).toLong(), name = name,
+                        parentId = 0, type = "LIVE", providerId = provider.id)
+                }
+                val vodCategories = vodGroups.mapIndexed { i, name ->
+                    CategoryEntity(categoryId = (i + 10_000).toLong(), name = name,
+                        parentId = 0, type = "MOVIE", providerId = provider.id)
+                }
 
-            val liveCategoryMap = liveGroups.withIndex().associate { (i, n) -> n to (i + 1).toLong() }
-            val vodCategoryMap  = vodGroups.withIndex().associate { (i, n) -> n to (i + 10_000).toLong() }
+                progress(onProgress, "Saving Channels…")
+                categoryDao.replaceAll(provider.id, "LIVE", liveCategories)
+                categoryDao.replaceAll(provider.id, "MOVIE", vodCategories)
 
-            // ── Channels with stable hash IDs ───────────────────
-            val channels = liveEntries.map { entry ->
-                Channel(
-                    id = stableId(provider.id, entry.tvgId, entry.url),
-                    name = entry.name,
-                    logoUrl = entry.tvgLogo,
-                    groupTitle = entry.groupTitle,
-                    categoryId = liveCategoryMap[entry.groupTitle],
-                    categoryName = entry.groupTitle,
-                    epgChannelId = entry.tvgId ?: entry.tvgName,
-                    number = entry.tvgChno ?: 0,
-                    streamUrl = entry.url,
-                    catchUpSupported = entry.catchUp != null,
-                    providerId = provider.id
-                ).toEntity()
-            }
-            Log.d(TAG, "Saving ${channels.size} channels")
-            channelDao.replaceAll(provider.id, channels)
+                val liveCategoryMap = liveGroups.withIndex().associate { (i, n) -> n to (i + 1).toLong() }
+                val vodCategoryMap  = vodGroups.withIndex().associate { (i, n) -> n to (i + 10_000).toLong() }
 
-            // ── Movies with stable hash IDs ─────────────────────
-            progress(onProgress, "Saving Movies…")
-            val movies = vodEntries.map { entry ->
-                Movie(
-                    id = stableId(provider.id, entry.tvgId, entry.url),
-                    name = entry.name,
-                    posterUrl = entry.tvgLogo,
-                    categoryId = vodCategoryMap[entry.groupTitle],
-                    categoryName = entry.groupTitle,
-                    streamUrl = entry.url,
-                    providerId = provider.id
-                ).toEntity()
-            }
-            Log.d(TAG, "Saving ${movies.size} movies")
-            movieDao.replaceAll(provider.id, movies)
-            Log.d(TAG, "M3U refresh complete")
+                // ── Channels with stable hash IDs ───────────────────
+                val channels = liveEntries.map { entry ->
+                    Channel(
+                        id = stableId(provider.id, entry.tvgId, entry.url),
+                        name = entry.name,
+                        logoUrl = entry.tvgLogo,
+                        groupTitle = entry.groupTitle,
+                        categoryId = liveCategoryMap[entry.groupTitle],
+                        categoryName = entry.groupTitle,
+                        epgChannelId = entry.tvgId ?: entry.tvgName,
+                        number = entry.tvgChno ?: 0,
+                        streamUrl = entry.url,
+                        catchUpSupported = entry.catchUp != null,
+                        catchUpDays = entry.catchUpDays ?: 0,
+                        catchUpSource = entry.catchUpSource,
+                        providerId = provider.id
+                    ).toEntity()
+                }
+                Log.d(TAG, "Saving ${channels.size} channels")
+                channelDao.replaceAll(provider.id, channels)
 
-            metadata = metadata.copy(
-                lastLiveSync = now, lastMovieSync = now, lastSeriesSync = now, // treat as single payload
-                liveCount = channels.size, movieCount = movies.size
-            )
-            syncMetadataRepository.updateMetadata(metadata)
+                // ── Movies with stable hash IDs ─────────────────────
+                progress(onProgress, "Saving Movies…")
+                val movies = vodEntries.map { entry ->
+                    Movie(
+                        id = stableId(provider.id, entry.tvgId, entry.url),
+                        name = entry.name,
+                        posterUrl = entry.tvgLogo,
+                        categoryId = vodCategoryMap[entry.groupTitle],
+                        categoryName = entry.groupTitle,
+                        streamUrl = entry.url,
+                        providerId = provider.id,
+                        rating = entry.rating?.toFloatOrNull() ?: 0f,
+                        year = entry.year,
+                        genre = entry.genre
+                    ).toEntity()
+                }
+                Log.d(TAG, "Saving ${movies.size} movies")
+                movieDao.replaceAll(provider.id, movies)
+                Log.d(TAG, "M3U refresh complete")
+
+                metadata = metadata.copy(
+                    lastLiveSync = now, lastMovieSync = now, lastSeriesSync = now, // treat as single payload
+                    liveCount = channels.size, movieCount = movies.size
+                )
+                syncMetadataRepository.updateMetadata(metadata)
             }
         } else {
             Log.d(TAG, "Skipping M3U playlist sync (cache still valid)")
         }
 
-        // Try EPG refresh if standard M3U provider linked an EPG URL
-        if (!provider.epgUrl.isNullOrBlank()) {
+        // Try EPG refresh if standard M3U provider linked an EPG URL or auto-discovered one
+        val currentEpgUrl = providerDao.getById(provider.id)?.epgUrl ?: provider.epgUrl
+        if (!currentEpgUrl.isNullOrBlank()) {
             if (!isCacheValid(metadata.lastEpgSync, TTL_6_HOURS, now)) {
                 try {
                     progress(onProgress, "Downloading EPG…")
-                    epgRepository.refreshEpg(provider.id, provider.epgUrl)
+                    epgRepository.refreshEpg(provider.id, currentEpgUrl)
                     metadata = metadata.copy(lastEpgSync = now)
                     syncMetadataRepository.updateMetadata(metadata)
                 } catch (e: Exception) {

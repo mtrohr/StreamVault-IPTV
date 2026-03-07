@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StreamVault</string>
+    <string name="nav_live_tv">TV live</string>
+    <string name="nav_movies">Filme</string>
+    <string name="nav_series">Serii</string>
+    <string name="nav_epg">Ghid TV</string>
+    <string name="nav_settings">Setări</string>
+    <string name="home_loading_channels">Se încarcă canalele...</string>
+    <string name="home_all_channels">Toate canalele</string>
+    <string name="pin_dialog_cancel">Anulare</string>
+    <string name="settings_language">Limbă</string>
+    <string name="settings_app_language">Limba aplicației</string>
+    <string name="settings_system_default">Sistem implicit</string>
+    <string name="settings_select_language">Selectați limba</string>
+    <string name="search_hint">Căutare...</string>
+    <string name="player_buffering">Se bufferizează...</string>
+    <string name="player_retry">Reîncercare</string>
+    <string name="player_close">Închide</string>
+    <string name="player_subs">Subtitrări</string>
+    <string name="player_audio">Audio</string>
+    <string name="multiview_add_to_split">Adaugă la ecranul divizat</string>
+    <string name="multiview_queued">Adăugat la ecranul divizat ✓</string>
+    <string name="multiview_planner_title">Coada ecranului divizat</string>
+    <string name="multiview_planner_clear">Șterge tot</string>
+    <string name="multiview_planner_launch">Lansează ecranul divizat</string>
+    <string name="multiview_nav">Ecran divizat</string>
+    <string name="settings_cancel">Anulare</string>
+    <string name="settings_edit">Editare</string>
+    <string name="settings_delete">Ștergere</string>
+    <string name="series_seasons">Sezoane</string>
+    <string name="series_episodes">Episoade (%1$d)</string>
+</resources>

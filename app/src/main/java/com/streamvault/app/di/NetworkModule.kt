@@ -1,10 +1,14 @@
 package com.streamvault.app.di
 
+import android.content.Context
 import com.streamvault.data.remote.xtream.XtreamApiService
 import com.streamvault.data.parser.XmltvParser
+import com.streamvault.player.Media3PlayerEngine
+import com.streamvault.player.PlayerEngine
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -53,4 +57,15 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideGson(): Gson = GsonBuilder().create()
+
+    /**
+     * Factory binding for PlayerEngine (NOT @Singleton).
+     * This allows MultiViewViewModel to inject Provider<PlayerEngine>
+     * and create up to 4 independent instances for split-screen playback.
+     */
+    @Provides
+    fun providePlayerEngine(
+        @ApplicationContext context: Context,
+        okHttpClient: OkHttpClient
+    ): PlayerEngine = Media3PlayerEngine(context, okHttpClient)
 }

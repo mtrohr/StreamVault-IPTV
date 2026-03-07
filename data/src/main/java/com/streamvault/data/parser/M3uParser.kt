@@ -21,6 +21,11 @@ import java.io.InputStreamReader
  */
 class M3uParser {
 
+    data class M3uHeader(
+        val tvgUrl: String? = null,
+        val userAgent: String? = null
+    )
+
     data class M3uEntry(
         val name: String,
         val groupTitle: String,
@@ -32,11 +37,22 @@ class M3uParser {
         val catchUpDays: Int?,
         val catchUpSource: String?,
         val url: String,
+        val userAgent: String? = null,
+        val rating: String? = null,
+        val year: String? = null,
+        val genre: String? = null,
+        val durationSeconds: Int? = null,
         val extraAttributes: Map<String, String> = emptyMap()
     )
 
-    fun parse(inputStream: InputStream): List<M3uEntry> {
+    data class ParseResult(
+        val header: M3uHeader,
+        val entries: List<M3uEntry>
+    )
+
+    fun parse(inputStream: InputStream): ParseResult {
         val entries = mutableListOf<M3uEntry>()
+        var header = M3uHeader()
         val reader = BufferedReader(InputStreamReader(inputStream, Charsets.UTF_8))
 
         var currentLine: String?
@@ -48,7 +64,11 @@ class M3uParser {
 
                 when {
                     line.startsWith("#EXTM3U") -> {
-                        // Header line, skip
+                        val attrs = extractAttributes(line)
+                        header = M3uHeader(
+                            tvgUrl = attrs["x-tvg-url"] ?: attrs["url-tvg"],
+                            userAgent = attrs["user-agent"]
+                        )
                     }
                     line.startsWith("#EXTINF:") -> {
                         extinfLine = line
@@ -57,9 +77,8 @@ class M3uParser {
                         // Other directive, skip
                     }
                     line.isNotBlank() && extinfLine != null -> {
-                        // This is a URL line after an #EXTINF line
                         try {
-                            val entry = parseEntry(extinfLine!!, line)
+                            val entry = parseEntry(extinfLine!!, line, header.userAgent)
                             if (entry != null) {
                                 entries.add(entry)
                             }
@@ -69,20 +88,19 @@ class M3uParser {
                         extinfLine = null
                     }
                     line.isNotBlank() -> {
-                        // URL without #EXTINF — skip or handle as bare URL
                         extinfLine = null
                     }
                 }
             }
         }
 
-        return entries
+        return ParseResult(header, entries)
     }
 
     fun parseToChannels(inputStream: InputStream, providerId: Long): List<Channel> {
-        return parse(inputStream).mapIndexed { index, entry ->
+        return parse(inputStream).entries.mapIndexed { index, entry ->
             Channel(
-                id = index.toLong() + 1,
+                id = index.toLong() + 1, // Will be replaced by stableId in SyncManager
                 name = entry.name,
                 logoUrl = entry.tvgLogo,
                 groupTitle = entry.groupTitle,
@@ -98,32 +116,14 @@ class M3uParser {
         }
     }
 
-    fun parseToMovies(inputStream: InputStream, providerId: Long): List<Movie> {
-        return parse(inputStream)
-            .filter { isVodEntry(it) }
-            .mapIndexed { index, entry ->
-                Movie(
-                    id = index.toLong() + 100000,
-                    name = entry.name,
-                    posterUrl = entry.tvgLogo,
-                    categoryName = entry.groupTitle,
-                    streamUrl = entry.url,
-                    providerId = providerId
-                )
-            }
-    }
-
-    private fun parseEntry(extinfLine: String, url: String): M3uEntry? {
-        // Format: #EXTINF:-1 tvg-id="..." tvg-name="..." tvg-logo="..." group-title="...",Channel Name
+    private fun parseEntry(extinfLine: String, url: String, globalUserAgent: String?): M3uEntry? {
         val afterColon = extinfLine.substringAfter("#EXTINF:", "")
         if (afterColon.isBlank()) return null
 
-        // Extract the channel name (everything after the last comma that's not in quotes)
         val name = extractDisplayName(afterColon)
         if (name.isBlank()) return null
 
-        // Extract attributes
-        val attributes = extractAttributes(afterColon)
+        val attributes = extractAttributes(extinfLine) // Pass full line for tags
 
         return M3uEntry(
             name = name,
@@ -136,12 +136,20 @@ class M3uParser {
             catchUpDays = attributes["catchup-days"]?.toIntOrNull(),
             catchUpSource = attributes["catchup-source"]?.takeIf { it.isNotBlank() },
             url = url,
+            userAgent = attributes["user-agent"] ?: globalUserAgent,
+            rating = attributes["rating"],
+            year = attributes["year"],
+            genre = attributes["genre"],
+            durationSeconds = extractDuration(afterColon),
             extraAttributes = attributes
         )
     }
 
+    private fun extractDuration(extinfContent: String): Int? {
+        return extinfContent.substringBefore(" ").trim().toIntOrNull()
+    }
+
     private fun extractDisplayName(extinfContent: String): String {
-        // The display name is after the last comma that's not inside quotes
         var inQuotes = false
         var lastCommaIndex = -1
 
@@ -155,17 +163,15 @@ class M3uParser {
         return if (lastCommaIndex >= 0) {
             extinfContent.substring(lastCommaIndex + 1).trim()
         } else {
-            // No comma found, try to use the whole thing after the duration
             extinfContent.substringAfter(" ").trim()
         }
     }
 
-    private fun extractAttributes(extinfContent: String): Map<String, String> {
+    private fun extractAttributes(content: String): Map<String, String> {
         val attributes = mutableMapOf<String, String>()
-        // Match key="value" patterns
         val regex = """([\w-]+)="([^"]*?)"""".toRegex()
 
-        regex.findAll(extinfContent).forEach { match ->
+        regex.findAll(content).forEach { match ->
             val key = match.groupValues[1].lowercase()
             val value = match.groupValues[2]
             attributes[key] = value
@@ -178,7 +184,6 @@ class M3uParser {
         val url = entry.url.lowercase()
         val group = entry.groupTitle.lowercase()
 
-        // Heuristics for identifying VOD content
         return url.endsWith(".mp4") ||
                 url.endsWith(".mkv") ||
                 url.endsWith(".avi") ||

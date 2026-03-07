@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StreamVault</string>
+    <string name="nav_live_tv">TV Langsung</string>
+    <string name="nav_movies">Film</string>
+    <string name="nav_series">Serial</string>
+    <string name="nav_epg">Panduan TV</string>
+    <string name="nav_settings">Pengaturan</string>
+    <string name="home_loading_channels">Memuat saluran...</string>
+    <string name="home_all_channels">Semua Saluran</string>
+    <string name="home_loading">Memuat...</string>
+    <string name="pin_dialog_title">Masukkan PIN</string>
+    <string name="pin_dialog_cancel">Batal</string>
+    <string name="add_group_cancel">Batal</string>
+    <string name="add_group_create">Buat</string>
+    <string name="add_group_remove_favorites">Hapus dari favorit</string>
+    <string name="add_group_add_favorites">Tambah ke favorit</string>
+    <string name="add_group_remove_btn">Hapus</string>
+    <string name="add_group_add_btn">Tambah</string>
+    <string name="card_live_badge">SIARAN LANGSUNG</string>
+    <string name="settings_language">Bahasa</string>
+    <string name="settings_app_language">Bahasa Aplikasi</string>
+    <string name="settings_system_default">Sistem Default</string>
+    <string name="settings_select_language">Pilih Bahasa</string>
+    <string name="search_hint">Cari...</string>
+    <string name="player_buffering">Memuat...</string>
+    <string name="player_retry">Coba Lagi</string>
+    <string name="player_close">Tutup</string>
+    <string name="player_subs">Subtitle</string>
+    <string name="player_audio">Audio</string>
+    <string name="epg_now_playing">SEDANG TAYANG</string>
+    <string name="epg_no_data">Tidak ada data EPG</string>
+    <string name="multiview_add_to_split">Tambah ke Layar Terbagi</string>
+    <string name="multiview_queued">Ditambahkan ke Layar Terbagi ✓</string>
+    <string name="multiview_planner_title">Antrean Layar Terbagi</string>
+    <string name="multiview_planner_clear">Hapus Semua</string>
+    <string name="multiview_planner_launch">Mulai Layar Terbagi</string>
+    <string name="multiview_empty_slot">Slot Kosong</string>
+    <string name="multiview_stream_error">Kesalahan Aliran</string>
+    <string name="multiview_nav">Layar Terbagi</string>
+    <string name="settings_cancel">Batal</string>
+    <string name="settings_edit">Edit</string>
+    <string name="settings_delete">Hapus</string>
+    <string name="series_seasons">Musim</string>
+    <string name="series_episodes">Episode (%1$d)</string>
+</resources>

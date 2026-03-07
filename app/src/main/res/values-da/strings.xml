@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StreamVault</string>
+    <string name="nav_live_tv">Live TV</string>
+    <string name="nav_movies">Film</string>
+    <string name="nav_series">Serier</string>
+    <string name="nav_epg">TV-guide</string>
+    <string name="nav_settings">Indstillinger</string>
+    <string name="home_loading_channels">Indlæser kanaler...</string>
+    <string name="home_all_channels">Alle kanaler</string>
+    <string name="home_loading">Indlæser...</string>
+    <string name="pin_dialog_title">Indtast PIN</string>
+    <string name="pin_dialog_cancel">Annuller</string>
+    <string name="card_live_badge">LIVE</string>
+    <string name="settings_language">Sprog</string>
+    <string name="settings_app_language">Appsprog</string>
+    <string name="settings_system_default">Systemstandard</string>
+    <string name="settings_select_language">Vælg sprog</string>
+    <string name="search_hint">Søg...</string>
+    <string name="player_retry">Prøv igen</string>
+    <string name="player_close">Luk</string>
+    <string name="player_subs">Undertekster</string>
+    <string name="player_audio">Lyd</string>
+    <string name="multiview_add_to_split">Tilføj til delt skærm</string>
+    <string name="multiview_queued">Tilføjet til delt skærm ✓</string>
+    <string name="multiview_planner_title">Kø til delt skærm</string>
+    <string name="multiview_planner_clear">Ryd alt</string>
+    <string name="multiview_planner_launch">Start delt skærm</string>
+    <string name="multiview_empty_slot">Tomt slot</string>
+    <string name="multiview_stream_error">Streamfejl</string>
+    <string name="multiview_nav">Delt skærm</string>
+    <string name="settings_cancel">Annuller</string>
+    <string name="settings_edit">Rediger</string>
+    <string name="settings_delete">Slet</string>
+    <string name="series_seasons">Sæsoner</string>
+    <string name="series_episodes">Episoder (%1$d)</string>
+</resources>

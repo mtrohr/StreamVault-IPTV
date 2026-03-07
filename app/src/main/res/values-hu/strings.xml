@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StreamVault</string>
+    <string name="nav_live_tv">Élő TV</string>
+    <string name="nav_movies">Filmek</string>
+    <string name="nav_series">Sorozatok</string>
+    <string name="nav_epg">TV-műsor</string>
+    <string name="nav_settings">Beállítások</string>
+    <string name="home_loading_channels">Csatornák betöltése...</string>
+    <string name="home_all_channels">Összes csatorna</string>
+    <string name="pin_dialog_cancel">Mégse</string>
+    <string name="settings_language">Nyelv</string>
+    <string name="settings_app_language">Alkalmazás nyelve</string>
+    <string name="settings_system_default">Rendszer alapértelmezett</string>
+    <string name="settings_select_language">Nyelv kiválasztása</string>
+    <string name="search_hint">Keresés...</string>
+    <string name="player_buffering">Pufferelés...</string>
+    <string name="player_retry">Újrapróbálás</string>
+    <string name="player_close">Bezárás</string>
+    <string name="player_subs">Feliratok</string>
+    <string name="player_audio">Hang</string>
+    <string name="multiview_add_to_split">Hozzáadás osztott képernyőhöz</string>
+    <string name="multiview_queued">Hozzáadva az osztott képernyőhöz ✓</string>
+    <string name="multiview_planner_title">Osztott képernyő sora</string>
+    <string name="multiview_planner_clear">Összes törlése</string>
+    <string name="multiview_planner_launch">Osztott képernyő indítása</string>
+    <string name="multiview_nav">Osztott képernyő</string>
+    <string name="settings_cancel">Mégse</string>
+    <string name="settings_edit">Szerkesztés</string>
+    <string name="settings_delete">Törlés</string>
+    <string name="series_seasons">Évadok</string>
+    <string name="series_episodes">Epizódok (%1$d)</string>
+</resources>

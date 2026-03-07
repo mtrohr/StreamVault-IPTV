@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StreamVault</string>
+    <string name="nav_live_tv">Live TV</string>
+    <string name="nav_movies">Filmy</string>
+    <string name="nav_series">Seriály</string>
+    <string name="nav_epg">TV průvodce</string>
+    <string name="nav_settings">Nastavení</string>
+    <string name="home_loading_channels">Načítání kanálů...</string>
+    <string name="home_all_channels">Všechny kanály</string>
+    <string name="pin_dialog_cancel">Zrušit</string>
+    <string name="settings_language">Jazyk</string>
+    <string name="settings_app_language">Jazyk aplikace</string>
+    <string name="settings_system_default">Výchozí systému</string>
+    <string name="settings_select_language">Vybrat jazyk</string>
+    <string name="search_hint">Hledat...</string>
+    <string name="player_retry">Zkusit znovu</string>
+    <string name="player_close">Zavřít</string>
+    <string name="player_subs">Titulky</string>
+    <string name="player_audio">Zvuk</string>
+    <string name="multiview_add_to_split">Přidat na rozdělenou obrazovku</string>
+    <string name="multiview_queued">Přidáno na rozdělenou obrazovku ✓</string>
+    <string name="multiview_planner_title">Fronta rozdělené obrazovky</string>
+    <string name="multiview_planner_clear">Vymazat vše</string>
+    <string name="multiview_planner_launch">Spustit rozdělenou obrazovku</string>
+    <string name="multiview_nav">Rozdělená obrazovka</string>
+    <string name="settings_cancel">Zrušit</string>
+    <string name="settings_edit">Upravit</string>
+    <string name="settings_delete">Smazat</string>
+    <string name="series_seasons">Sezóny</string>
+    <string name="series_episodes">Epizody (%1$d)</string>
+</resources>

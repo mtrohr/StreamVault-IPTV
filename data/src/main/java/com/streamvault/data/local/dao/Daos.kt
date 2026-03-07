@@ -35,6 +35,9 @@ interface ProviderDao {
 
     @Query("UPDATE providers SET last_synced_at = :timestamp WHERE id = :id")
     suspend fun updateSyncTime(id: Long, timestamp: Long)
+
+    @Query("UPDATE providers SET epg_url = :epgUrl WHERE id = :id")
+    suspend fun updateEpgUrl(id: Long, epgUrl: String)
 }
 
 @Dao

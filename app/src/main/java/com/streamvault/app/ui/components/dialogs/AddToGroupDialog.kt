@@ -43,7 +43,9 @@ fun AddToGroupDialog(
     onToggleFavorite: () -> Unit,
     onAddToGroup: (Category) -> Unit,
     onRemoveFromGroup: (Category) -> Unit,
-    onCreateGroup: (String) -> Unit
+    onCreateGroup: (String) -> Unit,
+    onAddToSplitScreen: (() -> Unit)? = null,
+    isSplitScreenQueued: Boolean = false
 ) {
     var showCreateGroup by remember { mutableStateOf(false) }
     var newGroupName by remember { mutableStateOf("") }
@@ -157,6 +159,39 @@ fun AddToGroupDialog(
                                     text = if (isFavorite) stringResource(R.string.add_group_remove_favorites) else stringResource(R.string.add_group_add_favorites),
                                     color = if (isFavorite) Color.Black else Color.White
                                 )
+                            }
+                        }
+
+                        // Add to Split Screen button
+                        if (onAddToSplitScreen != null) {
+                            item {
+                                var isFocused by remember { mutableStateOf(false) }
+                                Button(
+                                    onClick = {
+                                        onAddToSplitScreen()
+                                        onDismiss()
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .onFocusChanged { isFocused = it.isFocused }
+                                        .border(
+                                            if (isFocused) 2.dp else 0.dp,
+                                            if (isFocused) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                                            CircleShape
+                                        ),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isSplitScreenQueued) Color(0xFF1B5E20) else Color(0xFF2E7D32)
+                                    )
+                                ) {
+                                    Text("🔳  ", color = Color.White)
+                                    Text(
+                                        text = if (isSplitScreenQueued)
+                                            stringResource(R.string.multiview_queued)
+                                        else
+                                            stringResource(R.string.multiview_add_to_split),
+                                        color = Color.White
+                                    )
+                                }
                             }
                         }
 
