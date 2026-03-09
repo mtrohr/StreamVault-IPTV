@@ -16,8 +16,8 @@
     <application
         android:name=".StreamVaultApp"
         android:allowBackup="true"
-        android:banner="@mipmap/ic_launcher"
-        android:icon="@mipmap/ic_launcher"
+        android:banner="@drawable/app_banner"
+        android:icon="@mipmap/ic_launcher_vault"
         android:label="StreamVault"
         android:supportsRtl="true"
         android:theme="@style/Theme.StreamVault">

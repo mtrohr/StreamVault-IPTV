@@ -104,9 +104,9 @@ fun MoviesScreen(
                 items(3) {
                     SkeletonRow(
                         modifier = Modifier.fillMaxWidth(),
-                        cardWidth = 240,
-                        cardHeight = 135,
-                        itemsCount = 4
+                        cardWidth = 160,
+                        cardHeight = 240,
+                        itemsCount = 5
                     )
                 }
             }
@@ -343,7 +343,7 @@ fun MoviesScreen(
                     }
 
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 240.dp),
+                        columns = GridCells.Adaptive(minSize = 160.dp),
                         modifier = Modifier
                             .fillMaxSize()
                             .weight(1f)

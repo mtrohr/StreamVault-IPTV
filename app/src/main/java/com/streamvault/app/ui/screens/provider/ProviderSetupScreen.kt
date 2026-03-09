@@ -210,16 +210,8 @@ fun ProviderSetupScreen(
                             label = stringResource(R.string.setup_m3u_hint)
                         )
                     } else {
-                        TvTextField(
-                            value = if (m3uUrl.startsWith("file://")) m3uUrl.substringAfterLast("/") else m3uUrl,
-                            onValueChange = { /* read only */ },
-                            label = "Selected File",
-                            modifier = Modifier.clickable { filePickerLauncher.launch(arrayOf("*/*")) }
-                        )
-                        
-                        ActionButton(
-                            text = "Select Local File",
-                            enabled = !uiState.isLoading,
+                        FileSelectorCard(
+                            fileName = if (m3uUrl.startsWith("file://")) m3uUrl.substringAfterLast("/") else null,
                             onClick = { filePickerLauncher.launch(arrayOf("*/*")) }
                         )
                     }
@@ -367,6 +359,66 @@ private fun ActionButton(
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (enabled) OnBackground else OnSurfaceDim
             )
+        }
+    }
+}
+
+@Composable
+private fun FileSelectorCard(
+    fileName: String?,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    val borderColor = if (isFocused) Primary else SurfaceHighlight
+    val bgColor = if (isFocused) Surface else SurfaceElevated
+    val borderWidth = if (isFocused) 2.dp else 1.dp
+
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(80.dp)
+            .onFocusChanged { isFocused = it.isFocused },
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(BorderStroke(borderWidth, borderColor)),
+            focusedBorder = Border(BorderStroke(borderWidth, borderColor))
+        ),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = bgColor,
+            focusedContainerColor = bgColor
+        )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (fileName != null) {
+                Text(
+                    text = fileName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = OnBackground,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Click to change file",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OnSurfaceDim
+                )
+            } else {
+                Text(
+                    text = "Select M3U File",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = OnSurfaceDim
+                )
+                Text(
+                    text = "Browse local storage",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OnSurfaceDim
+                )
+            }
         }
     }
 }

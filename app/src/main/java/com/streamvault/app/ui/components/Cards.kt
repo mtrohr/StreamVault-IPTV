@@ -55,9 +55,9 @@ fun FocusableCard(
     // In reorder mode, only the dragging item scales. Otherwise grid is static.
     val scale by animateFloatAsState(
         targetValue = if (isFocused) {
-            if (isReorderMode && !isDragging) 1f else 1.05f // PREMIUM: 1.05x instead of 1.08x
+            if (isReorderMode && !isDragging) 1f else 1.1f // PREMIUM: 1.1x for better visibility
         } else {
-            if (isDragging) 1.05f else 1f
+            if (isDragging) 1.1f else 1f
         },
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing), // PREMIUM: 200ms
         label = "scale"
@@ -80,7 +80,7 @@ fun FocusableCard(
                 scaleY = scale
                 this.shadowElevation = shadowElevation
                 shape = RoundedCornerShape(12.dp)
-                clip = false
+                clip = false // PREMIUM: Allow focus border and shadow to show outside
             }
             .onFocusChanged { isFocused = it.isFocused },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)), // PREMIUM: 12dp
@@ -255,7 +255,7 @@ fun MovieCard(
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
     isLocked: Boolean = false,
-    watchProgress: Float = 0f,   // 0..1 from playback history
+    watchProgress: Float = 0f,
     isReorderMode: Boolean = false,
     isDragging: Boolean = false
 ) {
@@ -263,16 +263,21 @@ fun MovieCard(
         onClick = onClick,
         onLongClick = onLongClick,
         modifier = modifier,
-        width = 240.dp,
-        height = 135.dp
+        width = 160.dp, // PREMIUM: Vertical aspect ratio
+        height = 240.dp,
+        isReorderMode = isReorderMode,
+        isDragging = isDragging
     ) { isFocused ->
         // Poster image
         if (!movie.posterUrl.isNullOrBlank() && !isLocked) {
             AsyncImage(
                 model = movie.posterUrl,
                 contentDescription = movie.name,
-                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)),
-                contentScale = ContentScale.Crop
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(12.dp)) // PREMIUM: Clip poster to card shape
+                    .background(SurfaceElevated), // Background for non-standard posters
+                contentScale = ContentScale.Fit // PREMIUM: Fits entire poster inside card
             )
         } else {
             Box(
@@ -281,20 +286,20 @@ fun MovieCard(
             ) {
                 Text(
                     text = if (isLocked) "🔒" else "🎬",
-                    style = MaterialTheme.typography.headlineLarge
+                    style = MaterialTheme.typography.displayMedium
                 )
             }
         }
 
-        // Bottom gradient overlay
+        // Bottom gradient overlay - Higher for vertical text
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .fillMaxHeight(0.5f)
+                .fillMaxHeight(0.6f)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, GradientOverlayBottom),
+                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)),
                     )
                 )
         )
@@ -304,33 +309,26 @@ fun MovieCard(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(12.dp), // Increased padding
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
                 text = if (isLocked) stringResource(R.string.card_locked) else movie.name,
                 style = MaterialTheme.typography.titleSmall,
-                color = TextPrimary,
+                color = Color.White,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
             if (!isLocked && movie.year != null) {
-                val year = movie.year
-                val genre = movie.genre
                 Text(
-                    text = buildString {
-                        append(year)
-                        if (!genre.isNullOrBlank()) append(" · ${genre.take(20)}")
-                    },
+                    text = movie.year!!,
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    color = Color.White.copy(alpha = 0.7f)
                 )
             }
         }
 
-        // Watch progress bar at very bottom edge
+        // Watch progress bar
         if (watchProgress > 0f && !isLocked) {
             LinearProgressIndicator(
                 progress = { watchProgress.coerceIn(0f, 1f) },
@@ -338,41 +336,40 @@ fun MovieCard(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .height(3.dp),
-                color = AccentCyan,
+                color = Primary,
                 trackColor = Color.Transparent
             )
         }
 
-        // Top-right badges
+        // Badges
         if (!isLocked) {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(6.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (movie.isFavorite) {
-                    Box(
-                        modifier = Modifier
-                            .background(AccentAmber, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
-                    ) {
-                        Text("★", style = MaterialTheme.typography.labelSmall, color = Color.Black)
-                    }
+            // Rating badge (Bottom Right above title area or overlap)
+            if (movie.rating > 0f) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "⭐ ${String.format("%.1f", movie.rating)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AccentAmber
+                    )
                 }
-                if (movie.rating > 0f) {
-                    Box(
-                        modifier = Modifier
-                            .background(PrimaryGlow, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = String.format("%.1f", movie.rating),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Color.White
-                        )
-                    }
+            }
+
+            // Favorite badge
+            if (movie.isFavorite) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .background(Color.Red.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
+                        .padding(4.dp)
+                ) {
+                    Text("❤", style = MaterialTheme.typography.labelSmall, color = Color.White)
                 }
             }
         }
@@ -389,27 +386,29 @@ fun SeriesCard(
     onLongClick: (() -> Unit)? = null,
     isLocked: Boolean = false,
     watchProgress: Float = 0f,
-    subtitle: String? = null,   // e.g. "12 episodes" — caller provides to avoid type collision
+    subtitle: String? = null,
     isReorderMode: Boolean = false,
     isDragging: Boolean = false
 ) {
-    val posterUrl = series.posterUrl
-    val seriesName = series.name
-
     FocusableCard(
         onClick = onClick,
         onLongClick = onLongClick,
         modifier = modifier,
-        width = 240.dp,
-        height = 135.dp
+        width = 160.dp, // PREMIUM: Vertical aspect ratio
+        height = 240.dp,
+        isReorderMode = isReorderMode,
+        isDragging = isDragging
     ) { isFocused ->
         // Poster image
-        if (!posterUrl.isNullOrBlank() && !isLocked) {
+        if (!series.posterUrl.isNullOrBlank() && !isLocked) {
             AsyncImage(
-                model = posterUrl,
-                contentDescription = seriesName,
-                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)),
-                contentScale = ContentScale.Crop
+                model = series.posterUrl,
+                contentDescription = series.name,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(12.dp)) // PREMIUM: Clip poster to card shape
+                    .background(SurfaceElevated),
+                contentScale = ContentScale.Fit // PREMIUM: Fits entire poster inside card
             )
         } else {
             Box(
@@ -418,7 +417,7 @@ fun SeriesCard(
             ) {
                 Text(
                     text = if (isLocked) "🔒" else "📺",
-                    style = MaterialTheme.typography.headlineLarge
+                    style = MaterialTheme.typography.displayMedium
                 )
             }
         }
@@ -428,10 +427,10 @@ fun SeriesCard(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .fillMaxHeight(0.5f)
+                .fillMaxHeight(0.6f)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, GradientOverlayBottom)
+                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)),
                     )
                 )
         )
@@ -441,13 +440,13 @@ fun SeriesCard(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
-                text = if (isLocked) stringResource(R.string.card_locked) else seriesName,
+                text = if (isLocked) stringResource(R.string.card_locked) else series.name,
                 style = MaterialTheme.typography.titleSmall,
-                color = TextPrimary,
+                color = Color.White,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -455,13 +454,13 @@ fun SeriesCard(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextTertiary,
+                    color = Color.White.copy(alpha = 0.7f),
                     maxLines = 1
                 )
             }
         }
 
-        // Watch progress bar at very bottom edge
+        // Watch progress bar
         if (watchProgress > 0f && !isLocked) {
             LinearProgressIndicator(
                 progress = { watchProgress.coerceIn(0f, 1f) },
@@ -469,21 +468,41 @@ fun SeriesCard(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .height(3.dp),
-                color = AccentCyan,
+                color = Primary,
                 trackColor = Color.Transparent
             )
         }
 
-        // Top-right badges
-        if (series.isFavorite && !isLocked) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(6.dp)
-                    .background(AccentAmber, RoundedCornerShape(4.dp))
-                    .padding(horizontal = 5.dp, vertical = 2.dp)
-            ) {
-                Text("★", style = MaterialTheme.typography.labelSmall, color = Color.Black)
+        // Badges
+        if (!isLocked) {
+            // Rating badge
+            if (series.rating > 0f) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "⭐ ${String.format("%.1f", series.rating)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AccentAmber
+                    )
+                }
+            }
+
+            // Favorite badge
+            if (series.isFavorite) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .background(Color.Red.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
+                        .padding(4.dp)
+                ) {
+                    Text("❤", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                }
             }
         }
     }
