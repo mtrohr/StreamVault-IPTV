@@ -121,7 +121,7 @@ class SeriesViewModel @Inject constructor(
     }
 
     suspend fun verifyPin(pin: String): Boolean {
-        return preferencesRepository.parentalPin.first() == pin
+        return preferencesRepository.verifyParentalPin(pin)
     }
 
     fun onShowDialog(series: Series) {

@@ -14,6 +14,10 @@ interface ProviderRepository {
     suspend fun setActiveProvider(id: Long): Result<Unit>
     suspend fun loginXtream(serverUrl: String, username: String, password: String, name: String, onProgress: ((String) -> Unit)? = null, id: Long? = null): Result<Provider>
     suspend fun validateM3u(url: String, name: String, onProgress: ((String) -> Unit)? = null, id: Long? = null): Result<Provider>
-    suspend fun refreshProviderData(providerId: Long, onProgress: ((String) -> Unit)? = null): Result<Unit>
+    suspend fun refreshProviderData(
+        providerId: Long,
+        force: Boolean = false,
+        onProgress: ((String) -> Unit)? = null
+    ): Result<Unit>
     suspend fun buildCatchUpUrl(providerId: Long, streamId: Long, start: Long, end: Long): String?
 }

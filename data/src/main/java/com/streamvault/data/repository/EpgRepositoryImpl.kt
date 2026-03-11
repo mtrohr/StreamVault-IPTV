@@ -24,26 +24,28 @@ class EpgRepositoryImpl @Inject constructor(
 ) : EpgRepository {
 
     override fun getProgramsForChannel(
+        providerId: Long,
         channelId: String,
         startTime: Long,
         endTime: Long
     ): Flow<List<Program>> =
-        programDao.getForChannel(channelId, startTime, endTime)
+        programDao.getForChannel(providerId, channelId, startTime, endTime)
             .map { entities -> entities.map { it.toDomain() } }
 
-    override fun getNowPlaying(channelId: String): Flow<Program?> =
-        programDao.getNowPlaying(channelId, System.currentTimeMillis())
+    override fun getNowPlaying(providerId: Long, channelId: String): Flow<Program?> =
+        programDao.getNowPlaying(providerId, channelId, System.currentTimeMillis())
             .map { it?.toDomain() }
 
-    override fun getNowPlayingForChannels(channelIds: List<String>): Flow<Map<String, List<Program>>> =
-        programDao.getNowPlayingForChannels(channelIds, System.currentTimeMillis())
+    override fun getNowPlayingForChannels(providerId: Long, channelIds: List<String>): Flow<Map<String, List<Program>>> =
+        programDao.getNowPlayingForChannels(providerId, channelIds, System.currentTimeMillis())
             .map { entities -> 
                 entities.map { it.toDomain() }
                         .groupBy { it.channelId }
             }
 
-    override fun getNowAndNext(channelId: String): Flow<Pair<Program?, Program?>> =
+    override fun getNowAndNext(providerId: Long, channelId: String): Flow<Pair<Program?, Program?>> =
         programDao.getForChannel(
+            providerId,
             channelId,
             System.currentTimeMillis() - 3600000, // 1 hour ago
             System.currentTimeMillis() + 7200000   // 2 hours from now
@@ -71,8 +73,11 @@ class EpgRepositoryImpl @Inject constructor(
                     xmltvParser.parse(inputStream)
                 }
 
+                // Keep provider datasets isolated and avoid stale entries after partial guide updates.
+                programDao.deleteByProvider(providerId)
+
                 // Batch insert in chunks to avoid memory pressure
-                val entities = programs.map { it.toEntity() }
+                val entities = programs.map { it.copy(providerId = providerId).toEntity() }
                 entities.chunked(500).forEach { chunk ->
                     programDao.insertAll(chunk)
                 }

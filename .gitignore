@@ -22,3 +22,6 @@ local.properties
 
 # Build output
 build_output_*.txt
+
+# Generated sources
+domain/bin/

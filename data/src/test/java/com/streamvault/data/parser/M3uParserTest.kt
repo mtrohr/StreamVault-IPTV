@@ -1,7 +1,6 @@
 package com.streamvault.data.parser
 
 import com.google.common.truth.Truth.assertThat
-import com.streamvault.data.sync.SyncManager
 import org.junit.Before
 import org.junit.Test
 
@@ -33,7 +32,7 @@ class M3uParserTest {
             http://stream.example.com/sports.ts
         """.trimIndent()
 
-        val entries = parser.parse(m3u.byteInputStream())
+        val entries = parseEntries(m3u)
 
         assertThat(entries).hasSize(3)
 
@@ -67,7 +66,7 @@ class M3uParserTest {
             http://stream.example.com/another.ts
         """.trimIndent()
 
-        val entries = parser.parse(m3u.byteInputStream())
+        val entries = parseEntries(m3u)
 
         // "Bad Channel" is skipped since its "URL" line is another #EXTINF
         assertThat(entries.map { it.name }).containsExactly("Good Channel", "Another Good Channel")
@@ -75,7 +74,7 @@ class M3uParserTest {
 
     @Test
     fun `parse_emptyInputStream_returnsEmptyList`() {
-        val entries = parser.parse("".byteInputStream())
+        val entries = parseEntries("")
         assertThat(entries).isEmpty()
     }
 
@@ -87,7 +86,7 @@ class M3uParserTest {
             http://stream.example.com/channel2.ts
         """.trimIndent()
 
-        val entries = parser.parse(m3u.byteInputStream())
+        val entries = parseEntries(m3u)
         assertThat(entries).isEmpty()
     }
 
@@ -101,7 +100,7 @@ class M3uParserTest {
             http://vod.example.com/movie1.mp4
         """.trimIndent()
 
-        val entries = parser.parse(m3u.byteInputStream())
+        val entries = parseEntries(m3u)
 
         assertThat(entries).hasSize(1)
         assertThat(entries[0].groupTitle).isEqualTo("Movies HD")
@@ -115,7 +114,7 @@ class M3uParserTest {
             http://stream.example.com/aljazeera.ts
         """.trimIndent()
 
-        val entries = parser.parse(m3u.byteInputStream())
+        val entries = parseEntries(m3u)
 
         assertThat(entries).hasSize(1)
         assertThat(entries[0].groupTitle).isEqualTo("Al Jazeera | Arabic")
@@ -129,7 +128,7 @@ class M3uParserTest {
             http://stream.example.com/ch1.ts
         """.trimIndent()
 
-        val entries = parser.parse(m3u.byteInputStream())
+        val entries = parseEntries(m3u)
 
         assertThat(entries).hasSize(1)
         with(entries[0]) {
@@ -146,7 +145,7 @@ class M3uParserTest {
                 "#EXTINF:-1 group-title=\"Hebrew\",ערוץ ראשון\n" +
                 "http://stream.example.com/hebrew.ts"
 
-        val entries = parser.parse(m3u.byteInputStream())
+        val entries = parseEntries(m3u)
 
         assertThat(entries).hasSize(2)
         assertThat(entries[0].name).isEqualTo("قناة الأولى")
@@ -162,7 +161,7 @@ class M3uParserTest {
             $tokenizedUrl
         """.trimIndent()
 
-        val entries = parser.parse(m3u.byteInputStream())
+        val entries = parseEntries(m3u)
 
         assertThat(entries).hasSize(1)
         assertThat(entries[0].url).isEqualTo(tokenizedUrl)
@@ -174,11 +173,11 @@ class M3uParserTest {
     fun `isVodEntry_movieExtension_returnsTrue`() {
         // Create a throwaway SyncManager reference to access the internal helper
         // We test via the M3uParser-level behaviour: parse a playlist and verify isVod logic
-        val entries = parser.parse(buildPlaylist(
+        val entries = parseEntries(buildPlaylist(
             "http://vod.example.com/avatar.mp4" to "Movies",
             "http://vod.example.com/inception.mkv" to "VOD",
             "http://vod.example.com/oldfilm.avi" to "Films"
-        ).byteInputStream())
+        ))
 
         assertThat(entries).hasSize(3)
         // All three entries should be classified as VOD by SyncManager
@@ -194,10 +193,10 @@ class M3uParserTest {
 
     @Test
     fun `isVodEntry_liveStream_returnsFalse`() {
-        val entries = parser.parse(buildPlaylist(
+        val entries = parseEntries(buildPlaylist(
             "http://live.example.com/ch1.ts" to "Live",
             "http://live.example.com/ch2.m3u8" to "Sports"
-        ).byteInputStream())
+        ))
 
         assertThat(entries).hasSize(2)
         entries.forEach { entry ->
@@ -219,5 +218,9 @@ class M3uParserTest {
             sb.append("$url\n")
         }
         return sb.toString()
+    }
+
+    private fun parseEntries(m3u: String): List<M3uParser.M3uEntry> {
+        return parser.parse(m3u.byteInputStream()).entries
     }
 }

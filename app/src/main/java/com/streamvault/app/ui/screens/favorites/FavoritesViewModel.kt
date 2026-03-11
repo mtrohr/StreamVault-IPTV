@@ -10,6 +10,7 @@ import com.streamvault.domain.repository.FavoriteRepository
 import com.streamvault.domain.repository.MovieRepository
 import com.streamvault.domain.repository.SeriesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -22,6 +23,7 @@ data class FavoriteUiModel(
 )
 
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class FavoritesViewModel @Inject constructor(
     private val favoriteRepository: FavoriteRepository,
     private val channelRepository: ChannelRepository,
@@ -34,51 +36,55 @@ class FavoritesViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            favoriteRepository.getFavorites(null).collect { favorites ->
-                val uiModels = favorites.mapNotNull { fav ->
-                    try {
-                        when (fav.contentType) {
-                            ContentType.LIVE -> {
-                                val channel = channelRepository.getChannel(fav.contentId)
-                                if (channel != null) {
+            favoriteRepository.getFavorites(null)
+                .flatMapLatest { favorites ->
+                    val channelIds = favorites.filter { it.contentType == ContentType.LIVE }.map { it.contentId }
+                    val movieIds = favorites.filter { it.contentType == ContentType.MOVIE }.map { it.contentId }
+                    val seriesIds = favorites.filter { it.contentType == ContentType.SERIES }.map { it.contentId }
+
+                    combine(
+                        if (channelIds.isEmpty()) flowOf(emptyList()) else channelRepository.getChannelsByIds(channelIds),
+                        if (movieIds.isEmpty()) flowOf(emptyList()) else movieRepository.getMoviesByIds(movieIds),
+                        if (seriesIds.isEmpty()) flowOf(emptyList()) else seriesRepository.getSeriesByIds(seriesIds)
+                    ) { channels, movies, series ->
+                        val channelsById = channels.associateBy { it.id }
+                        val moviesById = movies.associateBy { it.id }
+                        val seriesById = series.associateBy { it.id }
+
+                        favorites.mapNotNull { favorite ->
+                            when (favorite.contentType) {
+                                ContentType.LIVE -> channelsById[favorite.contentId]?.let { channel ->
                                     FavoriteUiModel(
-                                        favorite = fav,
+                                        favorite = favorite,
                                         title = channel.name,
                                         subtitle = "Channel ${channel.number}",
                                         streamUrl = channel.streamUrl
                                     )
-                                } else null
-                            }
-                            ContentType.MOVIE -> {
-                                val movie = movieRepository.getMovie(fav.contentId)
-                                if (movie != null) {
+                                }
+                                ContentType.MOVIE -> moviesById[favorite.contentId]?.let { movie ->
                                     FavoriteUiModel(
-                                        favorite = fav,
+                                        favorite = favorite,
                                         title = movie.name,
                                         subtitle = "Movie",
                                         streamUrl = movie.streamUrl
                                     )
-                                } else null
-                            }
-                            ContentType.SERIES -> {
-                                val series = seriesRepository.getSeriesById(fav.contentId)
-                                if (series != null) {
+                                }
+                                ContentType.SERIES -> seriesById[favorite.contentId]?.let { seriesItem ->
                                     FavoriteUiModel(
-                                        favorite = fav,
-                                        title = series.name,
+                                        favorite = favorite,
+                                        title = seriesItem.name,
                                         subtitle = "Series",
                                         streamUrl = "" // Series doesn't have a single stream URL
                                     )
-                                } else null
+                                }
+                                else -> null
                             }
-                            else -> null // SERIES_EPISODE and future types not favoriteable
                         }
-                    } catch (e: Exception) {
-                        null
                     }
                 }
-                _uiState.update { it.copy(favorites = uiModels, isLoading = false) }
-            }
+                .collect { uiModels ->
+                    _uiState.update { it.copy(favorites = uiModels, isLoading = false) }
+                }
         }
         viewModelScope.launch {
             favoriteRepository.getGroups(ContentType.LIVE).collect { groups ->

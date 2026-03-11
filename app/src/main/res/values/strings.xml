@@ -158,6 +158,13 @@
     <string name="setup_save">Save Changes</string>
     <string name="setup_login">Login</string>
     <string name="setup_m3u_hint">M3U URL</string>
+    <string name="setup_tab_url">URL</string>
+    <string name="setup_tab_file">File</string>
+    <string name="setup_file_replace_hint">Press to replace file</string>
+    <string name="setup_file_select_title">Select M3U File</string>
+    <string name="setup_file_browse_hint">Browse local storage or USB</string>
+    <string name="setup_file_import_failed">Could not import playlist file. Please try again.</string>
+    <string name="setup_file_import_storage_full">Storage is full. Free up space and try importing again.</string>
     <string name="setup_validating">Validating...</string>
     <string name="setup_add">Add Playlist</string>
 
@@ -173,6 +180,8 @@
     <string name="player_type_movie">Movie</string>
     <string name="player_type_series">Series</string>
     <string name="player_close">Close</string>
+    <string name="player_play">Play</string>
+    <string name="player_pause">Pause</string>
     <string name="player_next">NEXT</string>
     <string name="player_restart">Restart</string>
     <string name="player_archive">Archive</string>
@@ -186,6 +195,21 @@
     <string name="player_track_subs">Select Subtitles</string>
     <string name="player_track_off">Off</string>
     <string name="player_video_quality">Video Quality</string>
+    <string name="player_aspect_ratio_label">Aspect %1$s</string>
+    <string name="player_selected">Selected</string>
+    <string name="player_channel_list_title">Channels (%1$d)</string>
+    <string name="player_channel_selected">Now</string>
+    <string name="player_archive_badge">ARCHIVE</string>
+    <string name="player_catchup_badge">CATCH-UP</string>
+    <string name="player_time_range_minutes">%1$s - %2$s | %3$d min</string>
+    <string name="player_next_label">Next:</string>
+    <string name="player_full_epg">Full EPG</string>
+    <string name="player_stats">Stats</string>
+    <string name="player_minutes_remaining">%1$d min remaining</string>
+    <string name="epg_title">TV Guide</string>
+    <string name="epg_catchup_available">Catch-up available (%1$d days)</string>
+    <string name="epg_upcoming_schedule">Upcoming Schedule</string>
+    <string name="epg_no_info">No EPG information</string>
 
     <!-- Parental Control Group -->
     <string name="parental_group_title">Protected Groups</string>

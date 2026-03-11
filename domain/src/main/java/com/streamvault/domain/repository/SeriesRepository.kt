@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 interface SeriesRepository {
     fun getSeries(providerId: Long): Flow<List<Series>>
     fun getSeriesByCategory(providerId: Long, categoryId: Long): Flow<List<Series>>
+    fun getSeriesByIds(ids: List<Long>): Flow<List<Series>>
     fun getCategories(providerId: Long): Flow<List<Category>>
     fun searchSeries(providerId: Long, query: String): Flow<List<Series>>
     suspend fun getSeriesById(seriesId: Long): Series?

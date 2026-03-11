@@ -35,7 +35,6 @@ class BackupManagerImpl @Inject constructor(
             // 1. Gather Data
             val prefs = mapOf(
                 "parentalControlLevel" to preferencesRepository.parentalControlLevel.first().toString(),
-                "parentalPin" to (preferencesRepository.parentalPin.first() ?: ""),
                 // We're leaving out provider credentials/URLs from the backup for security/complexity,
                 // but we could back them up as well if requested.
             )
@@ -91,9 +90,6 @@ class BackupManagerImpl @Inject constructor(
             backupData.preferences?.let { prefs ->
                 prefs["parentalControlLevel"]?.toIntOrNull()?.let {
                     preferencesRepository.setParentalControlLevel(it)
-                }
-                prefs["parentalPin"]?.let { pin ->
-                    if (pin.isNotBlank()) preferencesRepository.setParentalPin(pin)
                 }
             }
 

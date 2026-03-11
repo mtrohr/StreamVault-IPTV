@@ -1,26 +1,48 @@
 package com.streamvault.app.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.BorderStroke
-import androidx.tv.material3.*
-import com.streamvault.app.navigation.Routes
-import com.streamvault.app.ui.theme.*
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Border
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
 import com.streamvault.app.R
+import com.streamvault.app.navigation.Routes
+import com.streamvault.app.ui.theme.FocusBorder
+import com.streamvault.app.ui.theme.LocalSpacing
+import com.streamvault.app.ui.theme.Primary
+import com.streamvault.app.ui.theme.SurfaceElevated
+import com.streamvault.app.ui.theme.TextPrimary
+import com.streamvault.app.ui.theme.TextSecondary
+import com.streamvault.app.ui.theme.TextTertiary
 
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
@@ -42,29 +64,33 @@ fun TopNavBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(64.dp) // Premium height
-            .padding(horizontal = LocalSpacing.current.safeHoriz) // Premium 48dp overscan
+            .height(82.dp)
+            .padding(horizontal = LocalSpacing.current.safeHoriz)
             .focusProperties {
                 enter = {
                     val activeTabRoute = tabs.firstOrNull { it.route == currentRoute }?.route
-                    val activeRequester = focusRequesters[activeTabRoute]
-                    activeRequester ?: FocusRequester.Default
+                    focusRequesters[activeTabRoute] ?: FocusRequester.Default
                 }
             },
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(LocalSpacing.current.lg) // Premium 32dp spacing
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Logo / App Name
-        Text(
-            text = stringResource(id = R.string.app_name),
-            style = MaterialTheme.typography.titleLarge,
-            color = Primary,
-            modifier = Modifier.padding(end = LocalSpacing.current.lg)
-        )
+        Column {
+            Text(
+                text = stringResource(id = R.string.app_name),
+                style = MaterialTheme.typography.titleLarge,
+                color = TextPrimary
+            )
+            Text(
+                text = stringResource(id = R.string.nav_live_tv),
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary
+            )
+        }
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(LocalSpacing.current.sm)
-        ) {
+        Spacer(modifier = Modifier.width(LocalSpacing.current.md))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(LocalSpacing.current.sm)) {
             tabs.forEach { tab ->
                 val requester = focusRequesters.getOrPut(tab.route) { FocusRequester() }
                 NavTabButton(
@@ -92,21 +118,15 @@ private fun NavTabButton(
     var isFocused by remember { mutableStateOf(false) }
 
     val scale by animateFloatAsState(
-        targetValue = if (isFocused) 1.03f else 1f, // Premium subtle scale
-        animationSpec = tween(durationMillis = 200),
+        targetValue = if (isFocused) 1.02f else 1f,
+        animationSpec = tween(durationMillis = 180),
         label = "tabScale"
     )
 
-    val backgroundColor = when {
-        isSelected -> Primary.copy(alpha = 0.15f) // Cleaner selection tint
-        isFocused -> SurfaceElevated
-        else -> Color.Transparent
-    }
-
     val textColor = when {
         isSelected -> Primary
-        isFocused -> TextPrimary // High contrast white
-        else -> TextSecondary // Muted inactive
+        isFocused -> TextPrimary
+        else -> TextSecondary
     }
 
     Surface(
@@ -117,28 +137,50 @@ private fun NavTabButton(
                 scaleY = scale
             }
             .onFocusChanged { isFocused = it.isFocused },
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)), // Premium 12dp
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = backgroundColor,
+            containerColor = if (isSelected) Primary.copy(alpha = 0.16f) else SurfaceElevated,
             focusedContainerColor = SurfaceElevated
         ),
         border = ClickableSurfaceDefaults.border(
-            border = Border.None,
+            border = Border(
+                border = BorderStroke(1.dp, SurfaceElevated),
+                shape = RoundedCornerShape(12.dp)
+            ),
             focusedBorder = Border(
-                border = BorderStroke(2.dp, FocusBorder), // Premium White Focus
+                border = BorderStroke(2.dp, FocusBorder),
                 shape = RoundedCornerShape(12.dp)
             )
         )
     ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.titleSmall, // 16sp, robust TV font
-            color = textColor,
-            modifier = Modifier.padding(
-                horizontal = LocalSpacing.current.md, 
-                vertical = LocalSpacing.current.xs
+        Column(
+            modifier = Modifier.padding(horizontal = 22.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.titleSmall,
+                color = textColor
             )
-        )
+            AnimatedVisibility(visible = isSelected || isFocused) {
+                Box(
+                    modifier = Modifier
+                        .width(28.dp)
+                        .height(3.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .background(
+                                color = if (isSelected) Primary else FocusBorder,
+                                shape = RoundedCornerShape(999.dp)
+                            )
+                    )
+                }
+            }
+        }
     }
 }
 

@@ -18,7 +18,11 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -40,11 +44,13 @@ fun ProviderSetupScreen(
     viewModel: ProviderSetupViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val knownLocalM3uUrls by viewModel.knownLocalM3uUrls.collectAsState()
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     var name by remember { mutableStateOf("") }
     var m3uUrl by remember { mutableStateOf("") }
+    var fileImportError by remember { mutableStateOf<String?>(null) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -74,22 +80,60 @@ fun ProviderSetupScreen(
                         outFile.outputStream().use { out ->
                             inputStream.copyTo(out)
                         }
+                        cleanupOldImportedM3uFiles(
+                            filesDir = context.filesDir,
+                            protectedFileUris = knownLocalM3uUrls + "file://${outFile.absolutePath}",
+                            keepLatest = 20
+                        )
 
                         withContext(Dispatchers.Main) {
                             m3uUrl = "file://${outFile.absolutePath}"
                             if (name.isEmpty()) name = fileName
+                            fileImportError = null
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            fileImportError = context.getString(R.string.setup_file_import_failed)
                         }
                     }
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    withContext(Dispatchers.Main) {
+                        fileImportError = resolveFileImportError(context, e)
+                    }
                 }
             }
         }
     }
 
+    LaunchedEffect(knownLocalM3uUrls) {
+        cleanupOldImportedM3uFiles(
+            filesDir = context.filesDir,
+            protectedFileUris = knownLocalM3uUrls,
+            keepLatest = 20
+        )
+    }
+
     // Navigate on success
     LaunchedEffect(uiState.loginSuccess) {
-        if (uiState.loginSuccess) onProviderAdded()
+        if (uiState.loginSuccess) {
+            val previousLocal = uiState.m3uUrl.takeIf { it.startsWith("file://") }
+            val selectedLocal = m3uUrl.takeIf { it.startsWith("file://") }
+            val protectedUris = buildSet {
+                knownLocalM3uUrls.forEach { knownUri ->
+                    if (knownUri != previousLocal || previousLocal == selectedLocal) {
+                        add(knownUri)
+                    }
+                }
+                selectedLocal?.let(::add)
+            }
+
+            cleanupOldImportedM3uFiles(
+                filesDir = context.filesDir,
+                protectedFileUris = protectedUris,
+                keepLatest = 20
+            )
+            onProviderAdded()
+        }
     }
 
     // Auto-skip logic moved to MainActivity/Splash - preventing redirect loop here
@@ -126,122 +170,162 @@ fun ProviderSetupScreen(
     // We already have the vars defined above. 
 
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(BackgroundDeep, Background, Surface)
+                )
+            ),
         contentAlignment = Alignment.Center
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .width(500.dp)
-                .padding(32.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .width(620.dp)
+                .padding(horizontal = 32.dp, vertical = 24.dp)
+                .background(SurfaceElevated.copy(alpha = 0.94f), RoundedCornerShape(20.dp))
+                .border(1.dp, SurfaceHighlight, RoundedCornerShape(20.dp))
         ) {
-            // Title
-            Text(
-                text = if (uiState.isEditing) stringResource(R.string.setup_edit_provider) else stringResource(R.string.setup_title_streamvault),
-                style = MaterialTheme.typography.displaySmall,
-                color = Primary
-            )
-            Text(
-                text = if (uiState.isEditing) stringResource(R.string.setup_update_desc) else stringResource(R.string.setup_add_desc),
-                style = MaterialTheme.typography.bodyLarge,
-                color = OnSurface
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(28.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.Start,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = if (uiState.isEditing) stringResource(R.string.setup_edit_provider) else stringResource(R.string.setup_title_streamvault),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = TextPrimary
+                )
+                Text(
+                    text = if (uiState.isEditing) stringResource(R.string.setup_update_desc) else stringResource(R.string.setup_add_desc),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = OnSurface
+                )
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Tab selector - Disable changing type during edit
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                
-                if (!uiState.isEditing || uiState.selectedTab == 0) {
-                     TabButton(stringResource(R.string.setup_xtream), selectedTab == 0) { if (!uiState.isEditing) selectedTab = 0 }
-                }
-                if (!uiState.isEditing || uiState.selectedTab == 1) {
-                     TabButton(stringResource(R.string.setup_m3u), selectedTab == 1) { if (!uiState.isEditing) selectedTab = 1 }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Playlist Name (Common)
-            TvTextField(
-                value = name, 
-                onValueChange = { name = it }, 
-                label = stringResource(R.string.setup_name_hint)
-            )
-
-            when (selectedTab) {
-                0 -> {
-                    TvTextField(value = serverUrl, onValueChange = { serverUrl = it }, label = stringResource(R.string.setup_server_hint))
-                    TvTextField(value = username, onValueChange = { username = it }, label = stringResource(R.string.setup_user_hint))
-                    TvTextField(value = password, onValueChange = { password = it }, label = stringResource(R.string.setup_pass_hint))
-
-                    ActionButton(
-                        text = if (uiState.isLoading) stringResource(R.string.setup_connecting) else if (uiState.isEditing) stringResource(R.string.setup_save) else stringResource(R.string.setup_login),
-                        enabled = !uiState.isLoading,
-                        onClick = {
-                            viewModel.loginXtream(serverUrl, username, password, name)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (!uiState.isEditing || uiState.selectedTab == 0) {
+                        TabButton(stringResource(R.string.setup_xtream), selectedTab == 0) {
+                            if (!uiState.isEditing) selectedTab = 0
                         }
-                    )
-                }
-                1 -> {
-                    // Sub-tabs for M3U: URL vs File
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    ) {
-                        TabButton(
-                            text = "URL",
-                            isSelected = uiState.m3uTab == 0,
-                            onClick = { viewModel.updateM3uTab(0) }
-                        )
-                        TabButton(
-                            text = "File",
-                            isSelected = uiState.m3uTab == 1,
-                            onClick = { viewModel.updateM3uTab(1) }
-                        )
                     }
+                    if (!uiState.isEditing || uiState.selectedTab == 1) {
+                        TabButton(stringResource(R.string.setup_m3u), selectedTab == 1) {
+                            if (!uiState.isEditing) selectedTab = 1
+                        }
+                    }
+                }
 
-                    if (uiState.m3uTab == 0) {
+                TvTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = stringResource(R.string.setup_name_hint)
+                )
+
+                when (selectedTab) {
+                    0 -> {
                         TvTextField(
-                            value = m3uUrl,
-                            onValueChange = { m3uUrl = it },
-                            label = stringResource(R.string.setup_m3u_hint)
+                            value = serverUrl,
+                            onValueChange = { serverUrl = it },
+                            label = stringResource(R.string.setup_server_hint)
                         )
-                    } else {
-                        FileSelectorCard(
-                            fileName = if (m3uUrl.startsWith("file://")) m3uUrl.substringAfterLast("/") else null,
-                            onClick = { filePickerLauncher.launch(arrayOf("*/*")) }
+                        TvTextField(
+                            value = username,
+                            onValueChange = { username = it },
+                            label = stringResource(R.string.setup_user_hint)
+                        )
+                        TvTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = stringResource(R.string.setup_pass_hint),
+                            isPassword = true
+                        )
+
+                        ActionButton(
+                            text = if (uiState.isLoading) {
+                                stringResource(R.string.setup_connecting)
+                            } else if (uiState.isEditing) {
+                                stringResource(R.string.setup_save)
+                            } else {
+                                stringResource(R.string.setup_login)
+                            },
+                            enabled = !uiState.isLoading,
+                            onClick = {
+                                viewModel.loginXtream(serverUrl, username, password, name)
+                            }
                         )
                     }
+                    1 -> {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        ) {
+                            TabButton(
+                                text = stringResource(R.string.setup_tab_url),
+                                isSelected = uiState.m3uTab == 0,
+                                onClick = { viewModel.updateM3uTab(0) }
+                            )
+                            TabButton(
+                                text = stringResource(R.string.setup_tab_file),
+                                isSelected = uiState.m3uTab == 1,
+                                onClick = { viewModel.updateM3uTab(1) }
+                            )
+                        }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                        if (uiState.m3uTab == 0) {
+                            TvTextField(
+                                value = m3uUrl,
+                                onValueChange = { m3uUrl = it },
+                                label = stringResource(R.string.setup_m3u_hint)
+                            )
+                        } else {
+                            FileSelectorCard(
+                                fileName = if (m3uUrl.startsWith("file://")) m3uUrl.substringAfterLast("/") else null,
+                                fileSelectedHint = stringResource(R.string.setup_file_replace_hint),
+                                emptySelectionTitle = stringResource(R.string.setup_file_select_title),
+                                emptySelectionHint = stringResource(R.string.setup_file_browse_hint),
+                                onClick = { filePickerLauncher.launch(arrayOf("*/*")) }
+                            )
+                            fileImportError?.let { importError ->
+                                Text(
+                                    text = importError,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = ErrorColor
+                                )
+                            }
+                        }
 
-                    ActionButton(
-                        text = if (uiState.isLoading) stringResource(R.string.setup_validating) else if (uiState.isEditing) stringResource(R.string.setup_save) else stringResource(R.string.setup_add),
-                        enabled = !uiState.isLoading,
-                        onClick = { viewModel.addM3u(m3uUrl, name) }
+                        ActionButton(
+                            text = if (uiState.isLoading) {
+                                stringResource(R.string.setup_validating)
+                            } else if (uiState.isEditing) {
+                                stringResource(R.string.setup_save)
+                            } else {
+                                stringResource(R.string.setup_add)
+                            },
+                            enabled = !uiState.isLoading,
+                            onClick = { viewModel.addM3u(m3uUrl, name) }
+                        )
+                    }
+                }
+
+                uiState.validationError?.let { error ->
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ErrorColor
                     )
                 }
-            }
 
-            // Validation error
-            uiState.validationError?.let { error ->
-                Text(
-                    text = error,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ErrorColor
-                )
-            }
-            
-            // Error message
-            uiState.error?.let { error ->
-                Text(
-                    text = error,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ErrorColor
-                )
+                uiState.error?.let { error ->
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ErrorColor
+                    )
+                }
             }
         }
     }
@@ -281,6 +365,7 @@ private fun TvTextField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
+    isPassword: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -321,6 +406,7 @@ private fun TvTextField(
                 color = OnBackground
             ),
             singleLine = true,
+            visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
             cursorBrush = androidx.compose.ui.graphics.SolidColor(Primary)
         )
     }
@@ -344,20 +430,24 @@ private fun ActionButton(
         onClick = { if (enabled) onClick() },
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(52.dp)
             .scale(scale)
             .onFocusChanged { isFocused = it.isFocused },
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (enabled) Primary else SurfaceHighlight,
             focusedContainerColor = if (enabled) PrimaryVariant else SurfaceHighlight
+        ),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(BorderStroke(1.dp, if (enabled) PrimaryDark else SurfaceHighlight)),
+            focusedBorder = Border(BorderStroke(2.dp, FocusBorder))
         )
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Text(
                 text = text,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (enabled) OnBackground else OnSurfaceDim
+                color = if (enabled) Color.White else OnSurfaceDim
             )
         }
     }
@@ -366,6 +456,9 @@ private fun ActionButton(
 @Composable
 private fun FileSelectorCard(
     fileName: String?,
+    fileSelectedHint: String,
+    emptySelectionTitle: String,
+    emptySelectionHint: String,
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -403,18 +496,18 @@ private fun FileSelectorCard(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "Click to change file",
+                    text = fileSelectedHint,
                     style = MaterialTheme.typography.bodySmall,
                     color = OnSurfaceDim
                 )
             } else {
                 Text(
-                    text = "Select M3U File",
+                    text = emptySelectionTitle,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = OnSurfaceDim
+                    color = OnBackground
                 )
                 Text(
-                    text = "Browse local storage",
+                    text = emptySelectionHint,
                     style = MaterialTheme.typography.bodySmall,
                     color = OnSurfaceDim
                 )
@@ -434,17 +527,62 @@ private fun TabButton(
     Surface(
         onClick = onClick,
         modifier = Modifier.onFocusChanged { isFocused = it.isFocused },
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (isSelected) Primary.copy(alpha = 0.2f) else SurfaceElevated,
+            containerColor = if (isSelected) Primary.copy(alpha = 0.2f) else Surface,
             focusedContainerColor = SurfaceHighlight
+        ),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(BorderStroke(1.dp, if (isSelected) Primary.copy(alpha = 0.4f) else SurfaceHighlight)),
+            focusedBorder = Border(BorderStroke(2.dp, FocusBorder))
         )
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (isSelected) Primary else OnSurface,
+            color = if (isSelected) Primary else if (isFocused) TextPrimary else OnSurface,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp)
         )
+    }
+}
+
+private fun cleanupOldImportedM3uFiles(
+    filesDir: java.io.File,
+    protectedFileUris: Set<String>,
+    keepLatest: Int
+) {
+    val protectedPaths = protectedFileUris
+        .mapNotNull { uri ->
+            uri.removePrefix("file://").takeIf { it.isNotBlank() }
+        }
+        .toSet()
+
+    val importedFiles = filesDir
+        .listFiles { file -> file.isFile && file.name.startsWith("m3u_") && file.name.endsWith(".m3u") }
+        ?.sortedByDescending { it.lastModified() }
+        ?: return
+
+    importedFiles
+        .drop(keepLatest)
+        .forEach { staleFile ->
+            if (staleFile.absolutePath !in protectedPaths) {
+                runCatching { staleFile.delete() }
+            }
+        }
+}
+
+private fun resolveFileImportError(
+    context: android.content.Context,
+    error: Throwable
+): String {
+    val message = error.message.orEmpty()
+    val isStorageFull = message.contains("ENOSPC", ignoreCase = true) ||
+        message.contains("no space", ignoreCase = true) ||
+        message.contains("space left", ignoreCase = true)
+
+    return if (isStorageFull) {
+        context.getString(R.string.setup_file_import_storage_full)
+    } else {
+        context.getString(R.string.setup_file_import_failed)
     }
 }

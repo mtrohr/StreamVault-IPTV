@@ -121,7 +121,7 @@ class MoviesViewModel @Inject constructor(
     }
 
     suspend fun verifyPin(pin: String): Boolean {
-        return preferencesRepository.parentalPin.first() == pin
+        return preferencesRepository.verifyParentalPin(pin)
     }
 
     fun onShowDialog(movie: Movie) {

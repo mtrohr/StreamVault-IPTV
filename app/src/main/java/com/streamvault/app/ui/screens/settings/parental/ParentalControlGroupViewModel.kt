@@ -59,7 +59,12 @@ class ParentalControlGroupViewModel @Inject constructor(
 
     fun toggleCategoryProtection(category: Category) {
         viewModelScope.launch {
-            categoryRepository.setCategoryProtection(category.id, !category.isUserProtected)
+            categoryRepository.setCategoryProtection(
+                providerId = providerId,
+                categoryId = category.id,
+                type = category.type,
+                isProtected = !category.isUserProtected
+            )
         }
     }
 }

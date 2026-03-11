@@ -42,12 +42,14 @@ import com.streamvault.domain.repository.MovieRepository
 import com.streamvault.domain.repository.ProviderRepository
 import com.streamvault.domain.repository.SeriesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class SearchViewModel @Inject constructor(
     private val providerRepository: ProviderRepository,
     private val channelRepository: ChannelRepository,
@@ -55,6 +57,9 @@ class SearchViewModel @Inject constructor(
     private val seriesRepository: SeriesRepository,
     private val preferencesRepository: com.streamvault.data.preferences.PreferencesRepository
 ) : ViewModel() {
+    private companion object {
+        const val MAX_RESULTS_PER_SECTION = 120
+    }
 
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
@@ -99,9 +104,9 @@ class SearchViewModel @Inject constructor(
                     seriesRepository.searchSeries(providerId, query) else flowOf(emptyList())
             ) { channels, movies, series ->
                 SearchUiState(
-                    channels = channels,
-                    movies = movies,
-                    series = series,
+                    channels = channels.take(MAX_RESULTS_PER_SECTION),
+                    movies = movies.take(MAX_RESULTS_PER_SECTION),
+                    series = series.take(MAX_RESULTS_PER_SECTION),
                     isLoading = false,
                     hasSearched = true,
                     parentalControlLevel = level
@@ -119,7 +124,7 @@ class SearchViewModel @Inject constructor(
     }
 
     suspend fun verifyPin(pin: String): Boolean {
-        return preferencesRepository.parentalPin.first() == pin
+        return preferencesRepository.verifyParentalPin(pin)
     }
 }
 

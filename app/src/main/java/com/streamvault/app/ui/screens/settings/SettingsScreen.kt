@@ -31,8 +31,11 @@ import com.streamvault.app.ui.components.dialogs.PinDialog
 import com.streamvault.app.ui.components.TopNavBar
 import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.model.Provider
+import com.streamvault.domain.model.ProviderType
+import com.streamvault.domain.model.ProviderStatus
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.window.Dialog
 import com.streamvault.app.R
 
 
@@ -128,6 +131,8 @@ fun SettingsScreen(
                         provider = provider,
                         isActive = provider.id == uiState.activeProviderId,
                         isSyncing = uiState.isSyncing,
+                        syncWarnings = uiState.syncWarningsByProvider[provider.id].orEmpty(),
+                        onRetryWarningAction = { action -> viewModel.retryWarningAction(provider.id, action) },
                         onConnect = { viewModel.setActiveProvider(provider.id) },
                         onRefresh = { viewModel.refreshProvider(provider.id) },
                         onDelete = { viewModel.deleteProvider(provider.id) },
@@ -391,98 +396,137 @@ fun SettingsScreen(
         }
 
         if (showLevelDialog) {
-            AlertDialog(
-                onDismissRequest = { showLevelDialog = false },
-                title = { Text(stringResource(R.string.settings_select_level)) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        LevelOption(0, stringResource(R.string.settings_level_off_desc), uiState.parentalControlLevel) {
-                            viewModel.setParentalControlLevel(0)
-                            showLevelDialog = false
-                        }
-                        LevelOption(1, stringResource(R.string.settings_level_locked_desc), uiState.parentalControlLevel) {
-                            viewModel.setParentalControlLevel(1)
-                            showLevelDialog = false
-                        }
-                        LevelOption(2, stringResource(R.string.settings_level_hidden_desc), uiState.parentalControlLevel) {
-                            viewModel.setParentalControlLevel(2)
-                            showLevelDialog = false
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showLevelDialog = false }) {
-                        Text(stringResource(R.string.settings_cancel))
-                    }
+            PremiumSelectionDialog(
+                title = stringResource(R.string.settings_select_level),
+                onDismiss = { showLevelDialog = false }
+            ) {
+                LevelOption(0, stringResource(R.string.settings_level_off_desc), uiState.parentalControlLevel) {
+                    viewModel.setParentalControlLevel(0)
+                    showLevelDialog = false
                 }
-            )
+                LevelOption(1, stringResource(R.string.settings_level_locked_desc), uiState.parentalControlLevel) {
+                    viewModel.setParentalControlLevel(1)
+                    showLevelDialog = false
+                }
+                LevelOption(2, stringResource(R.string.settings_level_hidden_desc), uiState.parentalControlLevel) {
+                    viewModel.setParentalControlLevel(2)
+                    showLevelDialog = false
+                }
+            }
         }
 
         if (showLanguageDialog) {
-            AlertDialog(
-                onDismissRequest = { showLanguageDialog = false },
-                title = { Text(stringResource(R.string.settings_select_language)) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        LevelOption(
-                            level = 0,
-                            text = stringResource(R.string.settings_system_default),
-                            currentLevel = if (uiState.appLanguage == "system") 0 else -1,
-                            onSelect = {
-                                viewModel.setAppLanguage("system")
-                                showLanguageDialog = false
-                            }
-                        )
-                        LevelOption(
-                            level = 1,
-                            text = "English",
-                            currentLevel = if (uiState.appLanguage == "en") 1 else -1,
-                            onSelect = {
-                                viewModel.setAppLanguage("en")
-                                showLanguageDialog = false
-                            }
-                        )
-                        LevelOption(
-                            level = 2,
-                            text = "עברית (Hebrew)",
-                            currentLevel = if (uiState.appLanguage == "he") 2 else -1,
-                            onSelect = {
-                                viewModel.setAppLanguage("he")
-                                showLanguageDialog = false
-                            }
-                        )
-                        LevelOption(
-                            level = 3,
-                            text = "العربية (Arabic)",
-                            currentLevel = if (uiState.appLanguage == "ar") 3 else -1,
-                            onSelect = {
-                                viewModel.setAppLanguage("ar")
-                                showLanguageDialog = false
-                            }
-                        )
-                        LevelOption(
-                            level = 4,
-                            text = "Русский (Russian)",
-                            currentLevel = if (uiState.appLanguage == "ru") 4 else -1,
-                            onSelect = {
-                                viewModel.setAppLanguage("ru")
-                                showLanguageDialog = false
-                            }
-                        )
+            PremiumSelectionDialog(
+                title = stringResource(R.string.settings_select_language),
+                onDismiss = { showLanguageDialog = false }
+            ) {
+                LevelOption(
+                    level = 0,
+                    text = stringResource(R.string.settings_system_default),
+                    currentLevel = if (uiState.appLanguage == "system") 0 else -1,
+                    onSelect = {
+                        viewModel.setAppLanguage("system")
+                        showLanguageDialog = false
                     }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showLanguageDialog = false }) {
-                        Text(stringResource(R.string.settings_cancel))
+                )
+                LevelOption(
+                    level = 1,
+                    text = "English",
+                    currentLevel = if (uiState.appLanguage == "en") 1 else -1,
+                    onSelect = {
+                        viewModel.setAppLanguage("en")
+                        showLanguageDialog = false
                     }
-                }
-            )
+                )
+                LevelOption(
+                    level = 2,
+                    text = "Hebrew",
+                    currentLevel = if (uiState.appLanguage == "he") 2 else -1,
+                    onSelect = {
+                        viewModel.setAppLanguage("he")
+                        showLanguageDialog = false
+                    }
+                )
+                LevelOption(
+                    level = 3,
+                    text = "Arabic",
+                    currentLevel = if (uiState.appLanguage == "ar") 3 else -1,
+                    onSelect = {
+                        viewModel.setAppLanguage("ar")
+                        showLanguageDialog = false
+                    }
+                )
+                LevelOption(
+                    level = 4,
+                    text = "Russian",
+                    currentLevel = if (uiState.appLanguage == "ru") 4 else -1,
+                    onSelect = {
+                        viewModel.setAppLanguage("ru")
+                        showLanguageDialog = false
+                    }
+                )
+            }
         }
     }
 }
 
 private enum class ParentalAction {
     ChangeLevel, ChangePin, SetNewPin
+}
+
+@Composable
+private fun PremiumSelectionDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        androidx.compose.material3.Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = SurfaceElevated,
+            modifier = Modifier
+                .fillMaxWidth(0.62f)
+                .border(1.dp, Primary.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Primary
+                )
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(top = 6.dp)
+                ) {
+                    content()
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Surface(
+                        onClick = onDismiss,
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Primary.copy(alpha = 0.2f),
+                            focusedContainerColor = Primary.copy(alpha = 0.4f)
+                        )
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_cancel),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Primary,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -499,8 +543,7 @@ private fun LevelOption(level: Int, text: String, currentLevel: Int, onSelect: (
             onClick = onSelect
         )
         Spacer(modifier = Modifier.width(8.dp))
-        // Explicitly use Black for dialog text as it likely has a light background
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = Color.Black)
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = OnBackground)
     }
 }
 
@@ -590,6 +633,8 @@ private fun ProviderSettingsCard(
     provider: Provider,
     isActive: Boolean,
     isSyncing: Boolean,
+    syncWarnings: List<String>,
+    onRetryWarningAction: (ProviderWarningAction) -> Unit,
     onConnect: () -> Unit,
     onRefresh: () -> Unit,
     onDelete: () -> Unit,
@@ -626,11 +671,12 @@ private fun ProviderSettingsCard(
                     color = OnBackground
                 )
                 Text(
-                    text = "${provider.type.name} • ${provider.status.name}",
+                    text = provider.type.name,
                     style = MaterialTheme.typography.bodySmall,
                     color = OnSurface
                 )
             }
+            ProviderStatusBadge(status = provider.status)
             if (isActive) {
                 Text(
                     text = stringResource(R.string.settings_active),
@@ -658,6 +704,75 @@ private fun ProviderSettingsCard(
             style = MaterialTheme.typography.bodySmall,
             color = if (expDate != null && expDate < System.currentTimeMillis() && expDate != Long.MAX_VALUE) ErrorColor else OnSurfaceDim
         )
+
+        if (syncWarnings.isNotEmpty()) {
+            val hasEpgWarning = syncWarnings.any { it.contains("EPG", ignoreCase = true) }
+            val hasMoviesWarning = syncWarnings.any { it.contains("Movies", ignoreCase = true) }
+            val hasSeriesWarning = syncWarnings.any { it.contains("Series", ignoreCase = true) }
+
+            Text(
+                text = "Warnings: ${syncWarnings.take(3).joinToString(", ")}",
+                style = MaterialTheme.typography.bodySmall,
+                color = Secondary
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (hasEpgWarning) {
+                    Surface(
+                        onClick = { onRetryWarningAction(ProviderWarningAction.EPG) },
+                        enabled = !isSyncing,
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Secondary.copy(alpha = 0.16f),
+                            focusedContainerColor = Secondary.copy(alpha = 0.35f)
+                        )
+                    ) {
+                        Text(
+                            text = "Retry EPG",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Secondary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+                if (hasMoviesWarning) {
+                    Surface(
+                        onClick = { onRetryWarningAction(ProviderWarningAction.MOVIES) },
+                        enabled = !isSyncing,
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Secondary.copy(alpha = 0.16f),
+                            focusedContainerColor = Secondary.copy(alpha = 0.35f)
+                        )
+                    ) {
+                        Text(
+                            text = "Retry Movies",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Secondary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+                if (hasSeriesWarning && provider.type == ProviderType.XTREAM_CODES) {
+                    Surface(
+                        onClick = { onRetryWarningAction(ProviderWarningAction.SERIES) },
+                        enabled = !isSyncing,
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Secondary.copy(alpha = 0.16f),
+                            focusedContainerColor = Secondary.copy(alpha = 0.35f)
+                        )
+                    ) {
+                        Text(
+                            text = "Retry Series",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Secondary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
+        }
 
         // Action buttons - each independently focusable for d-pad
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -747,6 +862,28 @@ private fun ProviderSettingsCard(
             }
         }
     }
+}
+
+@Composable
+private fun ProviderStatusBadge(status: ProviderStatus) {
+    val (label, color) = when (status) {
+        ProviderStatus.ACTIVE -> "Active" to Primary
+        ProviderStatus.PARTIAL -> "Partial" to Secondary
+        ProviderStatus.ERROR -> "Error" to ErrorColor
+        ProviderStatus.EXPIRED -> "Expired" to ErrorColor
+        ProviderStatus.DISABLED -> "Disabled" to OnSurfaceDim
+        ProviderStatus.UNKNOWN -> "Unknown" to OnSurfaceDim
+    }
+
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall,
+        color = color,
+        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+        modifier = Modifier
+            .background(color.copy(alpha = 0.16f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    )
 }
 
 @Composable

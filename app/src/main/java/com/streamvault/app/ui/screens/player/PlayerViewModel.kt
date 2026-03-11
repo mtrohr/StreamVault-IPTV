@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.streamvault.domain.model.Program
 import com.streamvault.domain.model.ContentType
+import com.streamvault.domain.model.DecoderMode
 import com.streamvault.domain.model.PlaybackHistory
 import com.streamvault.domain.model.VideoFormat
 import com.streamvault.domain.repository.ChannelRepository
@@ -13,6 +14,7 @@ import com.streamvault.player.PlaybackState
 import com.streamvault.player.PlayerEngine
 import com.streamvault.player.PlayerError
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -25,6 +27,12 @@ data class ResumePromptState(
     val title: String = ""
 )
 
+data class NumericChannelInputState(
+    val input: String = "",
+    val matchedChannelName: String? = null,
+    val invalid: Boolean = false
+)
+
 enum class AspectRatio(val modeName: String) {
     FIT("Fit"),
     FILL("Stretch"),
@@ -32,6 +40,7 @@ enum class AspectRatio(val modeName: String) {
 }
 
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class PlayerViewModel @Inject constructor(
     val playerEngine: PlayerEngine,
     private val epgRepository: EpgRepository,
@@ -84,11 +93,18 @@ class PlayerViewModel @Inject constructor(
     private val _showChannelInfoOverlay = MutableStateFlow(false)
     val showChannelInfoOverlay: StateFlow<Boolean> = _showChannelInfoOverlay.asStateFlow()
 
+    private val _numericChannelInput = MutableStateFlow<NumericChannelInputState?>(null)
+    val numericChannelInput: StateFlow<NumericChannelInputState?> = _numericChannelInput.asStateFlow()
+
     private val _showDiagnostics = MutableStateFlow(false)
     val showDiagnostics: StateFlow<Boolean> = _showDiagnostics.asStateFlow()
 
     private var channelInfoHideJob: Job? = null
+    private var numericInputCommitJob: Job? = null
+    private var numericInputFeedbackJob: Job? = null
+    private var numericInputBuffer: String = ""
     private val triedAlternativeStreams = mutableSetOf<String>()
+    private var hasRetriedWithSoftwareDecoder = false
 
     init {
         viewModelScope.launch {
@@ -101,6 +117,7 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             playerEngine.playbackState.collect { state ->
                 if (state == PlaybackState.READY && currentContentType == ContentType.LIVE) {
+                    zapBufferWatchdogJob?.cancel()
                     _currentChannel.value?.let { channel ->
                         if (channel.errorCount > 0) {
                             channelRepository.resetChannelErrorCount(channel.id)
@@ -112,6 +129,14 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun handlePlaybackError(error: PlayerError) {
+        if (error is PlayerError.DecoderError && !hasRetriedWithSoftwareDecoder) {
+            hasRetriedWithSoftwareDecoder = true
+            android.util.Log.w("PlayerVM", "Decoder error detected. Retrying with software decoder mode.")
+            playerEngine.setDecoderMode(DecoderMode.SOFTWARE)
+            playerEngine.play()
+            return
+        }
+
         // Only auto-switch for live TV
         if (currentContentType != ContentType.LIVE) return
         
@@ -130,7 +155,7 @@ class PlayerViewModel @Inject constructor(
                 
                 if (nextStream != null) {
                     triedAlternativeStreams.add(nextStream)
-                    android.util.Log.d("PlayerVM", "Switching to alternative stream: $nextStream")
+                    android.util.Log.d("PlayerVM", "Switching to alternative stream for current channel")
                     
                     val streamInfo = com.streamvault.domain.model.StreamInfo(
                         url = nextStream,
@@ -139,13 +164,15 @@ class PlayerViewModel @Inject constructor(
                     playerEngine.prepare(streamInfo)
                     playerEngine.play()
                 } else {
-                    android.util.Log.e("PlayerVM", "No more alternative streams for channel: ${channel.name}")
+                    android.util.Log.e("PlayerVM", "No more alternative streams for current channel")
+                    fallbackToPreviousChannel("No alternative stream")
                 }
             }
         }
     }
 
     fun openChannelListOverlay() {
+        clearNumericChannelInput()
         _showChannelListOverlay.value = true
         _showEpgOverlay.value = false
         _showChannelInfoOverlay.value = false
@@ -153,6 +180,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun openEpgOverlay() {
+        clearNumericChannelInput()
         _showEpgOverlay.value = true
         _showChannelListOverlay.value = false
         _showChannelInfoOverlay.value = false
@@ -160,6 +188,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun openChannelInfoOverlay() {
+        clearNumericChannelInput()
         _showChannelInfoOverlay.value = true
         _showChannelListOverlay.value = false
         _showEpgOverlay.value = false
@@ -177,6 +206,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun closeOverlays() {
+        clearNumericChannelInput()
         _showChannelListOverlay.value = false
         _showEpgOverlay.value = false
         _showChannelInfoOverlay.value = false
@@ -204,6 +234,9 @@ class PlayerViewModel @Inject constructor(
     private var progressTrackingJob: Job? = null
     private var zapOverlayJob: Job? = null
     private var aspectRatioJob: Job? = null
+    private var zapBufferWatchdogJob: Job? = null
+    private var isAppInForeground: Boolean = true
+    private var shouldResumeAfterForeground: Boolean = false
     
     val playerError: StateFlow<PlayerError?> = playerEngine.error
         .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), null)
@@ -253,6 +286,8 @@ class PlayerViewModel @Inject constructor(
         currentContentId = internalChannelId
         currentTitle = title
         currentContentType = try { ContentType.valueOf(contentType) } catch (e: Exception) { ContentType.LIVE }
+        hasRetriedWithSoftwareDecoder = false
+        playerEngine.setDecoderMode(DecoderMode.AUTO)
         
         // Reset tried streams for manual switch
         triedAlternativeStreams.clear()
@@ -301,7 +336,7 @@ class PlayerViewModel @Inject constructor(
         currentStreamUrl = streamUrl
         
         // Fetch EPG if ID provided
-        fetchEpg(epgChannelId)
+        fetchEpg(currentProviderId, epgChannelId)
 
         // Load Aspect Ratio safely (fallback to FIT if none saved)
         aspectRatioJob?.cancel()
@@ -363,65 +398,92 @@ class PlayerViewModel @Inject constructor(
         progressTrackingJob = viewModelScope.launch {
             while (true) {
                 delay(5000) // Track every 5 seconds
-                val pos = playerEngine.currentPosition.value
-                val dur = playerEngine.duration.value
-
-                if (pos > 0 && dur > 0 && currentContentId != -1L) {
-                    val history = PlaybackHistory(
-                        contentId = currentContentId,
-                        contentType = currentContentType,
-                        providerId = currentProviderId,
-                        title = currentTitle,
-                        streamUrl = currentStreamUrl,
-                        resumePositionMs = pos,
-                        totalDurationMs = dur,
-                        lastWatchedAt = System.currentTimeMillis()
-                    )
-                    playbackHistoryRepository.updateResumePosition(history)
-                }
+                if (!isAppInForeground || !playerEngine.isPlaying.value) continue
+                persistPlaybackProgress()
             }
         }
     }
 
-    private fun fetchEpg(epgChannelId: String?) {
+    private suspend fun persistPlaybackProgress() {
+        val pos = playerEngine.currentPosition.value
+        val dur = playerEngine.duration.value
+
+        if (pos > 0 && dur > 0 && currentContentId != -1L && currentProviderId != -1L) {
+            val history = PlaybackHistory(
+                contentId = currentContentId,
+                contentType = currentContentType,
+                providerId = currentProviderId,
+                title = currentTitle,
+                streamUrl = currentStreamUrl,
+                resumePositionMs = pos,
+                totalDurationMs = dur,
+                lastWatchedAt = System.currentTimeMillis()
+            )
+            playbackHistoryRepository.updateResumePosition(history)
+        }
+    }
+
+    fun onAppBackgrounded() {
+        if (!isAppInForeground) return
+        isAppInForeground = false
+        shouldResumeAfterForeground = playerEngine.isPlaying.value
+        if (shouldResumeAfterForeground) {
+            playerEngine.pause()
+        }
+        if (currentContentType != ContentType.LIVE) {
+            viewModelScope.launch { persistPlaybackProgress() }
+        }
+    }
+
+    fun onAppForegrounded() {
+        if (isAppInForeground) return
+        isAppInForeground = true
+        if (shouldResumeAfterForeground && !_resumePrompt.value.show) {
+            playerEngine.play()
+        }
+        shouldResumeAfterForeground = false
+    }
+
+    fun onPlayerScreenDisposed() {
+        if (currentContentType != ContentType.LIVE) {
+            viewModelScope.launch { persistPlaybackProgress() }
+        }
+    }
+
+    private fun fetchEpg(providerId: Long, epgChannelId: String?) {
         epgJob?.cancel()
-        if (epgChannelId != null) {
+        if (providerId > 0 && epgChannelId != null) {
             epgJob = viewModelScope.launch {
-                epgRepository.getNowAndNext(epgChannelId).collect { (now, next) ->
-                    _currentProgram.value = now
-                    _nextProgram.value = next
+                launch {
+                    epgRepository.getNowAndNext(providerId, epgChannelId).collect { (now, next) ->
+                        _currentProgram.value = now
+                        _nextProgram.value = next
+                    }
+                }
+                launch {
+                    // Fetch last 24 hours.
+                    val now = System.currentTimeMillis()
+                    val start = now - (24 * 60 * 60 * 1000L)
+                    epgRepository.getProgramsForChannel(providerId, epgChannelId, start, now).collect { programs ->
+                        _programHistory.value = programs
+                            .filter { it.hasArchive }
+                            .sortedByDescending { it.startTime }
+                    }
+                }
+                launch {
+                    // Fetch next 6 hours.
+                    val now = System.currentTimeMillis()
+                    val end = now + (6 * 60 * 60 * 1000L)
+                    epgRepository.getProgramsForChannel(providerId, epgChannelId, now, end).collect { programs ->
+                        _upcomingPrograms.value = programs.sortedBy { it.startTime }
+                    }
                 }
             }
-            fetchProgramHistory(epgChannelId)
-            fetchUpcomingPrograms(epgChannelId)
         } else {
             _currentProgram.value = null
             _nextProgram.value = null
             _programHistory.value = emptyList()
             _upcomingPrograms.value = emptyList()
-        }
-    }
-
-    private fun fetchProgramHistory(channelId: String) {
-        viewModelScope.launch {
-            // Fetch last 24 hours
-            val now = System.currentTimeMillis()
-            val start = now - (24 * 60 * 60 * 1000L)
-            epgRepository.getProgramsForChannel(channelId, start, now).collect { programs ->
-                // Only show programs that have archive (for Xtream)
-                _programHistory.value = programs.filter { it.hasArchive }.sortedByDescending { it.startTime }
-            }
-        }
-    }
-
-    private fun fetchUpcomingPrograms(channelId: String) {
-        viewModelScope.launch {
-            // Fetch next 6 hours
-            val now = System.currentTimeMillis()
-            val end = now + (6 * 60 * 60 * 1000L)
-            epgRepository.getProgramsForChannel(channelId, now, end).collect { programs ->
-                _upcomingPrograms.value = programs.sortedBy { it.startTime }
-            }
         }
     }
 
@@ -474,6 +536,7 @@ class PlayerViewModel @Inject constructor(
     private var currentStreamUrl: String = ""
 
     fun playNext() {
+        clearNumericChannelInput()
         if (channelList.isEmpty()) return
         
         if (currentChannelIndex == -1) {
@@ -486,6 +549,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun playPrevious() {
+        clearNumericChannelInput()
         if (channelList.isEmpty()) return
         
         if (currentChannelIndex == -1) {
@@ -498,6 +562,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun zapToChannel(channelId: Long) {
+        clearNumericChannelInput()
         if (channelList.isEmpty()) return
         val index = channelList.indexOfFirst { it.id == channelId }
         if (index != -1) {
@@ -507,11 +572,75 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun zapToLastChannel() {
+        clearNumericChannelInput()
         if (channelList.isEmpty() || previousChannelIndex == -1) return
         changeChannel(previousChannelIndex)
     }
 
+    fun hasPendingNumericChannelInput(): Boolean = numericInputBuffer.isNotBlank()
+
+    fun inputNumericChannelDigit(digit: Int) {
+        if (currentContentType != ContentType.LIVE || channelList.isEmpty() || digit !in 0..9) return
+
+        if (numericInputBuffer.isEmpty() && digit == 0) {
+            zapToLastChannel()
+            return
+        }
+
+        numericInputBuffer = if (numericInputBuffer.length >= 4) {
+            digit.toString()
+        } else {
+            numericInputBuffer + digit.toString()
+        }
+
+        val exactMatch = resolveChannelByNumber(numericInputBuffer.toIntOrNull())
+        val previewMatch = exactMatch ?: resolveChannelByPrefix(numericInputBuffer)
+
+        _numericChannelInput.value = NumericChannelInputState(
+            input = numericInputBuffer,
+            matchedChannelName = previewMatch?.name,
+            invalid = false
+        )
+
+        scheduleNumericChannelCommit()
+    }
+
+    fun commitNumericChannelInput() {
+        numericInputCommitJob?.cancel()
+        if (numericInputBuffer.isBlank()) return
+
+        val targetChannel = resolveChannelByNumber(numericInputBuffer.toIntOrNull())
+        if (targetChannel != null) {
+            val targetIndex = channelList.indexOfFirst { it.id == targetChannel.id }
+            if (targetIndex != -1) {
+                changeChannel(targetIndex)
+            }
+            clearNumericChannelInput()
+            return
+        }
+
+        _numericChannelInput.value = NumericChannelInputState(
+            input = numericInputBuffer,
+            matchedChannelName = null,
+            invalid = true
+        )
+
+        numericInputFeedbackJob?.cancel()
+        numericInputFeedbackJob = viewModelScope.launch {
+            delay(900)
+            clearNumericChannelInput()
+        }
+    }
+
+    fun clearNumericChannelInput() {
+        numericInputCommitJob?.cancel()
+        numericInputFeedbackJob?.cancel()
+        numericInputBuffer = ""
+        _numericChannelInput.value = null
+    }
+
     private fun changeChannel(index: Int) {
+        clearNumericChannelInput()
         if (currentChannelIndex != -1 && currentChannelIndex != index) {
             previousChannelIndex = currentChannelIndex
         }
@@ -528,7 +657,7 @@ class PlayerViewModel @Inject constructor(
         playerEngine.prepare(streamInfo)
         playerEngine.play()
         
-        fetchEpg(channel.epgChannelId)
+        fetchEpg(currentProviderId, channel.epgChannelId)
         
         // Show Zap Overlay & Brief Info
         _showZapOverlay.value = true
@@ -540,7 +669,61 @@ class PlayerViewModel @Inject constructor(
         triedAlternativeStreams.add(channel.streamUrl)
         
         hideZapOverlayAfterDelay()
+        if (currentContentType == ContentType.LIVE) {
+            scheduleZapBufferWatchdog(index)
+        }
     }
+
+    private fun scheduleZapBufferWatchdog(targetIndex: Int) {
+        zapBufferWatchdogJob?.cancel()
+        zapBufferWatchdogJob = viewModelScope.launch {
+            delay(9000)
+            val stillOnTarget = currentChannelIndex == targetIndex
+            val state = playerEngine.playbackState.value
+            val stalled = state == PlaybackState.BUFFERING || state == PlaybackState.ERROR
+            if (stillOnTarget && stalled) {
+                fallbackToPreviousChannel("Channel timed out in buffering state")
+            }
+        }
+    }
+
+    private fun fallbackToPreviousChannel(reason: String) {
+        val fallbackIndex = previousChannelIndex
+        if (fallbackIndex in channelList.indices && fallbackIndex != currentChannelIndex) {
+            android.util.Log.w("PlayerVM", "Falling back to previous channel: $reason")
+            changeChannel(fallbackIndex)
+        }
+    }
+
+    private fun scheduleNumericChannelCommit() {
+        numericInputCommitJob?.cancel()
+        numericInputCommitJob = viewModelScope.launch {
+            delay(1300)
+            commitNumericChannelInput()
+        }
+    }
+
+    private fun resolveChannelByNumber(number: Int?): com.streamvault.domain.model.Channel? {
+        if (number == null) return null
+        return channelList
+            .withIndex()
+            .firstOrNull { (index, channel) -> resolveChannelNumber(channel, index) == number }
+            ?.value
+    }
+
+    private fun resolveChannelByPrefix(prefix: String): com.streamvault.domain.model.Channel? {
+        return channelList
+            .withIndex()
+            .firstOrNull { (index, channel) ->
+                resolveChannelNumber(channel, index).toString().startsWith(prefix)
+            }
+            ?.value
+    }
+
+    private fun resolveChannelNumber(
+        channel: com.streamvault.domain.model.Channel,
+        index: Int
+    ): Int = if (channel.number > 0) channel.number else index + 1
 
     fun play() = playerEngine.play()
     fun pause() = playerEngine.pause()
@@ -633,9 +816,17 @@ class PlayerViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        onPlayerScreenDisposed()
+        channelInfoHideJob?.cancel()
+        numericInputCommitJob?.cancel()
+        numericInputFeedbackJob?.cancel()
+        epgJob?.cancel()
+        playlistJob?.cancel()
         controlsHideJob?.cancel()
         zapOverlayJob?.cancel()
+        zapBufferWatchdogJob?.cancel()
         progressTrackingJob?.cancel()
+        aspectRatioJob?.cancel()
         playerEngine.release()
     }
 }

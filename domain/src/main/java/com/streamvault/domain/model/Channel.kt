@@ -21,5 +21,6 @@ data class Channel(
     val isUserProtected: Boolean = false,
     val logicalGroupId: String = "",
     val errorCount: Int = 0,
-    val alternativeStreams: List<String> = emptyList()
+    val alternativeStreams: List<String> = emptyList(),
+    val streamId: Long = 0L
 )

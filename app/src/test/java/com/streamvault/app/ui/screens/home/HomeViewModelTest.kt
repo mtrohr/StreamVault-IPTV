@@ -101,6 +101,6 @@ class HomeViewModelTest {
         
         val state = viewModel.uiState.value
         assertThat(state.selectedCategory).isEqualTo(category)
-        verify(parentalControlManager).clearUnlockedCategories()
+        verify(parentalControlManager).clearUnlockedCategories(anyOrNull())
     }
 }

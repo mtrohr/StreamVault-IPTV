@@ -18,6 +18,18 @@ sealed class SyncState {
     data class Success(val timestamp: Long = System.currentTimeMillis()) : SyncState()
 
     /**
+     * The most recent sync completed but with non-fatal degradations.
+     *
+     * @param message  Human-readable partial-sync summary.
+     * @param warnings Detailed list of failed/skipped sub-operations.
+     */
+    data class Partial(
+        val message: String,
+        val warnings: List<String> = emptyList(),
+        val timestamp: Long = System.currentTimeMillis()
+    ) : SyncState()
+
+    /**
      * The most recent sync failed.
      *
      * @param message Human-readable description of the failure.
@@ -30,4 +42,5 @@ sealed class SyncState {
     val isSyncing: Boolean get() = this is Syncing
     val isError: Boolean get() = this is Error
     val isSuccess: Boolean get() = this is Success
+    val isPartial: Boolean get() = this is Partial
 }

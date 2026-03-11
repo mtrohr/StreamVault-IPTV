@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 interface MovieRepository {
     fun getMovies(providerId: Long): Flow<List<Movie>>
     fun getMoviesByCategory(providerId: Long, categoryId: Long): Flow<List<Movie>>
+    fun getMoviesByIds(ids: List<Long>): Flow<List<Movie>>
     fun getCategories(providerId: Long): Flow<List<Category>>
     fun searchMovies(providerId: Long, query: String): Flow<List<Movie>>
     suspend fun getMovie(movieId: Long): Movie?

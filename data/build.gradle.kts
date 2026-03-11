@@ -75,4 +75,11 @@ dependencies {
     testImplementation(libs.kxml2)
     // Mocking for SyncManagerTest
     testImplementation(libs.mockito.kotlin)
+
+    // Android instrumentation tests
+    androidTestImplementation("androidx.room:room-testing:2.6.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation(libs.truth)
+    androidTestImplementation(libs.coroutines.test)
 }

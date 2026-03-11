@@ -9,7 +9,8 @@ data class Program(
     val endTime: Long = 0L,
     val lang: String = "",
     val hasArchive: Boolean = false,
-    val isNowPlaying: Boolean = false
+    val isNowPlaying: Boolean = false,
+    val providerId: Long = 0L
 ) {
     val durationMinutes: Int
         get() = ((endTime - startTime) / 60000).toInt()

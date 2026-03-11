@@ -38,6 +38,7 @@ class ProgramDaoTest {
     @Test
     fun writeProgramsAndReadInList() = runTest {
         val program = ProgramEntity(
+            providerId = 1L,
             channelId = "channel1",
             title = "Test Program",
             description = "Test Desc",
@@ -47,7 +48,7 @@ class ProgramDaoTest {
             hasArchive = false
         )
         programDao.insertAll(listOf(program))
-        val byChannel = programDao.getForChannel("channel1", 500L, 2500L).first()
+        val byChannel = programDao.getForChannel(1L, "channel1", 500L, 2500L).first()
         assertThat(byChannel).hasSize(1)
         assertThat(byChannel[0].title).isEqualTo("Test Program")
     }
@@ -55,12 +56,14 @@ class ProgramDaoTest {
     @Test
     fun deleteOldPrograms() = runTest {
         val program1 = ProgramEntity(
+            providerId = 1L,
             channelId = "channel1",
             title = "Old Program",
             startTime = 100L,
             endTime = 500L
         )
         val program2 = ProgramEntity(
+            providerId = 1L,
             channelId = "channel1",
             title = "New Program",
             startTime = 1000L,
@@ -71,7 +74,7 @@ class ProgramDaoTest {
         // Delete older than 800L
         programDao.deleteOld(800L)
         
-        val all = programDao.getForChannel("channel1", 0L, 2000L).first()
+        val all = programDao.getForChannel(1L, "channel1", 0L, 2000L).first()
         assertThat(all).hasSize(1)
         assertThat(all[0].title).isEqualTo("New Program")
     }
@@ -79,18 +82,21 @@ class ProgramDaoTest {
     @Test
     fun getNowPlayingForChannels() = runTest {
         val program1 = ProgramEntity(
+            providerId = 1L,
             channelId = "channel1",
             title = "Now Playing 1",
             startTime = 1000L,
             endTime = 2000L
         )
         val program2 = ProgramEntity(
+            providerId = 1L,
             channelId = "channel2",
             title = "Now Playing 2",
             startTime = 1500L,
             endTime = 2500L
         )
         val program3 = ProgramEntity(
+            providerId = 1L,
             channelId = "channel2",
             title = "Next Playing 2",
             startTime = 2500L,
@@ -99,12 +105,12 @@ class ProgramDaoTest {
         programDao.insertAll(listOf(program1, program2, program3))
 
         // Check around time 1600L
-        val nowPlaying = programDao.getNowPlayingForChannels(listOf("channel1", "channel2"), 1600L).first()
+        val nowPlaying = programDao.getNowPlayingForChannels(1L, listOf("channel1", "channel2"), 1600L).first()
         assertThat(nowPlaying).hasSize(2)
         assertThat(nowPlaying.map { it.title }).containsExactly("Now Playing 1", "Now Playing 2")
 
         // Check around time 2200L
-        val laterPlaying = programDao.getNowPlayingForChannels(listOf("channel1", "channel2"), 2200L).first()
+        val laterPlaying = programDao.getNowPlayingForChannels(1L, listOf("channel1", "channel2"), 2200L).first()
         assertThat(laterPlaying).hasSize(1)
         assertThat(laterPlaying[0].title).isEqualTo("Now Playing 2")
     }

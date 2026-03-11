@@ -3,10 +3,14 @@ package com.streamvault.data.repository
 import com.streamvault.data.local.dao.*
 import com.streamvault.data.local.entity.*
 import com.streamvault.data.mapper.*
+import com.streamvault.data.remote.xtream.XtreamApiService
+import com.streamvault.data.remote.xtream.XtreamProvider
+import com.streamvault.data.security.CredentialCrypto
 import com.streamvault.domain.model.*
 import com.streamvault.domain.repository.SeriesRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import com.streamvault.data.preferences.PreferencesRepository
@@ -17,6 +21,8 @@ class SeriesRepositoryImpl @Inject constructor(
     private val seriesDao: SeriesDao,
     private val episodeDao: EpisodeDao,
     private val categoryDao: CategoryDao,
+    private val providerDao: ProviderDao,
+    private val xtreamApiService: XtreamApiService,
     private val preferencesRepository: PreferencesRepository
 ) : SeriesRepository {
 
@@ -44,6 +50,9 @@ class SeriesRepositoryImpl @Inject constructor(
             }
         }.map { list: List<SeriesEntity> -> list.map { it.toDomain() } }
 
+    override fun getSeriesByIds(ids: List<Long>): Flow<List<Series>> =
+        seriesDao.getByIds(ids).map { entities -> entities.map { it.toDomain() } }
+
     override fun getCategories(providerId: Long): Flow<List<Category>> =
         combine(
             categoryDao.getByProviderAndType(providerId, ContentType.SERIES.name),
@@ -58,23 +67,141 @@ class SeriesRepositoryImpl @Inject constructor(
         }
 
     override fun searchSeries(providerId: Long, query: String): Flow<List<Series>> =
-        combine(
-            seriesDao.search(providerId, query),
-            preferencesRepository.parentalControlLevel
-        ) { entities: List<SeriesEntity>, level: Int ->
-            if (level == 2) {
-                entities.filter { !it.isUserProtected }
-            } else {
-                entities
-            }
-        }.map { list: List<SeriesEntity> -> list.map { it.toDomain() } }
+        query.toFtsPrefixQuery().let { ftsQuery ->
+            if (ftsQuery.isBlank()) {
+            flowOf(emptyList())
+            } else combine(
+                seriesDao.search(providerId, ftsQuery),
+                preferencesRepository.parentalControlLevel
+            ) { entities: List<SeriesEntity>, level: Int ->
+                if (level == 2) {
+                    entities.filter { !it.isUserProtected }
+                } else {
+                    entities
+                }
+            }.map { list: List<SeriesEntity> -> list.map { it.toDomain() } }
+        }
 
     override suspend fun getSeriesById(seriesId: Long): Series? =
         seriesDao.getById(seriesId)?.toDomain()
 
     override suspend fun getSeriesDetails(providerId: Long, seriesId: Long): Result<Series> {
-        val series = seriesDao.getById(seriesId)?.toDomain()
-        return if (series != null) Result.success(series) else Result.error("Series not found")
+        val seriesEntity = seriesDao.getById(seriesId)
+            ?: return Result.error("Series not found")
+
+        val provider = providerDao.getById(providerId)
+            ?: return Result.error("Provider not found")
+
+        // M3U and other non-Xtream providers have no standardized series-detail endpoint.
+        if (provider.type != ProviderType.XTREAM_CODES.name) {
+            return Result.success(buildSeriesWithPersistedEpisodes(seriesEntity))
+        }
+
+        val xtreamProvider = XtreamProvider(
+            providerId = providerId,
+            api = xtreamApiService,
+            serverUrl = provider.serverUrl,
+            username = provider.username,
+            password = CredentialCrypto.decryptIfNeeded(provider.password)
+        )
+
+        return when (val remoteResult = xtreamProvider.getSeriesInfo(seriesEntity.seriesId)) {
+            is Result.Success -> {
+                val remoteSeries = remoteResult.data
+
+                val updatedSeries = seriesEntity.copy(
+                    name = remoteSeries.name.ifBlank { seriesEntity.name },
+                    posterUrl = remoteSeries.posterUrl ?: seriesEntity.posterUrl,
+                    backdropUrl = remoteSeries.backdropUrl ?: seriesEntity.backdropUrl,
+                    categoryId = remoteSeries.categoryId ?: seriesEntity.categoryId,
+                    categoryName = remoteSeries.categoryName ?: seriesEntity.categoryName,
+                    plot = remoteSeries.plot ?: seriesEntity.plot,
+                    cast = remoteSeries.cast ?: seriesEntity.cast,
+                    director = remoteSeries.director ?: seriesEntity.director,
+                    genre = remoteSeries.genre ?: seriesEntity.genre,
+                    releaseDate = remoteSeries.releaseDate ?: seriesEntity.releaseDate,
+                    rating = if (remoteSeries.rating > 0f) remoteSeries.rating else seriesEntity.rating,
+                    tmdbId = remoteSeries.tmdbId ?: seriesEntity.tmdbId,
+                    youtubeTrailer = remoteSeries.youtubeTrailer ?: seriesEntity.youtubeTrailer,
+                    episodeRunTime = remoteSeries.episodeRunTime ?: seriesEntity.episodeRunTime,
+                    lastModified = if (remoteSeries.lastModified > 0) remoteSeries.lastModified else seriesEntity.lastModified
+                )
+                seriesDao.update(updatedSeries)
+
+                val episodesToPersist = remoteSeries.seasons
+                    .flatMap { season ->
+                        season.episodes.map { episode ->
+                            val remoteEpisodeId = episode.episodeId.takeIf { it > 0 } ?: episode.id
+                            episode.copy(
+                                id = 0,
+                                episodeId = remoteEpisodeId,
+                                seasonNumber = if (episode.seasonNumber > 0) episode.seasonNumber else season.seasonNumber,
+                                seriesId = seriesEntity.id,
+                                providerId = providerId
+                            ).toEntity().copy(
+                                id = 0,
+                                episodeId = remoteEpisodeId,
+                                seriesId = seriesEntity.id,
+                                providerId = providerId
+                            )
+                        }
+                    }
+
+                if (episodesToPersist.isNotEmpty()) {
+                    episodeDao.replaceAll(seriesEntity.id, providerId, episodesToPersist)
+                }
+
+                val persistedSeries = seriesDao.getById(seriesEntity.id) ?: updatedSeries
+                val persistedEpisodes = episodeDao.getBySeriesSync(seriesEntity.id).map { it.toDomain() }
+                val persistedByRemoteEpisodeId = persistedEpisodes.associateBy {
+                    it.episodeId.takeIf { remoteId -> remoteId > 0 } ?: it.id
+                }
+
+                val mergedSeasons = if (remoteSeries.seasons.isNotEmpty()) {
+                    remoteSeries.seasons
+                        .sortedBy { it.seasonNumber }
+                        .map { remoteSeason ->
+                            val mergedEpisodes = remoteSeason.episodes.map { remoteEpisode ->
+                                val remoteEpisodeId = remoteEpisode.episodeId.takeIf { it > 0 } ?: remoteEpisode.id
+                                persistedByRemoteEpisodeId[remoteEpisodeId] ?: remoteEpisode.copy(
+                                    episodeId = remoteEpisodeId,
+                                    seriesId = seriesEntity.id,
+                                    providerId = providerId
+                                )
+                            }
+                            remoteSeason.copy(
+                                episodes = mergedEpisodes,
+                                episodeCount = mergedEpisodes.size
+                            )
+                        }
+                } else {
+                    persistedEpisodes.groupBy { it.seasonNumber }
+                        .entries
+                        .sortedBy { it.key }
+                        .map { (seasonNumber, episodes) ->
+                            Season(
+                                seasonNumber = seasonNumber,
+                                name = "Season $seasonNumber",
+                                episodes = episodes,
+                                episodeCount = episodes.size
+                            )
+                        }
+                }
+
+                Result.success(
+                    persistedSeries.toDomain().copy(seasons = mergedSeasons)
+                )
+            }
+            is Result.Error -> {
+                val localSeries = buildSeriesWithPersistedEpisodes(seriesEntity)
+                if (localSeries.seasons.isNotEmpty()) {
+                    Result.success(localSeries)
+                } else {
+                    Result.error(remoteResult.message, remoteResult.exception)
+                }
+            }
+            is Result.Loading -> Result.error("Unexpected loading state")
+        }
     }
 
     override suspend fun getEpisodeStreamUrl(episode: Episode): Result<String> =
@@ -89,5 +216,30 @@ class SeriesRepositoryImpl @Inject constructor(
 
     override suspend fun updateEpisodeWatchProgress(episodeId: Long, progress: Long) {
         episodeDao.updateWatchProgress(episodeId, progress)
+    }
+
+    private suspend fun buildSeriesWithPersistedEpisodes(seriesEntity: SeriesEntity): Series {
+        val episodes = episodeDao.getBySeriesSync(seriesEntity.id).map { it.toDomain() }
+        val seasons = episodes.groupBy { it.seasonNumber }
+            .entries
+            .sortedBy { it.key }
+            .map { (seasonNumber, seasonEpisodes) ->
+                Season(
+                    seasonNumber = seasonNumber,
+                    name = "Season $seasonNumber",
+                    episodes = seasonEpisodes,
+                    episodeCount = seasonEpisodes.size
+                )
+            }
+        return seriesEntity.toDomain().copy(seasons = seasons)
+    }
+
+    private fun String.toFtsPrefixQuery(): String {
+        val tokens = trim()
+            .split(Regex("\\s+"))
+            .map { token -> token.replace(Regex("[^\\p{L}\\p{N}_]"), "") }
+            .filter { it.length >= 2 }
+
+        return tokens.joinToString(" AND ") { "$it*" }
     }
 }

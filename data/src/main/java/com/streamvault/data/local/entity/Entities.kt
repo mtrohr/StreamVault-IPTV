@@ -2,6 +2,7 @@ package com.streamvault.data.local.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Fts4
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -127,6 +128,24 @@ data class SeriesEntity(
     @ColumnInfo(name = "is_user_protected") val isUserProtected: Boolean = false
 )
 
+@Fts4(contentEntity = ChannelEntity::class)
+@Entity(tableName = "channels_fts")
+data class ChannelFtsEntity(
+    val name: String
+)
+
+@Fts4(contentEntity = MovieEntity::class)
+@Entity(tableName = "movies_fts")
+data class MovieFtsEntity(
+    val name: String
+)
+
+@Fts4(contentEntity = SeriesEntity::class)
+@Entity(tableName = "series_fts")
+data class SeriesFtsEntity(
+    val name: String
+)
+
 @Entity(
     tableName = "episodes",
     indices = [
@@ -180,14 +199,17 @@ data class CategoryEntity(
 @Entity(
     tableName = "programs",
     indices = [
-        Index(value = ["channel_id"]),
+        Index(value = ["provider_id"]),
+        Index(value = ["provider_id", "channel_id"]),
         Index(value = ["start_time"]),
-        Index(value = ["channel_id", "start_time"])
+        Index(value = ["provider_id", "channel_id", "start_time"]),
+        Index(value = ["provider_id", "channel_id", "start_time", "end_time"], unique = true)
     ]
 )
 data class ProgramEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+    @ColumnInfo(name = "provider_id") val providerId: Long = 0,
     @ColumnInfo(name = "channel_id") val channelId: String,
     val title: String,
     val description: String = "",

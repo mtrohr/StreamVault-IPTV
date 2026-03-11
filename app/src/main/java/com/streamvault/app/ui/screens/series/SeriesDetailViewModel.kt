@@ -46,8 +46,7 @@ class SeriesDetailViewModel @Inject constructor(
                 return@launch
             }
 
-            // Fetch details
-            // seriesId from navigation is likely the 'series_id' from Xtream, which fits 'seriesId' in our repo call
+            // Fetch details (repository resolves remote provider IDs internally when needed).
             val result = seriesRepository.getSeriesDetails(provider.id, seriesId)
             
             when (result) {

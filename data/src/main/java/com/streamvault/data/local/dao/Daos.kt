@@ -4,6 +4,11 @@ import androidx.room.*
 import com.streamvault.data.local.entity.*
 import kotlinx.coroutines.flow.Flow
 
+data class RemoteIdMapping(
+    @ColumnInfo(name = "id") val id: Long,
+    @ColumnInfo(name = "remote_id") val remoteId: Long
+)
+
 @Dao
 interface ProviderDao {
     @Query("SELECT * FROM providers ORDER BY created_at DESC")
@@ -48,7 +53,16 @@ interface ChannelDao {
     @Query("SELECT * FROM channels WHERE provider_id = :providerId AND category_id = :categoryId ORDER BY number ASC")
     fun getByCategory(providerId: Long, categoryId: Long): Flow<List<ChannelEntity>>
 
-    @Query("SELECT * FROM channels WHERE provider_id = :providerId AND name LIKE '%' || :query || '%' ORDER BY name ASC")
+    @Query(
+        """
+        SELECT c.* FROM channels c
+        JOIN channels_fts ON c.id = channels_fts.rowid
+        WHERE c.provider_id = :providerId
+          AND channels_fts MATCH :query
+        ORDER BY c.name ASC
+        LIMIT 300
+        """
+    )
     fun search(providerId: Long, query: String): Flow<List<ChannelEntity>>
 
     @Query("SELECT * FROM channels WHERE id = :id")
@@ -57,13 +71,20 @@ interface ChannelDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(channels: List<ChannelEntity>)
 
+    @Query("SELECT id, stream_id AS remote_id FROM channels WHERE provider_id = :providerId")
+    suspend fun getIdMappings(providerId: Long): List<RemoteIdMapping>
+
     @Query("DELETE FROM channels WHERE provider_id = :providerId")
     suspend fun deleteByProvider(providerId: Long)
 
     @Transaction
     suspend fun replaceAll(providerId: Long, channels: List<ChannelEntity>) {
+        val existingByRemoteId = getIdMappings(providerId).associate { it.remoteId to it.id }
+        val remapped = channels
+            .distinctBy { it.streamId }
+            .map { entity -> entity.copy(id = existingByRemoteId[entity.streamId] ?: 0L) }
         deleteByProvider(providerId)
-        insertAll(channels)
+        insertAll(remapped)
     }
 
     @Query("SELECT * FROM channels WHERE id IN (:ids)")
@@ -75,8 +96,8 @@ interface ChannelDao {
     @Query("SELECT COUNT(*) FROM channels WHERE provider_id = :providerId")
     fun getCount(providerId: Long): Flow<Int>
 
-    @Query("UPDATE channels SET is_user_protected = :isProtected WHERE category_id = :categoryId")
-    suspend fun updateProtectionStatus(categoryId: Long, isProtected: Boolean)
+    @Query("UPDATE channels SET is_user_protected = :isProtected WHERE provider_id = :providerId AND category_id = :categoryId")
+    suspend fun updateProtectionStatus(providerId: Long, categoryId: Long, isProtected: Boolean)
 
     @Query("UPDATE channels SET error_count = error_count + 1 WHERE id = :id")
     suspend fun incrementErrorCount(id: Long)
@@ -93,17 +114,32 @@ interface MovieDao {
     @Query("SELECT * FROM movies WHERE provider_id = :providerId AND category_id = :categoryId ORDER BY name ASC")
     fun getByCategory(providerId: Long, categoryId: Long): Flow<List<MovieEntity>>
 
-    @Query("SELECT * FROM movies WHERE provider_id = :providerId AND name LIKE '%' || :query || '%' ORDER BY name ASC")
+    @Query(
+        """
+        SELECT m.* FROM movies m
+        JOIN movies_fts ON m.id = movies_fts.rowid
+        WHERE m.provider_id = :providerId
+          AND movies_fts MATCH :query
+        ORDER BY m.name ASC
+        LIMIT 300
+        """
+    )
     fun search(providerId: Long, query: String): Flow<List<MovieEntity>>
 
     @Query("SELECT * FROM movies WHERE id = :id")
     suspend fun getById(id: Long): MovieEntity?
+
+    @Query("SELECT * FROM movies WHERE id IN (:ids)")
+    fun getByIds(ids: List<Long>): Flow<List<MovieEntity>>
 
     @Query("SELECT * FROM movies WHERE provider_id = :providerId AND stream_id = :streamId")
     suspend fun getByStreamId(providerId: Long, streamId: Long): MovieEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(movies: List<MovieEntity>)
+
+    @Query("SELECT id, stream_id AS remote_id FROM movies WHERE provider_id = :providerId")
+    suspend fun getIdMappings(providerId: Long): List<RemoteIdMapping>
 
     @Update
     suspend fun update(movie: MovieEntity)
@@ -132,8 +168,12 @@ interface MovieDao {
 
     @Transaction
     suspend fun replaceAll(providerId: Long, movies: List<MovieEntity>) {
+        val existingByRemoteId = getIdMappings(providerId).associate { it.remoteId to it.id }
+        val remapped = movies
+            .distinctBy { it.streamId }
+            .map { entity -> entity.copy(id = existingByRemoteId[entity.streamId] ?: 0L) }
         deleteByProvider(providerId)
-        insertAll(movies)
+        insertAll(remapped)
         restoreWatchProgress(providerId)
     }
 
@@ -143,8 +183,8 @@ interface MovieDao {
     @Query("SELECT COUNT(*) FROM movies WHERE provider_id = :providerId")
     fun getCount(providerId: Long): Flow<Int>
 
-    @Query("UPDATE movies SET is_user_protected = :isProtected WHERE category_id = :categoryId")
-    suspend fun updateProtectionStatus(categoryId: Long, isProtected: Boolean)
+    @Query("UPDATE movies SET is_user_protected = :isProtected WHERE provider_id = :providerId AND category_id = :categoryId")
+    suspend fun updateProtectionStatus(providerId: Long, categoryId: Long, isProtected: Boolean)
 }
 
 @Dao
@@ -155,22 +195,47 @@ interface SeriesDao {
     @Query("SELECT * FROM series WHERE provider_id = :providerId AND category_id = :categoryId ORDER BY name ASC")
     fun getByCategory(providerId: Long, categoryId: Long): Flow<List<SeriesEntity>>
 
-    @Query("SELECT * FROM series WHERE provider_id = :providerId AND name LIKE '%' || :query || '%' ORDER BY name ASC")
+    @Query(
+        """
+        SELECT s.* FROM series s
+        JOIN series_fts ON s.id = series_fts.rowid
+        WHERE s.provider_id = :providerId
+          AND series_fts MATCH :query
+        ORDER BY s.name ASC
+        LIMIT 300
+        """
+    )
     fun search(providerId: Long, query: String): Flow<List<SeriesEntity>>
 
     @Query("SELECT * FROM series WHERE id = :id")
     suspend fun getById(id: Long): SeriesEntity?
 
+    @Query("SELECT * FROM series WHERE id IN (:ids)")
+    fun getByIds(ids: List<Long>): Flow<List<SeriesEntity>>
+
+    @Query("SELECT * FROM series WHERE provider_id = :providerId AND series_id = :seriesId LIMIT 1")
+    suspend fun getBySeriesId(providerId: Long, seriesId: Long): SeriesEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(series: List<SeriesEntity>)
+
+    @Update
+    suspend fun update(series: SeriesEntity)
+
+    @Query("SELECT id, series_id AS remote_id FROM series WHERE provider_id = :providerId")
+    suspend fun getIdMappings(providerId: Long): List<RemoteIdMapping>
 
     @Query("DELETE FROM series WHERE provider_id = :providerId")
     suspend fun deleteByProvider(providerId: Long)
 
     @Transaction
     suspend fun replaceAll(providerId: Long, series: List<SeriesEntity>) {
+        val existingByRemoteId = getIdMappings(providerId).associate { it.remoteId to it.id }
+        val remapped = series
+            .distinctBy { it.seriesId }
+            .map { entity -> entity.copy(id = existingByRemoteId[entity.seriesId] ?: 0L) }
         deleteByProvider(providerId)
-        insertAll(series)
+        insertAll(remapped)
     }
 
     @Query("SELECT category_id, COUNT(*) as item_count FROM series WHERE provider_id = :providerId AND category_id IS NOT NULL GROUP BY category_id")
@@ -179,8 +244,8 @@ interface SeriesDao {
     @Query("SELECT COUNT(*) FROM series WHERE provider_id = :providerId")
     fun getCount(providerId: Long): Flow<Int>
 
-    @Query("UPDATE series SET is_user_protected = :isProtected WHERE category_id = :categoryId")
-    suspend fun updateProtectionStatus(categoryId: Long, isProtected: Boolean)
+    @Query("UPDATE series SET is_user_protected = :isProtected WHERE provider_id = :providerId AND category_id = :categoryId")
+    suspend fun updateProtectionStatus(providerId: Long, categoryId: Long, isProtected: Boolean)
 }
 
 
@@ -189,11 +254,17 @@ interface EpisodeDao {
     @Query("SELECT * FROM episodes WHERE series_id = :seriesId ORDER BY season_number ASC, episode_number ASC")
     fun getBySeries(seriesId: Long): Flow<List<EpisodeEntity>>
 
+    @Query("SELECT * FROM episodes WHERE series_id = :seriesId ORDER BY season_number ASC, episode_number ASC")
+    suspend fun getBySeriesSync(seriesId: Long): List<EpisodeEntity>
+
     @Query("SELECT * FROM episodes WHERE id = :id")
     suspend fun getById(id: Long): EpisodeEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(episodes: List<EpisodeEntity>)
+
+    @Query("SELECT id, episode_id AS remote_id FROM episodes WHERE provider_id = :providerId AND series_id = :seriesId")
+    suspend fun getIdMappings(providerId: Long, seriesId: Long): List<RemoteIdMapping>
 
     @Query("UPDATE episodes SET watch_progress = :progress, last_watched_at = :timestamp WHERE id = :id")
     suspend fun updateWatchProgress(id: Long, progress: Long, timestamp: Long = System.currentTimeMillis())
@@ -218,9 +289,13 @@ interface EpisodeDao {
     suspend fun restoreWatchProgress(seriesId: Long)
 
     @Transaction
-    suspend fun replaceAll(seriesId: Long, episodes: List<EpisodeEntity>) {
+    suspend fun replaceAll(seriesId: Long, providerId: Long, episodes: List<EpisodeEntity>) {
+        val existingByRemoteId = getIdMappings(providerId, seriesId).associate { it.remoteId to it.id }
+        val remapped = episodes
+            .distinctBy { it.episodeId }
+            .map { entity -> entity.copy(id = existingByRemoteId[entity.episodeId] ?: 0L) }
         deleteBySeries(seriesId)
-        insertAll(episodes)
+        insertAll(remapped)
         restoreWatchProgress(seriesId)
     }
 }
@@ -242,20 +317,20 @@ interface CategoryDao {
         insertAll(categories)
     }
 
-    @Query("UPDATE categories SET is_user_protected = :isProtected WHERE category_id = :categoryId")
-    suspend fun updateProtectionStatus(categoryId: Long, isProtected: Boolean)
+    @Query("UPDATE categories SET is_user_protected = :isProtected WHERE provider_id = :providerId AND category_id = :categoryId AND type = :type")
+    suspend fun updateProtectionStatus(providerId: Long, categoryId: Long, type: String, isProtected: Boolean)
 }
 
 @Dao
 interface ProgramDao {
-    @Query("SELECT * FROM programs WHERE channel_id = :channelId AND start_time >= :startTime AND end_time <= :endTime ORDER BY start_time ASC")
-    fun getForChannel(channelId: String, startTime: Long, endTime: Long): Flow<List<ProgramEntity>>
+    @Query("SELECT * FROM programs WHERE provider_id = :providerId AND channel_id = :channelId AND start_time >= :startTime AND end_time <= :endTime ORDER BY start_time ASC")
+    fun getForChannel(providerId: Long, channelId: String, startTime: Long, endTime: Long): Flow<List<ProgramEntity>>
 
-    @Query("SELECT * FROM programs WHERE channel_id = :channelId AND start_time <= :now AND end_time > :now LIMIT 1")
-    fun getNowPlaying(channelId: String, now: Long = System.currentTimeMillis()): Flow<ProgramEntity?>
+    @Query("SELECT * FROM programs WHERE provider_id = :providerId AND channel_id = :channelId AND start_time <= :now AND end_time > :now LIMIT 1")
+    fun getNowPlaying(providerId: Long, channelId: String, now: Long = System.currentTimeMillis()): Flow<ProgramEntity?>
 
-    @Query("SELECT * FROM programs WHERE channel_id IN (:channelIds) AND start_time <= :now AND end_time > :now")
-    fun getNowPlayingForChannels(channelIds: List<String>, now: Long = System.currentTimeMillis()): Flow<List<ProgramEntity>>
+    @Query("SELECT * FROM programs WHERE provider_id = :providerId AND channel_id IN (:channelIds) AND start_time <= :now AND end_time > :now")
+    fun getNowPlayingForChannels(providerId: Long, channelIds: List<String>, now: Long = System.currentTimeMillis()): Flow<List<ProgramEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(programs: List<ProgramEntity>)
@@ -263,8 +338,11 @@ interface ProgramDao {
     @Query("DELETE FROM programs WHERE end_time < :beforeTime")
     suspend fun deleteOld(beforeTime: Long)
 
-    @Query("DELETE FROM programs WHERE channel_id = :channelId")
-    suspend fun deleteForChannel(channelId: String)
+    @Query("DELETE FROM programs WHERE provider_id = :providerId")
+    suspend fun deleteByProvider(providerId: Long)
+
+    @Query("DELETE FROM programs WHERE provider_id = :providerId AND channel_id = :channelId")
+    suspend fun deleteForChannel(providerId: Long, channelId: String)
 }
 
 @Dao

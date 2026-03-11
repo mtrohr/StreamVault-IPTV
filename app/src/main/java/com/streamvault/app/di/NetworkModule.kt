@@ -1,6 +1,7 @@
 package com.streamvault.app.di
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import com.streamvault.data.remote.xtream.XtreamApiService
 import com.streamvault.data.parser.XmltvParser
 import com.streamvault.player.Media3PlayerEngine
@@ -25,14 +26,23 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient =
-        OkHttpClient.Builder()
+    fun provideOkHttpClient(
+        @ApplicationContext context: Context
+    ): OkHttpClient {
+        val isDebuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        val loggingLevel = if (isDebuggable) {
+            HttpLoggingInterceptor.Level.BASIC
+        } else {
+            HttpLoggingInterceptor.Level.NONE
+        }
+
+        return OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .addInterceptor(
                 HttpLoggingInterceptor().apply {
-                    level = HttpLoggingInterceptor.Level.BASIC
+                    level = loggingLevel
                 }
             )
             .followRedirects(true)
@@ -43,6 +53,7 @@ object NetworkModule {
                 maxRequestsPerHost = 10 // Increase host limit for Multi-View
             })
             .build()
+    }
 
     @Provides
     @Singleton

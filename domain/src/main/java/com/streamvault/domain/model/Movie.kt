@@ -25,5 +25,6 @@ data class Movie(
     val watchProgress: Long = 0L,
     val lastWatchedAt: Long = 0L,
     val isAdult: Boolean = false,
-    val isUserProtected: Boolean = false
+    val isUserProtected: Boolean = false,
+    val streamId: Long = 0L
 )

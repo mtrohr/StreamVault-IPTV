@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.streamvault.app.ui.components.SearchInput
@@ -260,8 +261,61 @@ fun HomeScreen(
                     }
                 }
             } else {
-                val context = androidx.compose.ui.platform.LocalContext.current
-                
+                val channelSearchFocusRequester = remember { FocusRequester() }
+                val categoryFocusRequesters = remember { mutableMapOf<Long, FocusRequester>() }
+                val channelFocusRequesters = remember { mutableMapOf<Long, FocusRequester>() }
+                var lastFocusedCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
+                var lastFocusedChannelId by rememberSaveable { mutableStateOf<Long?>(null) }
+                var shouldRestoreCategoryFocus by remember { mutableStateOf(false) }
+                var shouldRestoreChannelFocus by remember { mutableStateOf(false) }
+
+                LaunchedEffect(
+                    uiState.showDialog,
+                    showPinDialog,
+                    uiState.showDeleteGroupDialog,
+                    uiState.selectedCategoryForOptions
+                ) {
+                    val modalClosed =
+                        !uiState.showDialog &&
+                        !showPinDialog &&
+                        !uiState.showDeleteGroupDialog &&
+                        uiState.selectedCategoryForOptions == null
+
+                    if (!modalClosed) return@LaunchedEffect
+
+                    val canRestoreChannel = lastFocusedChannelId != null &&
+                        uiState.filteredChannels.any { it.id == lastFocusedChannelId }
+                    val canRestoreCategory = lastFocusedCategoryId != null &&
+                        uiState.categories.any { it.id == lastFocusedCategoryId }
+
+                    shouldRestoreChannelFocus = canRestoreChannel
+                    shouldRestoreCategoryFocus = !canRestoreChannel && canRestoreCategory
+                }
+
+                LaunchedEffect(shouldRestoreChannelFocus, uiState.filteredChannels) {
+                    if (!shouldRestoreChannelFocus) return@LaunchedEffect
+                    kotlinx.coroutines.delay(80)
+                    val channelId = lastFocusedChannelId
+                    val restored = channelId != null && runCatching {
+                        channelFocusRequesters[channelId]?.requestFocus()
+                    }.isSuccess
+                    if (!restored) {
+                        val fallbackId = uiState.filteredChannels.firstOrNull()?.id
+                        fallbackId?.let { channelFocusRequesters[it]?.requestFocus() }
+                    }
+                    shouldRestoreChannelFocus = false
+                }
+
+                LaunchedEffect(shouldRestoreCategoryFocus, uiState.categories) {
+                    if (!shouldRestoreCategoryFocus) return@LaunchedEffect
+                    kotlinx.coroutines.delay(80)
+                    val categoryId = lastFocusedCategoryId
+                    if (categoryId != null) {
+                        runCatching { categoryFocusRequesters[categoryId]?.requestFocus() }
+                    }
+                    shouldRestoreCategoryFocus = false
+                }
+
                 Row(modifier = Modifier.fillMaxSize()) {
                     // Sidebar - Categories
                     val categorySearchFocusRequester = remember { FocusRequester() }
@@ -360,11 +414,13 @@ fun HomeScreen(
                             key = { it.id }
                         ) { category ->
                             val isLocked = (category.isAdult || category.isUserProtected) && uiState.parentalControlLevel == 1
+                            val categoryFocusRequester = categoryFocusRequesters.getOrPut(category.id) { FocusRequester() }
 
                             CategoryItem(
                                 category = category,
                                 isSelected = category.id == uiState.selectedCategory?.id,
                                 isLocked = isLocked,
+                                focusRequester = categoryFocusRequester,
                                 onClick = {
                                     if (isLocked) {
                                         pendingUnlockCategory = category
@@ -374,7 +430,18 @@ fun HomeScreen(
                                     }
                                 },
                                 onLongClick = { viewModel.showCategoryOptions(category) },
-                                onJumpToSearch = { categorySearchFocusRequester.requestFocus() }
+                                onJumpToSearch = { categorySearchFocusRequester.requestFocus() },
+                                onJumpToContent = {
+                                    if (uiState.filteredChannels.isNotEmpty()) {
+                                        val preferredChannelId = lastFocusedChannelId
+                                            ?.takeIf { channelId -> uiState.filteredChannels.any { it.id == channelId } }
+                                            ?: uiState.filteredChannels.first().id
+                                        channelFocusRequesters[preferredChannelId]?.requestFocus()
+                                    } else {
+                                        channelSearchFocusRequester.requestFocus()
+                                    }
+                                },
+                                onFocused = { lastFocusedCategoryId = category.id }
                             )
                         }
                     }
@@ -404,6 +471,7 @@ fun HomeScreen(
                                 onValueChange = { viewModel.updateChannelSearchQuery(it) },
                                 placeholder = stringResource(R.string.home_search_channels),
                                 onSearch = { focusManager.clearFocus() },
+                                focusRequester = channelSearchFocusRequester,
                                 modifier = Modifier.width(300.dp)
                             )
                         }
@@ -507,6 +575,7 @@ fun HomeScreen(
                                 ) { channel ->
                                     val isLocked = (channel.isAdult || channel.isUserProtected || (uiState.selectedCategory?.isUserProtected ?: false)) && uiState.parentalControlLevel == 1
                                     val isDraggingThis = draggingChannel == channel
+                                    val channelFocusRequester = channelFocusRequesters.getOrPut(channel.id) { FocusRequester() }
                                     
                                     ChannelCard(
                                         channel = channel,
@@ -536,6 +605,12 @@ fun HomeScreen(
                                         },
                                         modifier = Modifier
                                             .aspectRatio(16f/9f)
+                                            .focusRequester(channelFocusRequester)
+                                            .onFocusChanged { focusState ->
+                                                if (focusState.isFocused) {
+                                                    lastFocusedChannelId = channel.id
+                                                }
+                                            }
                                             .onPreviewKeyEvent { event ->
                                                 if (uiState.isChannelReorderMode && isDraggingThis && event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN) {
                                                     // Consume D-pad to move item instead of changing focus
@@ -634,9 +709,12 @@ private fun CategoryItem(
     category: Category,
     isSelected: Boolean,
     isLocked: Boolean = false,
+    focusRequester: FocusRequester,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
-    onJumpToSearch: () -> Unit
+    onJumpToSearch: () -> Unit,
+    onJumpToContent: () -> Unit,
+    onFocused: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
     
@@ -646,13 +724,24 @@ private fun CategoryItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .onFocusChanged { isFocused = it.isFocused }
+            .focusRequester(focusRequester)
+            .onFocusChanged {
+                isFocused = it.isFocused
+                if (it.isFocused) onFocused()
+            }
             .onPreviewKeyEvent { event ->
                 if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN) {
-                    if (event.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT) {
-                        onJumpToSearch()
-                        true
-                    } else false
+                    when (event.nativeKeyEvent.keyCode) {
+                        android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                            onJumpToSearch()
+                            true
+                        }
+                        android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            onJumpToContent()
+                            true
+                        }
+                        else -> false
+                    }
                 } else false
             },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),

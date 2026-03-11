@@ -58,12 +58,13 @@ fun ChannelEntity.toDomain() = Channel(
     isAdult = isAdult,
     isUserProtected = isUserProtected,
     logicalGroupId = logicalGroupId,
-    errorCount = errorCount
+    errorCount = errorCount,
+    streamId = streamId
 )
 
 fun Channel.toEntity() = ChannelEntity(
     id = id,
-    streamId = id,
+    streamId = streamId.takeIf { it > 0 } ?: id,
     name = name,
     logoUrl = logoUrl,
     groupTitle = groupTitle,
@@ -108,12 +109,13 @@ fun MovieEntity.toDomain() = Movie(
     watchProgress = watchProgress,
     lastWatchedAt = lastWatchedAt,
     isAdult = isAdult,
-    isUserProtected = isUserProtected
+    isUserProtected = isUserProtected,
+    streamId = streamId
 )
 
 fun Movie.toEntity() = MovieEntity(
     id = id,
-    streamId = id,
+    streamId = streamId.takeIf { it > 0 } ?: id,
     name = name,
     posterUrl = posterUrl,
     backdropUrl = backdropUrl,
@@ -160,12 +162,13 @@ fun SeriesEntity.toDomain() = Series(
     lastModified = lastModified,
     providerId = providerId,
     isAdult = isAdult,
-    isUserProtected = isUserProtected
+    isUserProtected = isUserProtected,
+    seriesId = seriesId
 )
 
 fun Series.toEntity() = SeriesEntity(
     id = id,
-    seriesId = id,
+    seriesId = seriesId.takeIf { it > 0 } ?: id,
     name = name,
     posterUrl = posterUrl,
     backdropUrl = backdropUrl,
@@ -206,12 +209,13 @@ fun EpisodeEntity.toDomain() = Episode(
     watchProgress = watchProgress,
     lastWatchedAt = lastWatchedAt,
     isAdult = isAdult,
-    isUserProtected = isUserProtected
+    isUserProtected = isUserProtected,
+    episodeId = episodeId
 )
 
 fun Episode.toEntity() = EpisodeEntity(
     id = id,
-    episodeId = id,
+    episodeId = episodeId.takeIf { it > 0 } ?: id,
     title = title,
     episodeNumber = episodeNumber,
     seasonNumber = seasonNumber,
@@ -262,18 +266,20 @@ fun ProgramEntity.toDomain() = Program(
     startTime = startTime,
     endTime = endTime,
     lang = lang,
-    hasArchive = hasArchive
+    hasArchive = hasArchive,
+    providerId = providerId
 )
 
 fun Program.toEntity() = ProgramEntity(
-    id = id,
+    id = 0,
     channelId = channelId,
     title = title,
     description = description,
     startTime = startTime,
     endTime = endTime,
     lang = lang,
-    hasArchive = hasArchive
+    hasArchive = hasArchive,
+    providerId = providerId
 )
 
 // ── Favorite ───────────────────────────────────────────────────────

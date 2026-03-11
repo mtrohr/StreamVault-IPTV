@@ -17,10 +17,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.streamvault.app.ui.components.TopNavBar
 import com.streamvault.domain.model.Category
+import com.streamvault.domain.model.ContentType
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
 
@@ -135,7 +137,7 @@ fun ParentalControlGroupScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(uiState.categories, key = { it.id }) { category ->
+                items(uiState.categories, key = { "${it.type.name}:${it.id}" }) { category ->
                     CategoryProtectionCard(
                         category = category,
                         onToggle = { viewModel.toggleCategoryProtection(category) }
@@ -161,8 +163,6 @@ fun CategoryProtectionCard(
     
     val borderColor = if (isFocused) MaterialTheme.colorScheme.primary else Color.Transparent
     val borderWidth = if (isFocused) 2.dp else 0.dp
-    val backgroundColor = if (isFocused) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant
-
     Surface(
         onClick = { 
             if (!category.isAdult) {
@@ -196,22 +196,28 @@ fun CategoryProtectionCard(
                     .weight(1f)
                     .padding(end = 16.dp)
             ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    TypeBadge(type = category.type)
+                    if (category.isAdult) {
+                        Text(
+                            text = stringResource(R.string.parental_group_auto_protected),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
                 Text(
                     text = category.name,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis
                 )
-                if (category.isAdult) {
-                    Text(
-                        text = stringResource(R.string.parental_group_auto_protected),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
-                }
             }
 
             androidx.compose.material3.Switch(
@@ -231,5 +237,28 @@ fun CategoryProtectionCard(
                 )
             )
         }
+    }
+}
+
+@Composable
+private fun TypeBadge(type: ContentType) {
+    val label = when (type) {
+        ContentType.LIVE -> "Live"
+        ContentType.MOVIE -> "Movies"
+        ContentType.SERIES -> "Series"
+        ContentType.SERIES_EPISODE -> "Episodes"
+    }
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        colors = SurfaceDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        )
     }
 }

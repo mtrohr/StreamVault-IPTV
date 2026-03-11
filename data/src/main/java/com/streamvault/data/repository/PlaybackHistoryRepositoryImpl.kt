@@ -30,11 +30,11 @@ class PlaybackHistoryRepositoryImpl @Inject constructor(
 
     override suspend fun updateResumePosition(history: PlaybackHistory) {
         val existing = dao.get(history.contentId, history.contentType.name, history.providerId)
-        val watchCount = existing?.watchCount ?: 0
-        
-        // If the item exists and the watch is fresh, maybe bump watch count, but for now just use max 1 or explicit watch_count
+
+        // Resume ticks should not increment watch count on every update.
+        // Keep existing count for ongoing sessions; initialize to 1 on first save.
         val updatedHistory = history.copy(
-            watchCount = if (existing == null) 1 else existing.watchCount + 1,
+            watchCount = existing?.watchCount ?: 1,
             lastWatchedAt = System.currentTimeMillis()
         )
         dao.insertOrUpdate(updatedHistory.toEntity())

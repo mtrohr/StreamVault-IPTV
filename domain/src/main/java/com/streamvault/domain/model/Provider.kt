@@ -24,6 +24,7 @@ enum class ProviderType {
 
 enum class ProviderStatus {
     ACTIVE,
+    PARTIAL,
     EXPIRED,
     DISABLED,
     ERROR,

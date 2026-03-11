@@ -12,6 +12,7 @@ import com.streamvault.domain.model.Result
 import com.streamvault.domain.repository.MovieRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import com.streamvault.data.preferences.PreferencesRepository
@@ -48,6 +49,9 @@ class MovieRepositoryImpl @Inject constructor(
             }
         }.map { list -> list.map { it.toDomain() } }
 
+    override fun getMoviesByIds(ids: List<Long>): Flow<List<Movie>> =
+        movieDao.getByIds(ids).map { entities -> entities.map { it.toDomain() } }
+
     override fun getCategories(providerId: Long): Flow<List<Category>> =
         combine(
             categoryDao.getByProviderAndType(providerId, ContentType.MOVIE.name),
@@ -62,16 +66,20 @@ class MovieRepositoryImpl @Inject constructor(
         }
 
     override fun searchMovies(providerId: Long, query: String): Flow<List<Movie>> =
-        combine(
-            movieDao.search(providerId, query),
-            preferencesRepository.parentalControlLevel
-        ) { entities: List<MovieEntity>, level: Int ->
-            if (level == 2) {
-                entities.filter { !it.isUserProtected }
-            } else {
-                entities
-            }
-        }.map { list -> list.map { it.toDomain() } }
+        query.toFtsPrefixQuery().let { ftsQuery ->
+            if (ftsQuery.isBlank()) {
+            flowOf(emptyList())
+            } else combine(
+                movieDao.search(providerId, ftsQuery),
+                preferencesRepository.parentalControlLevel
+            ) { entities: List<MovieEntity>, level: Int ->
+                if (level == 2) {
+                    entities.filter { !it.isUserProtected }
+                } else {
+                    entities
+                }
+            }.map { list -> list.map { it.toDomain() } }
+        }
 
     override suspend fun getMovie(movieId: Long): Movie? =
         movieDao.getById(movieId)?.toDomain()
@@ -93,5 +101,14 @@ class MovieRepositoryImpl @Inject constructor(
 
     override suspend fun updateWatchProgress(movieId: Long, progress: Long) {
         movieDao.updateWatchProgress(movieId, progress)
+    }
+
+    private fun String.toFtsPrefixQuery(): String {
+        val tokens = trim()
+            .split(Regex("\\s+"))
+            .map { token -> token.replace(Regex("[^\\p{L}\\p{N}_]"), "") }
+            .filter { it.length >= 2 }
+
+        return tokens.joinToString(" AND ") { "$it*" }
     }
 }

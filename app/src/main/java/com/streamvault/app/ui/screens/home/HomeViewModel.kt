@@ -15,12 +15,14 @@ import com.streamvault.domain.repository.FavoriteRepository
 import com.streamvault.domain.repository.ProviderRepository
 import com.streamvault.domain.usecase.GetCustomCategories
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModel @Inject constructor(
     private val providerRepository: ProviderRepository,
     private val channelRepository: ChannelRepository,
@@ -141,7 +143,7 @@ class HomeViewModel @Inject constructor(
 
     fun selectCategory(category: Category) {
         if (_uiState.value.selectedCategory?.id == category.id) return
-        parentalControlManager.clearUnlockedCategories()
+        parentalControlManager.clearUnlockedCategories(_uiState.value.provider?.id)
         _uiState.update { it.copy(selectedCategory = category, isLoading = true) }
         loadChannelsForCategory(category)
     }
@@ -194,11 +196,12 @@ class HomeViewModel @Inject constructor(
 
     private fun fetchEpgForChannels(channels: List<Channel>) {
         epgJob?.cancel()
+        val providerId = _uiState.value.provider?.id ?: return
         val epgIds = channels.mapNotNull { it.epgChannelId }.distinct()
 
         epgJob = viewModelScope.launch {
             val programMap = if (epgIds.isNotEmpty()) {
-                epgRepository.getNowPlayingForChannels(epgIds).firstOrNull() ?: emptyMap()
+                epgRepository.getNowPlayingForChannels(providerId, epgIds).firstOrNull() ?: emptyMap()
             } else {
                 emptyMap()
             }
@@ -349,7 +352,7 @@ class HomeViewModel @Inject constructor(
         val provider = _uiState.value.provider ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            providerRepository.refreshProviderData(provider.id)
+            providerRepository.refreshProviderData(provider.id, force = true)
             _uiState.update { it.copy(isLoading = false) }
         }
     }
@@ -367,12 +370,12 @@ class HomeViewModel @Inject constructor(
     }
 
     suspend fun verifyPin(pin: String): Boolean {
-        val storedPin = preferencesRepository.parentalPin.firstOrNull() ?: "0000"
-        return pin == storedPin
+        return preferencesRepository.verifyParentalPin(pin)
     }
 
     fun unlockCategory(category: Category) {
-        parentalControlManager.unlockCategory(category.id)
+        val providerId = _uiState.value.provider?.id ?: return
+        parentalControlManager.unlockCategory(providerId, category.id)
     }
 
     fun setDefaultCategory(category: Category) {
@@ -383,9 +386,10 @@ class HomeViewModel @Inject constructor(
     }
 
     fun toggleCategoryLock(category: Category) {
+        val providerId = _uiState.value.provider?.id ?: return
         viewModelScope.launch {
             val newStatus = !category.isUserProtected
-            categoryRepository.setCategoryProtection(category.id, newStatus)
+            categoryRepository.setCategoryProtection(providerId, category.id, category.type, newStatus)
             val msg = if (newStatus) "Locked '${category.name}'" else "Unlocked '${category.name}'"
             _uiState.update { it.copy(userMessage = msg) }
         }

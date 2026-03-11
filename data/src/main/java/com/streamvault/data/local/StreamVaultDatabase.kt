@@ -11,8 +11,11 @@ import com.streamvault.data.local.entity.*
     entities = [
         ProviderEntity::class,
         ChannelEntity::class,
+        ChannelFtsEntity::class,
         MovieEntity::class,
+        MovieFtsEntity::class,
         SeriesEntity::class,
+        SeriesFtsEntity::class,
         EpisodeEntity::class,
         CategoryEntity::class,
         ProgramEntity::class,
@@ -21,7 +24,7 @@ import com.streamvault.data.local.entity.*
         PlaybackHistoryEntity::class,
         SyncMetadataEntity::class
     ],
-    version = 7,
+    version = 10,
     exportSchema = true   // ← was false; schema JSON now tracked in version control
 )
 abstract class StreamVaultDatabase : RoomDatabase() {
@@ -143,6 +146,427 @@ abstract class StreamVaultDatabase : RoomDatabase() {
                 database.execSQL("ALTER TABLE channels ADD COLUMN logical_group_id TEXT NOT NULL DEFAULT ''")
                 database.execSQL("ALTER TABLE channels ADD COLUMN error_count INTEGER NOT NULL DEFAULT 0")
                 database.execSQL("CREATE INDEX IF NOT EXISTS index_channels_logical_group_id ON channels(logical_group_id)")
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE programs ADD COLUMN provider_id INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("DROP INDEX IF EXISTS index_programs_channel_id")
+                database.execSQL("DROP INDEX IF EXISTS index_programs_channel_id_start_time")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_programs_provider_id ON programs(provider_id)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_programs_provider_id_channel_id ON programs(provider_id, channel_id)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_programs_provider_id_channel_id_start_time ON programs(provider_id, channel_id, start_time)")
+                database.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS index_programs_provider_id_channel_id_start_time_end_time " +
+                        "ON programs(provider_id, channel_id, start_time, end_time)"
+                )
+            }
+        }
+
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Rebuild media tables to normalize legacy local IDs and keep only provider-scoped remote IDs as remote keys.
+                // This preserves user-facing references by remapping favorites/history through temporary ID maps.
+
+                // Channels
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS channels_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        stream_id INTEGER NOT NULL,
+                        name TEXT NOT NULL,
+                        logo_url TEXT,
+                        group_title TEXT,
+                        category_id INTEGER,
+                        category_name TEXT,
+                        stream_url TEXT NOT NULL,
+                        epg_channel_id TEXT,
+                        number INTEGER NOT NULL,
+                        catch_up_supported INTEGER NOT NULL,
+                        catch_up_days INTEGER NOT NULL,
+                        catchUpSource TEXT,
+                        provider_id INTEGER NOT NULL,
+                        is_adult INTEGER NOT NULL,
+                        is_user_protected INTEGER NOT NULL,
+                        logical_group_id TEXT NOT NULL,
+                        error_count INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    INSERT INTO channels_new (
+                        stream_id, name, logo_url, group_title, category_id, category_name, stream_url,
+                        epg_channel_id, number, catch_up_supported, catch_up_days, catchUpSource,
+                        provider_id, is_adult, is_user_protected, logical_group_id, error_count
+                    )
+                    SELECT
+                        stream_id, name, logo_url, group_title, category_id, category_name, stream_url,
+                        epg_channel_id, number, catch_up_supported, catch_up_days, catchUpSource,
+                        provider_id, is_adult, is_user_protected, logical_group_id, error_count
+                    FROM channels
+                    """.trimIndent()
+                )
+                database.execSQL("CREATE TEMP TABLE channel_id_map(old_id INTEGER PRIMARY KEY NOT NULL, new_id INTEGER NOT NULL)")
+                database.execSQL(
+                    """
+                    INSERT INTO channel_id_map(old_id, new_id)
+                    SELECT old.id, new.id
+                    FROM channels old
+                    JOIN channels_new new
+                      ON new.provider_id = old.provider_id
+                     AND new.stream_id = old.stream_id
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    UPDATE favorites
+                    SET content_id = (SELECT new_id FROM channel_id_map WHERE old_id = content_id)
+                    WHERE content_type = 'LIVE'
+                      AND content_id IN (SELECT old_id FROM channel_id_map)
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    UPDATE playback_history
+                    SET content_id = (SELECT new_id FROM channel_id_map WHERE old_id = content_id)
+                    WHERE content_type = 'LIVE'
+                      AND content_id IN (SELECT old_id FROM channel_id_map)
+                    """.trimIndent()
+                )
+                database.execSQL("DROP TABLE channels")
+                database.execSQL("ALTER TABLE channels_new RENAME TO channels")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_channels_provider_id ON channels(provider_id)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_channels_provider_id_category_id ON channels(provider_id, category_id)")
+                database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_channels_provider_id_stream_id ON channels(provider_id, stream_id)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_channels_logical_group_id ON channels(logical_group_id)")
+                database.execSQL("DROP TABLE channel_id_map")
+
+                // Movies
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS movies_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        stream_id INTEGER NOT NULL,
+                        name TEXT NOT NULL,
+                        poster_url TEXT,
+                        backdrop_url TEXT,
+                        category_id INTEGER,
+                        category_name TEXT,
+                        stream_url TEXT NOT NULL,
+                        container_extension TEXT,
+                        plot TEXT,
+                        cast TEXT,
+                        director TEXT,
+                        genre TEXT,
+                        release_date TEXT,
+                        duration TEXT,
+                        duration_seconds INTEGER NOT NULL,
+                        rating REAL NOT NULL,
+                        year TEXT,
+                        tmdb_id INTEGER,
+                        youtube_trailer TEXT,
+                        provider_id INTEGER NOT NULL,
+                        watch_progress INTEGER NOT NULL,
+                        last_watched_at INTEGER NOT NULL,
+                        is_adult INTEGER NOT NULL,
+                        is_user_protected INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    INSERT INTO movies_new (
+                        stream_id, name, poster_url, backdrop_url, category_id, category_name, stream_url,
+                        container_extension, plot, cast, director, genre, release_date, duration, duration_seconds,
+                        rating, year, tmdb_id, youtube_trailer, provider_id, watch_progress, last_watched_at,
+                        is_adult, is_user_protected
+                    )
+                    SELECT
+                        stream_id, name, poster_url, backdrop_url, category_id, category_name, stream_url,
+                        container_extension, plot, cast, director, genre, release_date, duration, duration_seconds,
+                        rating, year, tmdb_id, youtube_trailer, provider_id, watch_progress, last_watched_at,
+                        is_adult, is_user_protected
+                    FROM movies
+                    """.trimIndent()
+                )
+                database.execSQL("CREATE TEMP TABLE movie_id_map(old_id INTEGER PRIMARY KEY NOT NULL, new_id INTEGER NOT NULL)")
+                database.execSQL(
+                    """
+                    INSERT INTO movie_id_map(old_id, new_id)
+                    SELECT old.id, new.id
+                    FROM movies old
+                    JOIN movies_new new
+                      ON new.provider_id = old.provider_id
+                     AND new.stream_id = old.stream_id
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    UPDATE favorites
+                    SET content_id = (SELECT new_id FROM movie_id_map WHERE old_id = content_id)
+                    WHERE content_type = 'MOVIE'
+                      AND content_id IN (SELECT old_id FROM movie_id_map)
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    UPDATE playback_history
+                    SET content_id = (SELECT new_id FROM movie_id_map WHERE old_id = content_id)
+                    WHERE content_type = 'MOVIE'
+                      AND content_id IN (SELECT old_id FROM movie_id_map)
+                    """.trimIndent()
+                )
+                database.execSQL("DROP TABLE movies")
+                database.execSQL("ALTER TABLE movies_new RENAME TO movies")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_movies_provider_id ON movies(provider_id)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_movies_provider_id_category_id ON movies(provider_id, category_id)")
+                database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_movies_provider_id_stream_id ON movies(provider_id, stream_id)")
+                database.execSQL("DROP TABLE movie_id_map")
+
+                // Series
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS series_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        series_id INTEGER NOT NULL,
+                        name TEXT NOT NULL,
+                        poster_url TEXT,
+                        backdrop_url TEXT,
+                        category_id INTEGER,
+                        category_name TEXT,
+                        plot TEXT,
+                        cast TEXT,
+                        director TEXT,
+                        genre TEXT,
+                        release_date TEXT,
+                        rating REAL NOT NULL,
+                        tmdb_id INTEGER,
+                        youtube_trailer TEXT,
+                        episode_run_time TEXT,
+                        last_modified INTEGER NOT NULL,
+                        provider_id INTEGER NOT NULL,
+                        is_adult INTEGER NOT NULL,
+                        is_user_protected INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    INSERT INTO series_new (
+                        series_id, name, poster_url, backdrop_url, category_id, category_name, plot, cast,
+                        director, genre, release_date, rating, tmdb_id, youtube_trailer, episode_run_time,
+                        last_modified, provider_id, is_adult, is_user_protected
+                    )
+                    SELECT
+                        series_id, name, poster_url, backdrop_url, category_id, category_name, plot, cast,
+                        director, genre, release_date, rating, tmdb_id, youtube_trailer, episode_run_time,
+                        last_modified, provider_id, is_adult, is_user_protected
+                    FROM series
+                    """.trimIndent()
+                )
+                database.execSQL("CREATE TEMP TABLE series_id_map(old_id INTEGER PRIMARY KEY NOT NULL, new_id INTEGER NOT NULL)")
+                database.execSQL(
+                    """
+                    INSERT INTO series_id_map(old_id, new_id)
+                    SELECT old.id, new.id
+                    FROM series old
+                    JOIN series_new new
+                      ON new.provider_id = old.provider_id
+                     AND new.series_id = old.series_id
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    UPDATE favorites
+                    SET content_id = (SELECT new_id FROM series_id_map WHERE old_id = content_id)
+                    WHERE content_type = 'SERIES'
+                      AND content_id IN (SELECT old_id FROM series_id_map)
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    UPDATE playback_history
+                    SET content_id = (SELECT new_id FROM series_id_map WHERE old_id = content_id)
+                    WHERE content_type = 'SERIES'
+                      AND content_id IN (SELECT old_id FROM series_id_map)
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    UPDATE playback_history
+                    SET series_id = (SELECT new_id FROM series_id_map WHERE old_id = series_id)
+                    WHERE series_id IS NOT NULL
+                      AND series_id IN (SELECT old_id FROM series_id_map)
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    UPDATE episodes
+                    SET series_id = (SELECT new_id FROM series_id_map WHERE old_id = series_id)
+                    WHERE series_id IN (SELECT old_id FROM series_id_map)
+                    """.trimIndent()
+                )
+                database.execSQL("DROP TABLE series")
+                database.execSQL("ALTER TABLE series_new RENAME TO series")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_series_provider_id ON series(provider_id)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_series_provider_id_category_id ON series(provider_id, category_id)")
+                database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_series_provider_id_series_id ON series(provider_id, series_id)")
+                database.execSQL("DROP TABLE series_id_map")
+
+                // Episodes
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS episodes_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        episode_id INTEGER NOT NULL,
+                        title TEXT NOT NULL,
+                        episode_number INTEGER NOT NULL,
+                        season_number INTEGER NOT NULL,
+                        stream_url TEXT NOT NULL,
+                        container_extension TEXT,
+                        cover_url TEXT,
+                        plot TEXT,
+                        duration TEXT,
+                        duration_seconds INTEGER NOT NULL,
+                        rating REAL NOT NULL,
+                        release_date TEXT,
+                        series_id INTEGER NOT NULL,
+                        provider_id INTEGER NOT NULL,
+                        watch_progress INTEGER NOT NULL,
+                        last_watched_at INTEGER NOT NULL,
+                        is_adult INTEGER NOT NULL,
+                        is_user_protected INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    INSERT INTO episodes_new (
+                        episode_id, title, episode_number, season_number, stream_url, container_extension, cover_url,
+                        plot, duration, duration_seconds, rating, release_date, series_id, provider_id, watch_progress,
+                        last_watched_at, is_adult, is_user_protected
+                    )
+                    SELECT
+                        episode_id, title, episode_number, season_number, stream_url, container_extension, cover_url,
+                        plot, duration, duration_seconds, rating, release_date, series_id, provider_id, watch_progress,
+                        last_watched_at, is_adult, is_user_protected
+                    FROM episodes
+                    """.trimIndent()
+                )
+                database.execSQL("CREATE TEMP TABLE episode_id_map(old_id INTEGER PRIMARY KEY NOT NULL, new_id INTEGER NOT NULL)")
+                database.execSQL(
+                    """
+                    INSERT INTO episode_id_map(old_id, new_id)
+                    SELECT old.id, new.id
+                    FROM episodes old
+                    JOIN episodes_new new
+                      ON new.provider_id = old.provider_id
+                     AND new.episode_id = old.episode_id
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    UPDATE playback_history
+                    SET content_id = (SELECT new_id FROM episode_id_map WHERE old_id = content_id)
+                    WHERE content_type = 'SERIES_EPISODE'
+                      AND content_id IN (SELECT old_id FROM episode_id_map)
+                    """.trimIndent()
+                )
+                database.execSQL("DROP TABLE episodes")
+                database.execSQL("ALTER TABLE episodes_new RENAME TO episodes")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_episodes_series_id ON episodes(series_id)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_episodes_provider_id ON episodes(provider_id)")
+                database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_episodes_provider_id_episode_id ON episodes(provider_id, episode_id)")
+                database.execSQL("DROP TABLE episode_id_map")
+            }
+        }
+
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS channels_fts USING fts4(name, content='channels')")
+                database.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS movies_fts USING fts4(name, content='movies')")
+                database.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS series_fts USING fts4(name, content='series')")
+
+                database.execSQL("INSERT INTO channels_fts(rowid, name) SELECT id, name FROM channels")
+                database.execSQL("INSERT INTO movies_fts(rowid, name) SELECT id, name FROM movies")
+                database.execSQL("INSERT INTO series_fts(rowid, name) SELECT id, name FROM series")
+
+                database.execSQL(
+                    """
+                    CREATE TRIGGER IF NOT EXISTS channels_ai
+                    AFTER INSERT ON channels BEGIN
+                        INSERT INTO channels_fts(rowid, name) VALUES (new.id, new.name);
+                    END
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    CREATE TRIGGER IF NOT EXISTS channels_ad
+                    AFTER DELETE ON channels BEGIN
+                        DELETE FROM channels_fts WHERE rowid = old.id;
+                    END
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    CREATE TRIGGER IF NOT EXISTS channels_au
+                    AFTER UPDATE OF name ON channels BEGIN
+                        UPDATE channels_fts SET name = new.name WHERE rowid = old.id;
+                    END
+                    """.trimIndent()
+                )
+
+                database.execSQL(
+                    """
+                    CREATE TRIGGER IF NOT EXISTS movies_ai
+                    AFTER INSERT ON movies BEGIN
+                        INSERT INTO movies_fts(rowid, name) VALUES (new.id, new.name);
+                    END
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    CREATE TRIGGER IF NOT EXISTS movies_ad
+                    AFTER DELETE ON movies BEGIN
+                        DELETE FROM movies_fts WHERE rowid = old.id;
+                    END
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    CREATE TRIGGER IF NOT EXISTS movies_au
+                    AFTER UPDATE OF name ON movies BEGIN
+                        UPDATE movies_fts SET name = new.name WHERE rowid = old.id;
+                    END
+                    """.trimIndent()
+                )
+
+                database.execSQL(
+                    """
+                    CREATE TRIGGER IF NOT EXISTS series_ai
+                    AFTER INSERT ON series BEGIN
+                        INSERT INTO series_fts(rowid, name) VALUES (new.id, new.name);
+                    END
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    CREATE TRIGGER IF NOT EXISTS series_ad
+                    AFTER DELETE ON series BEGIN
+                        DELETE FROM series_fts WHERE rowid = old.id;
+                    END
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    CREATE TRIGGER IF NOT EXISTS series_au
+                    AFTER UPDATE OF name ON series BEGIN
+                        UPDATE series_fts SET name = new.name WHERE rowid = old.id;
+                    END
+                    """.trimIndent()
+                )
             }
         }
     }

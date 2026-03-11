@@ -5,6 +5,7 @@ import com.streamvault.data.local.entity.ProviderEntity
 import com.streamvault.data.mapper.*
 import com.streamvault.data.remote.xtream.XtreamApiService
 import com.streamvault.data.remote.xtream.XtreamProvider
+import com.streamvault.data.security.CredentialCrypto
 import com.streamvault.data.sync.SyncManager
 import com.streamvault.domain.model.*
 import com.streamvault.domain.provider.IptvProvider
@@ -27,23 +28,23 @@ class ProviderRepositoryImpl @Inject constructor(
 ) : ProviderRepository {
 
     override fun getProviders(): Flow<List<Provider>> =
-        providerDao.getAll().map { entities -> entities.map { it.toDomain() } }
+        providerDao.getAll().map { entities -> entities.map { it.toPublicDomain() } }
 
     override fun getActiveProvider(): Flow<Provider?> =
-        providerDao.getActive().map { it?.toDomain() }
+        providerDao.getActive().map { it?.toPublicDomain() }
 
     override suspend fun getProvider(id: Long): Provider? =
-        providerDao.getById(id)?.toDomain()
+        providerDao.getById(id)?.toPublicDomain()
 
     override suspend fun addProvider(provider: Provider): Result<Long> = try {
-        val id = providerDao.insert(provider.toEntity())
+        val id = providerDao.insert(provider.toSecureEntity())
         Result.success(id)
     } catch (e: Exception) {
         Result.error("Failed to add provider: ${e.message}", e)
     }
 
     override suspend fun updateProvider(provider: Provider): Result<Unit> = try {
-        providerDao.update(provider.toEntity())
+        providerDao.update(provider.toSecureEntity())
         Result.success(Unit)
     } catch (e: Exception) {
         Result.error("Failed to update provider: ${e.message}", e)
@@ -79,14 +80,17 @@ class ProviderRepositoryImpl @Inject constructor(
         id: Long?
     ): Result<Provider> {
         onProgress?.invoke("Authenticating...")
-        val provider = createXtreamProvider(0, serverUrl, username, password)
+        val existingProvider = if (id != null) {
+            providerDao.getById(id)
+        } else {
+            providerDao.getByUrlAndUser(serverUrl, username)
+        }
+        val effectivePassword = password.takeIf { it.isNotBlank() }
+            ?: existingProvider?.password?.let(CredentialCrypto::decryptIfNeeded)
+            ?: ""
+        val provider = createXtreamProvider(0, serverUrl, username, effectivePassword)
         return when (val authResult = provider.authenticate()) {
             is Result.Success -> {
-                val existingProvider = if (id != null) {
-                    providerDao.getById(id)
-                } else {
-                    providerDao.getByUrlAndUser(serverUrl, username)
-                }
 
                 val providerData = if (existingProvider != null) {
                     onProgress?.invoke("Updating existing provider...")
@@ -94,27 +98,42 @@ class ProviderRepositoryImpl @Inject constructor(
                         name = name.ifBlank { existingProvider.name },
                         serverUrl = serverUrl,
                         username = username,
-                        password = password,
+                        password = effectivePassword,
                         isActive = true,
                         lastSyncedAt = 0
                     )
-                    providerDao.update(updated)
-                    updated.toDomain()
+                    providerDao.update(
+                        updated.copy(password = CredentialCrypto.encryptIfNeeded(updated.password))
+                    )
+                    updated.toPublicDomain()
                 } else {
                     val newData = authResult.data.copy(name = name.ifBlank { authResult.data.name })
-                    val newId = providerDao.insert(newData.toEntity())
-                    newData.copy(id = newId)
+                    val newId = providerDao.insert(newData.toSecureEntity())
+                    newData.copy(id = newId).copy(password = "")
                 }
 
-                try {
-                    providerDao.deactivateAll()
-                    providerDao.activate(providerData.id)
-                    // Delegate sync to SyncManager
-                    syncManager.sync(providerData.id, onProgress)
-                } catch (e: Exception) {
-                    android.util.Log.e("ProviderRepo", "Initial Xtream sync failed: ${e.message}")
+                providerDao.deactivateAll()
+                providerDao.activate(providerData.id)
+
+                when (val syncResult = syncManager.sync(providerData.id, force = false, onProgress = onProgress)) {
+                    is Result.Success -> {
+                        val finalStatus = if (syncManager.syncState.value is SyncState.Partial) {
+                            ProviderStatus.PARTIAL
+                        } else {
+                            ProviderStatus.ACTIVE
+                        }
+                        updateProviderSyncStatus(providerData.id, finalStatus, System.currentTimeMillis())
+                        Result.success(providerData.copy(status = finalStatus))
+                    }
+                    is Result.Error -> {
+                        updateProviderSyncStatus(providerData.id, ProviderStatus.ERROR)
+                        Result.error(
+                            "Provider authenticated, but initial sync failed: ${syncResult.message}",
+                            syncResult.exception
+                        )
+                    }
+                    is Result.Loading -> Result.error("Unexpected loading state")
                 }
-                Result.success(providerData)
             }
             is Result.Error -> Result.error(authResult.message, authResult.exception)
             is Result.Loading -> Result.error("Unexpected loading state")
@@ -147,7 +166,7 @@ class ProviderRepositoryImpl @Inject constructor(
                 lastSyncedAt = 0
             )
             providerDao.update(updated)
-            updated.toDomain()
+            updated.toPublicDomain()
         } else {
             val provider = Provider(
                 name = providerName,
@@ -156,19 +175,32 @@ class ProviderRepositoryImpl @Inject constructor(
                 m3uUrl = url,
                 status = ProviderStatus.ACTIVE
             )
-            val newId = providerDao.insert(provider.toEntity())
-            provider.copy(id = newId)
+            val newId = providerDao.insert(provider.toSecureEntity())
+            provider.copy(id = newId).copy(password = "")
         }
 
-        try {
-            providerDao.deactivateAll()
-            providerDao.activate(providerData.id)
-            // Delegate sync to SyncManager
-            syncManager.sync(providerData.id, onProgress)
-        } catch (e: Exception) {
-            android.util.Log.e("ProviderRepo", "Initial M3U sync failed: ${e.message}")
+        providerDao.deactivateAll()
+        providerDao.activate(providerData.id)
+
+        when (val syncResult = syncManager.sync(providerData.id, force = false, onProgress = onProgress)) {
+            is Result.Success -> {
+                val finalStatus = if (syncManager.syncState.value is SyncState.Partial) {
+                    ProviderStatus.PARTIAL
+                } else {
+                    ProviderStatus.ACTIVE
+                }
+                updateProviderSyncStatus(providerData.id, finalStatus, System.currentTimeMillis())
+                Result.success(providerData.copy(status = finalStatus))
+            }
+            is Result.Error -> {
+                updateProviderSyncStatus(providerData.id, ProviderStatus.ERROR)
+                Result.error(
+                    "Playlist saved, but initial sync failed: ${syncResult.message}",
+                    syncResult.exception
+                )
+            }
+            is Result.Loading -> Result.error("Unexpected loading state")
         }
-        Result.success(providerData)
     } catch (e: Exception) {
         Result.error("Failed to add M3U provider: ${e.message}", e)
     }
@@ -178,18 +210,39 @@ class ProviderRepositoryImpl @Inject constructor(
      */
     override suspend fun refreshProviderData(
         providerId: Long,
+        force: Boolean,
         onProgress: ((String) -> Unit)?
-    ): Result<Unit> = syncManager.sync(providerId, onProgress)
+    ): Result<Unit> {
+        return when (val syncResult = syncManager.sync(providerId, force = force, onProgress = onProgress)) {
+            is Result.Success -> {
+                val finalStatus = if (syncManager.syncState.value is SyncState.Partial) {
+                    ProviderStatus.PARTIAL
+                } else {
+                    ProviderStatus.ACTIVE
+                }
+                updateProviderSyncStatus(providerId, finalStatus, System.currentTimeMillis())
+                syncResult
+            }
+            is Result.Error -> {
+                updateProviderSyncStatus(providerId, ProviderStatus.ERROR)
+                syncResult
+            }
+            is Result.Loading -> Result.error("Unexpected loading state")
+        }
+    }
 
     override suspend fun buildCatchUpUrl(providerId: Long, streamId: Long, start: Long, end: Long): String? {
-        val provider = providerDao.getById(providerId) ?: return null
-        return if (provider.type == ProviderType.XTREAM_CODES.name) {
-            createXtreamProvider(providerId, provider.serverUrl, provider.username, provider.password)
-                .buildCatchUpUrl(streamId, start, end)
+        val providerEntity = providerDao.getById(providerId) ?: return null
+        val provider = providerEntity.toPublicDomain()
+        val providerPassword = CredentialCrypto.decryptIfNeeded(providerEntity.password)
+        val channel = channelDao.getById(streamId)
+        val resolvedStreamId = channel?.streamId?.takeIf { it > 0 } ?: streamId
+        return if (provider.type == ProviderType.XTREAM_CODES) {
+            createXtreamProvider(providerId, provider.serverUrl, provider.username, providerPassword)
+                .buildCatchUpUrl(resolvedStreamId, start, end)
         } else {
             // M3U catch-up
-            val channel = channelDao.getById(streamId) ?: return null
-            val source = channel.catchUpSource ?: return null
+            val source = channel?.catchUpSource ?: return null
             
             // Substitute variables in template
             source.replace("{start}", start.toString())
@@ -213,4 +266,26 @@ class ProviderRepositoryImpl @Inject constructor(
         username = username,
         password = password
     )
+
+    private fun ProviderEntity.toPublicDomain(): Provider {
+        return toDomain().copy(password = "")
+    }
+
+    private fun Provider.toSecureEntity(): ProviderEntity {
+        val encryptedPassword = CredentialCrypto.encryptIfNeeded(password)
+        return copy(password = encryptedPassword).toEntity()
+    }
+
+    private suspend fun updateProviderSyncStatus(
+        providerId: Long,
+        status: ProviderStatus,
+        lastSyncedAt: Long? = null
+    ) {
+        val current = providerDao.getById(providerId) ?: return
+        val updated = current.copy(
+            status = status.name,
+            lastSyncedAt = lastSyncedAt ?: current.lastSyncedAt
+        )
+        providerDao.update(updated)
+    }
 }

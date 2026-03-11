@@ -14,6 +14,7 @@ import com.streamvault.domain.repository.ChannelRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import javax.inject.Inject
 import com.streamvault.data.preferences.PreferencesRepository
 import javax.inject.Singleton
@@ -30,7 +31,7 @@ class ChannelRepositoryImpl @Inject constructor(
         combine(
             channelDao.getByProvider(providerId),
             preferencesRepository.parentalControlLevel,
-            parentalControlManager.unlockedCategories
+            parentalControlManager.unlockedCategoriesForProvider(providerId)
         ) { entities, level, unlockedCats ->
             // Level 2 = HIDDEN. 
             // If hidden, filter out adult/protected UNLESS they are in unlockedCats.
@@ -54,7 +55,7 @@ class ChannelRepositoryImpl @Inject constructor(
                 channelDao.getByCategory(providerId, categoryId)
             },
             preferencesRepository.parentalControlLevel,
-            parentalControlManager.unlockedCategories
+            parentalControlManager.unlockedCategoriesForProvider(providerId)
         ) { entities, level, unlockedCats ->
              // Level 2 = HIDDEN. 
             // If hidden, filter out adult/protected UNLESS they are in unlockedCats.
@@ -76,7 +77,7 @@ class ChannelRepositoryImpl @Inject constructor(
             channelDao.getCategoryCounts(providerId),
             channelDao.getCount(providerId),
             preferencesRepository.parentalControlLevel,
-            parentalControlManager.unlockedCategories
+            parentalControlManager.unlockedCategoriesForProvider(providerId)
         ) { categories: List<CategoryEntity>, counts: List<CategoryCount>, totalCount: Int, level: Int, unlockedCats: Set<Long> ->
             android.util.Log.d("ChannelRepo", "getCategories: ${categories.size} cats, ${counts.size} counts, total: $totalCount")
             val countMap = counts.associate { it.categoryId to it.item_count }
@@ -112,21 +113,25 @@ class ChannelRepositoryImpl @Inject constructor(
         }
 
     override fun searchChannels(providerId: Long, query: String): Flow<List<Channel>> =
-        combine(
-            channelDao.search(providerId, query),
-            preferencesRepository.parentalControlLevel,
-            parentalControlManager.unlockedCategories
-        ) { entities, level, unlockedCats ->
-            val filtered = if (level == 2) {
-                entities.filter { entity ->
-                     val isUnlocked = entity.categoryId != null && unlockedCats.contains(entity.categoryId)
-                    (!entity.isAdult && !entity.isUserProtected) || isUnlocked
+        query.toFtsPrefixQuery().let { ftsQuery ->
+            if (ftsQuery.isBlank()) {
+            flowOf(emptyList())
+            } else combine(
+                channelDao.search(providerId, ftsQuery),
+                preferencesRepository.parentalControlLevel,
+                parentalControlManager.unlockedCategoriesForProvider(providerId)
+            ) { entities, level, unlockedCats ->
+                val filtered = if (level == 2) {
+                    entities.filter { entity ->
+                        val isUnlocked = entity.categoryId != null && unlockedCats.contains(entity.categoryId)
+                        (!entity.isAdult && !entity.isUserProtected) || isUnlocked
+                    }
+                } else {
+                    entities
                 }
-            } else {
-                entities
+
+                groupAndMapChannels(filtered, unlockedCats)
             }
-            
-             groupAndMapChannels(filtered, unlockedCats)
         }
 
     override suspend fun getChannel(channelId: Long): Channel? =
@@ -175,5 +180,14 @@ class ChannelRepositoryImpl @Inject constructor(
                 domain
             }
         }
+    }
+
+    private fun String.toFtsPrefixQuery(): String {
+        val tokens = trim()
+            .split(Regex("\\s+"))
+            .map { token -> token.replace(Regex("[^\\p{L}\\p{N}_]"), "") }
+            .filter { it.length >= 2 }
+
+        return tokens.joinToString(" AND ") { "$it*" }
     }
 }

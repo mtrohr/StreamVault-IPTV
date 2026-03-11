@@ -42,7 +42,7 @@ class EpgViewModel @Inject constructor(
                             val epgIds = channels.mapNotNull { it.epgChannelId }.distinct()
                             
                             // Listen for EPG updates for all these channels
-                            epgRepository.getNowPlayingForChannels(epgIds).collect { programsDict ->
+                            epgRepository.getNowPlayingForChannels(provider.id, epgIds).collect { programsDict ->
                                 _uiState.update { 
                                     it.copy(
                                         channels = channels.take(100), // Limit to 100 for now to avoid grid overload

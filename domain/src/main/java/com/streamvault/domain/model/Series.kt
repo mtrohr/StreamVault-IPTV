@@ -21,7 +21,8 @@ data class Series(
     val episodeRunTime: String? = null,
     val lastModified: Long = 0L,
     val isAdult: Boolean = false,
-    val isUserProtected: Boolean = false
+    val isUserProtected: Boolean = false,
+    val seriesId: Long = 0L
 )
 
 data class Season(
@@ -51,5 +52,6 @@ data class Episode(
     val watchProgress: Long = 0L,
     val lastWatchedAt: Long = 0L,
     val isAdult: Boolean = false,
-    val isUserProtected: Boolean = false
+    val isUserProtected: Boolean = false,
+    val episodeId: Long = 0L
 )

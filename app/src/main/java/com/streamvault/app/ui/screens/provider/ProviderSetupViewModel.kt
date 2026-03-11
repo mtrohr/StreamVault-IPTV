@@ -17,6 +17,8 @@ class ProviderSetupViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(ProviderSetupState())
     val uiState: StateFlow<ProviderSetupState> = _uiState.asStateFlow()
+    private val _knownLocalM3uUrls = MutableStateFlow<Set<String>>(emptySet())
+    val knownLocalM3uUrls: StateFlow<Set<String>> = _knownLocalM3uUrls.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -24,6 +26,15 @@ class ProviderSetupViewModel @Inject constructor(
                 if (provider != null) {
                     _uiState.update { it.copy(hasExistingProvider = true) }
                 }
+            }
+        }
+        viewModelScope.launch {
+            providerRepository.getProviders().collect { providers ->
+                _knownLocalM3uUrls.value = providers
+                    .mapNotNull { provider ->
+                        provider.m3uUrl.takeIf { it.startsWith("file://") }
+                    }
+                    .toSet()
             }
         }
     }
@@ -39,7 +50,8 @@ class ProviderSetupViewModel @Inject constructor(
                         name = provider.name,
                         serverUrl = provider.serverUrl,
                         username = provider.username,
-                        password = provider.password,
+                        // Do not prefill stored passwords back into UI.
+                        password = "",
                         m3uUrl = provider.m3uUrl,
                         selectedTab = if (provider.type == ProviderType.M3U) 1 else 0,
                         m3uTab = if (provider.m3uUrl.startsWith("file://")) 1 else 0

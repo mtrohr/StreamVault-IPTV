@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -54,8 +55,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import com.streamvault.app.ui.components.dialogs.ProgramHistoryDialog
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.streamvault.app.R
 import com.streamvault.app.ui.screens.multiview.MultiViewViewModel
 import com.streamvault.app.ui.screens.multiview.MultiViewPlannerDialog
@@ -98,6 +103,7 @@ fun PlayerScreen(
     val displayChannelNumber by viewModel.displayChannelNumber.collectAsState()
     val upcomingPrograms by viewModel.upcomingPrograms.collectAsState()
     val showChannelInfoOverlay by viewModel.showChannelInfoOverlay.collectAsState()
+    val numericChannelInput by viewModel.numericChannelInput.collectAsState()
     
     val availableAudioTracks by viewModel.availableAudioTracks.collectAsState()
     val availableSubtitleTracks by viewModel.availableSubtitleTracks.collectAsState()
@@ -114,13 +120,32 @@ fun PlayerScreen(
     
     val focusRequester = remember { FocusRequester() }
     val channelListFocusRequester = remember { FocusRequester() }
+    val epgFocusRequester = remember { FocusRequester() }
     val playButtonFocusRequester = remember { FocusRequester() }
     val channelInfoFocusRequester = remember { FocusRequester() } // NEW
+    var lastFocusedChannelListItemId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var lastFocusedEpgProgramToken by rememberSaveable { mutableStateOf<Long?>(null) }
     val layoutDirection = LocalLayoutDirection.current
     val isRtl = layoutDirection == LayoutDirection.Rtl
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> viewModel.onAppForegrounded()
+                Lifecycle.Event.ON_STOP -> viewModel.onAppBackgrounded()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.onPlayerScreenDisposed()
+        }
     }
 
     // Consolidated focus management for all overlays
@@ -133,6 +158,7 @@ fun PlayerScreen(
             try {
                 when {
                     showChannelListOverlay -> channelListFocusRequester.requestFocus()
+                    showEpgOverlay -> epgFocusRequester.requestFocus()
                     showChannelInfoOverlay -> channelInfoFocusRequester.requestFocus()
                     // EPG and Dialogs usually handle their own initial focus or use their own re-composition logic
                 }
@@ -207,7 +233,9 @@ fun PlayerScreen(
                 if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
                     when (event.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                            if (contentType == "LIVE") {
+                            if (contentType == "LIVE" && viewModel.hasPendingNumericChannelInput()) {
+                                viewModel.commitNumericChannelInput()
+                            } else if (contentType == "LIVE") {
                                 if (showChannelInfoOverlay) viewModel.closeChannelInfoOverlay()
                                 else viewModel.openChannelInfoOverlay()
                             } else {
@@ -238,32 +266,49 @@ fun PlayerScreen(
                             }
                         }
                         KeyEvent.KEYCODE_DPAD_UP -> {
-                            if (!showChannelListOverlay && !showEpgOverlay) {
+                            if (showChannelListOverlay || showEpgOverlay) return@onKeyEvent false
+
+                            if (contentType == "LIVE") {
                                 viewModel.playNext()
-                                true
                             } else {
-                                // Let the overlay LazyColumn handle this event
-                                false
+                                viewModel.toggleControls()
                             }
+                            true
                         }
                         KeyEvent.KEYCODE_DPAD_DOWN -> {
-                            if (!showChannelListOverlay && !showEpgOverlay) {
+                            if (showChannelListOverlay || showEpgOverlay) return@onKeyEvent false
+
+                            if (contentType == "LIVE") {
                                 viewModel.playPrevious()
-                                true
                             } else {
-                                // Let the overlay LazyColumn handle this event
-                                false
+                                viewModel.toggleControls()
                             }
+                            true
                         }
                         KeyEvent.KEYCODE_BACK -> {
-                            if (showChannelInfoOverlay) {
+                            if (viewModel.hasPendingNumericChannelInput()) {
+                                viewModel.clearNumericChannelInput()
+                                true
+                            } else if (showProgramHistory) {
+                                showProgramHistory = false
+                                true
+                            } else if (showSplitDialog) {
+                                showSplitDialog = false
+                                true
+                            } else if (showTrackSelection != null) {
+                                showTrackSelection = null
+                                true
+                            } else if (showDiagnostics) {
+                                viewModel.toggleDiagnostics()
+                                true
+                            } else if (showChannelInfoOverlay) {
                                 viewModel.closeChannelInfoOverlay()
                                 true
                             } else if (showChannelListOverlay || showEpgOverlay) {
                                 viewModel.closeOverlays()
                                 true
-                            } else if (showTrackSelection != null) {
-                                showTrackSelection = null
+                            } else if (showControls) {
+                                viewModel.toggleControls()
                                 true
                             } else {
                                 onBack()
@@ -275,16 +320,58 @@ fun PlayerScreen(
                             true
                         }
                         KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_DPAD_UP_RIGHT -> {
-                             viewModel.playNext()
-                             true
+                            if (contentType == "LIVE") {
+                                viewModel.playNext()
+                                true
+                            } else {
+                                false
+                            }
                         }
                         KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_DPAD_DOWN_LEFT -> {
-                             viewModel.playPrevious()
-                             true
+                            if (contentType == "LIVE") {
+                                viewModel.playPrevious()
+                                true
+                            } else {
+                                false
+                            }
                         }
-                        KeyEvent.KEYCODE_MEDIA_PREVIOUS, KeyEvent.KEYCODE_0 -> {
-                             viewModel.zapToLastChannel()
-                             true
+                        KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
+                            if (contentType == "LIVE") {
+                                viewModel.zapToLastChannel()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        KeyEvent.KEYCODE_GUIDE -> {
+                            if (contentType == "LIVE") {
+                                viewModel.openEpgOverlay()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        KeyEvent.KEYCODE_INFO -> {
+                            if (contentType == "LIVE") {
+                                if (showChannelInfoOverlay) viewModel.closeChannelInfoOverlay()
+                                else viewModel.openChannelInfoOverlay()
+                            } else {
+                                viewModel.toggleControls()
+                            }
+                            true
+                        }
+                        KeyEvent.KEYCODE_MENU -> {
+                            viewModel.toggleControls()
+                            true
+                        }
+                        in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> {
+                            if (contentType == "LIVE" && !showChannelListOverlay && !showEpgOverlay && !showChannelInfoOverlay) {
+                                val digit = event.nativeKeyEvent.keyCode - KeyEvent.KEYCODE_0
+                                viewModel.inputNumericChannelDigit(digit)
+                                true
+                            } else {
+                                false
+                            }
                         }
                         else -> false
                     }
@@ -301,7 +388,7 @@ fun PlayerScreen(
                     androidx.media3.ui.PlayerView(context).apply {
                         this.player = player
                         useController = false
-                        setShowBuffering(androidx.media3.ui.PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                        setShowBuffering(androidx.media3.ui.PlayerView.SHOW_BUFFERING_NEVER)
                     }
                 },
                 update = { playerView ->
@@ -318,14 +405,29 @@ fun PlayerScreen(
         // Buffering indicator
         if (playbackState == PlaybackState.BUFFERING) {
             Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 64.dp),
+                contentAlignment = Alignment.TopCenter
             ) {
-                Text(
-                    text = stringResource(R.string.player_buffering),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color.White
-                )
+                Row(
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.62f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        color = Primary,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.player_buffering),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White
+                    )
+                }
             }
         }
 
@@ -337,7 +439,7 @@ fun PlayerScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "⚠️ " + stringResource(R.string.player_error_title),
+                        text = stringResource(R.string.player_error_title),
                         style = MaterialTheme.typography.titleMedium,
                         color = ErrorColor
                     )
@@ -459,7 +561,7 @@ fun PlayerScreen(
                                 )
                             ) {
                                 Text(
-                                    text = "✕ " + stringResource(R.string.player_close),
+                                    text = stringResource(R.string.player_close),
                                     color = Color.White,
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                 )
@@ -507,21 +609,20 @@ fun PlayerScreen(
                                 // Track selection buttons shifted here for Live
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     if (currentChannel?.catchUpSupported == true) {
-                                        QuickSettingsButton("🔄 " + stringResource(R.string.player_restart)) { viewModel.restartCurrentProgram() }
-                                        QuickSettingsButton("📼 " + stringResource(R.string.player_archive)) { showProgramHistory = true }
+                                        QuickSettingsButton(stringResource(R.string.player_restart)) { viewModel.restartCurrentProgram() }
+                                        QuickSettingsButton(stringResource(R.string.player_archive)) { showProgramHistory = true }
                                     }
-                                    QuickSettingsButton("📺 ${aspectRatio.modeName}") { viewModel.toggleAspectRatio() }
+                                    QuickSettingsButton(stringResource(R.string.player_aspect_ratio_label, aspectRatio.modeName)) { viewModel.toggleAspectRatio() }
                                     if (availableSubtitleTracks.isNotEmpty()) {
-                                        QuickSettingsButton("💬 " + stringResource(R.string.player_subs)) { showTrackSelection = TrackType.TEXT }
+                                        QuickSettingsButton(stringResource(R.string.player_subs)) { showTrackSelection = TrackType.TEXT }
                                     }
                                     if (availableAudioTracks.size > 1) {
-                                        QuickSettingsButton("🔊 " + stringResource(R.string.player_audio)) { showTrackSelection = TrackType.AUDIO }
+                                        QuickSettingsButton(stringResource(R.string.player_audio)) { showTrackSelection = TrackType.AUDIO }
                                     }
                                     if (availableVideoQualities.size > 1) {
-                                        QuickSettingsButton("⚙ HD") { showTrackSelection = TrackType.VIDEO }
+                                        QuickSettingsButton(stringResource(R.string.player_video_quality)) { showTrackSelection = TrackType.VIDEO }
                                     }
-                                    // Split Screen button — available in LIVE mode
-                                    QuickSettingsButton("🔳 " + stringResource(R.string.multiview_nav)) { showSplitDialog = true }
+                                    QuickSettingsButton(stringResource(R.string.multiview_nav)) { showSplitDialog = true }
                                 }
                             }
 
@@ -593,16 +694,15 @@ fun PlayerScreen(
 
                                 // Track selection for VOD
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    QuickSettingsButton("📺 ${aspectRatio.modeName}") { viewModel.toggleAspectRatio() }
+                                    QuickSettingsButton(stringResource(R.string.player_aspect_ratio_label, aspectRatio.modeName)) { viewModel.toggleAspectRatio() }
                                     if (availableSubtitleTracks.isNotEmpty()) {
-                                        QuickSettingsButton("💬 " + stringResource(R.string.player_subs)) { showTrackSelection = TrackType.TEXT }
+                                        QuickSettingsButton(stringResource(R.string.player_subs)) { showTrackSelection = TrackType.TEXT }
                                     }
                                     if (availableAudioTracks.size > 1) {
-                                        QuickSettingsButton("🔊 " + stringResource(R.string.player_audio)) { showTrackSelection = TrackType.AUDIO }
+                                        QuickSettingsButton(stringResource(R.string.player_audio)) { showTrackSelection = TrackType.AUDIO }
                                     }
                                     if (availableVideoQualities.size > 1) {
-                                        // VODs might have multiple qualities in rare cases if the provider provides them as separate stream IDs and we grouped them, though our grouping targets Live channels mostly.
-                                        QuickSettingsButton("⚙ HD") { showTrackSelection = TrackType.VIDEO }
+                                        QuickSettingsButton(stringResource(R.string.player_video_quality)) { showTrackSelection = TrackType.VIDEO }
                                     }
                                 }
                             }
@@ -617,7 +717,7 @@ fun PlayerScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (contentType != "LIVE") {
-                        TransportButton("⏪") { viewModel.seekBackward() }
+                        TransportButton("<<") { viewModel.seekBackward() }
                     }
                     
                     if (contentType != "LIVE") {
@@ -634,7 +734,7 @@ fun PlayerScreen(
                         ) {
                             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                                 Text(
-                                    text = if (isPlaying) "⏸" else "▶",
+                                    text = if (isPlaying) "||" else ">",
                                     style = MaterialTheme.typography.headlineMedium,
                                     color = Color.White
                                 )
@@ -643,7 +743,7 @@ fun PlayerScreen(
                     }
 
                     if (contentType != "LIVE") {
-                        TransportButton("⏩") { viewModel.seekForward() }
+                        TransportButton(">>") { viewModel.seekForward() }
                     }
                 }
             }
@@ -698,6 +798,42 @@ fun PlayerScreen(
             }
          }
          
+         AnimatedVisibility(
+             visible = numericChannelInput != null && contentType == "LIVE" && !showControls,
+             enter = fadeIn() + slideInVertically(initialOffsetY = { -it / 2 }),
+             exit = fadeOut() + slideOutVertically(targetOffsetY = { -it / 2 }),
+             modifier = Modifier
+                 .align(Alignment.TopCenter)
+                 .padding(top = 40.dp)
+         ) {
+             val inputState = numericChannelInput ?: return@AnimatedVisibility
+             Box(
+                 modifier = Modifier
+                     .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(14.dp))
+                     .padding(horizontal = 22.dp, vertical = 12.dp)
+             ) {
+                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                     Text(
+                         text = inputState.input,
+                         style = MaterialTheme.typography.headlineMedium,
+                         color = if (inputState.invalid) ErrorColor else Primary,
+                         fontWeight = FontWeight.Bold
+                     )
+                     Text(
+                         text = when {
+                             inputState.invalid -> "Channel not found"
+                             !inputState.matchedChannelName.isNullOrBlank() -> inputState.matchedChannelName
+                             else -> "Type channel number"
+                         },
+                         style = MaterialTheme.typography.bodySmall,
+                         color = Color.White.copy(alpha = 0.85f),
+                         maxLines = 1,
+                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                     )
+                 }
+             }
+         }
+
          // Aspect Ratio confirmation Toast
          var showAspectRatioToast by remember { mutableStateOf(false) }
          LaunchedEffect(aspectRatio) {
@@ -909,6 +1045,8 @@ fun PlayerScreen(
                 channels = currentChannelList,
                 currentChannelId = internalChannelId,
                 overlayFocusRequester = channelListFocusRequester,
+                preferredFocusedChannelId = lastFocusedChannelListItemId,
+                onFocusedChannelChange = { channelId -> lastFocusedChannelListItemId = channelId },
                 onSelectChannel = { channelId -> viewModel.zapToChannel(channelId) },
                 onDismiss = { viewModel.closeOverlays() }
             )
@@ -930,6 +1068,9 @@ fun PlayerScreen(
                 currentProgram = currentProgram,
                 nextProgram = nextProgram,
                 upcomingPrograms = upcomingPrograms,
+                overlayFocusRequester = epgFocusRequester,
+                preferredFocusedProgramToken = lastFocusedEpgProgramToken,
+                onFocusedProgramChange = { token -> lastFocusedEpgProgramToken = token },
                 onDismiss = { viewModel.closeOverlays() },
                 onPlayCatchUp = { program -> 
                     viewModel.playCatchUp(program)
@@ -1038,7 +1179,7 @@ fun ChannelInfoOverlay(
                                 .background(Primary.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
-                            Text("⏪ Catch-Up", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                            Text(stringResource(R.string.player_catchup_badge), style = MaterialTheme.typography.labelSmall, color = Color.White)
                         }
                     }
                 }
@@ -1061,7 +1202,12 @@ fun ChannelInfoOverlay(
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "${timeFormat.format(java.util.Date(currentProgram.startTime))} – ${timeFormat.format(java.util.Date(currentProgram.endTime))}  ·  ${currentProgram.durationMinutes} min",
+                                text = stringResource(
+                                    R.string.player_time_range_minutes,
+                                    timeFormat.format(java.util.Date(currentProgram.startTime)),
+                                    timeFormat.format(java.util.Date(currentProgram.endTime)),
+                                    currentProgram.durationMinutes
+                                ),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = Color.White.copy(alpha = 0.7f)
                             )
@@ -1099,7 +1245,7 @@ fun ChannelInfoOverlay(
                     if (nextProgram != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "Next:  ",
+                            text = stringResource(R.string.player_next_label),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = Primary
                             )
@@ -1126,8 +1272,8 @@ fun ChannelInfoOverlay(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     QuickActionButton(
-                        icon = if (isPlaying) "⏸" else "▶",
-                        label = if (isPlaying) "Pause" else "Play",
+                        icon = if (isPlaying) "||" else ">",
+                        label = if (isPlaying) stringResource(R.string.player_pause) else stringResource(R.string.player_play),
                         onClick = onTogglePlayPause,
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Primary.copy(alpha = 0.25f),
@@ -1137,8 +1283,8 @@ fun ChannelInfoOverlay(
                     )
                     if (currentChannel?.catchUpSupported == true && currentProgram?.hasArchive == true) {
                         QuickActionButton(
-                            icon = "⏮",
-                            label = "Restart",
+                            icon = "R",
+                            label = stringResource(R.string.player_restart),
                             onClick = {
                                 onRestartProgram()
                                 onDismiss()
@@ -1146,27 +1292,27 @@ fun ChannelInfoOverlay(
                         )
                     }
                     QuickActionButton(
-                        icon = "📺",
+                        icon = "AR",
                         label = currentAspectRatio,
                         onClick = onToggleAspectRatio,
                         modifier = Modifier.focusRequester(focusRequester)
                     )
                     QuickActionButton(
-                        icon = "📋",
-                        label = "Full EPG",
+                        icon = "EPG",
+                        label = stringResource(R.string.player_full_epg),
                         onClick = onOpenFullEpg
                     )
                     QuickActionButton(
-                        icon = "🔳",
-                        label = "Split Screen",
+                        icon = "MV",
+                        label = stringResource(R.string.multiview_nav),
                         onClick = {
                             onDismiss()
                             onOpenSplitScreen()
                         }
                     )
                     QuickActionButton(
-                        icon = if (isDiagnosticsEnabled) "🛠️" else "📊",
-                        label = "Stats",
+                        icon = if (isDiagnosticsEnabled) "ON" else "OFF",
+                        label = stringResource(R.string.player_stats),
                         onClick = onToggleDiagnostics
                     )
                 }
@@ -1243,7 +1389,7 @@ private fun TrackItem(
                 modifier = Modifier.weight(1f)
             )
             if (isSelected) {
-                Text("✓", color = Primary, style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(R.string.player_selected), color = Primary, style = MaterialTheme.typography.labelSmall)
             }
         }
     }
@@ -1254,17 +1400,26 @@ fun ChannelListOverlay(
     channels: List<com.streamvault.domain.model.Channel>,
     currentChannelId: Long,
     overlayFocusRequester: FocusRequester = remember { FocusRequester() },
+    preferredFocusedChannelId: Long? = null,
+    onFocusedChannelChange: (Long) -> Unit = {},
     onSelectChannel: (Long) -> Unit,
     onDismiss: () -> Unit
 ) {
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = rememberCoroutineScope()
     val currentIndex = remember(channels, currentChannelId) {
         channels.indexOfFirst { it.id == currentChannelId }.coerceAtLeast(0)
     }
-    // Scroll to current item when channels load
-    LaunchedEffect(channels) {
+    val preferredIndex = remember(channels, currentChannelId, preferredFocusedChannelId) {
+        val focused = preferredFocusedChannelId?.let { channelId ->
+            channels.indexOfFirst { it.id == channelId }.takeIf { it >= 0 }
+        }
+        focused ?: currentIndex
+    }
+    // Scroll to focused/current item when channels load
+    LaunchedEffect(channels, preferredIndex) {
         if (channels.isNotEmpty()) {
-            listState.scrollToItem(currentIndex)
+            listState.scrollToItem(preferredIndex)
         }
     }
 
@@ -1279,7 +1434,7 @@ fun ChannelListOverlay(
     ) {
         item {
             Text(
-                text = "Channels (${channels.size})",
+                text = stringResource(R.string.player_channel_list_title, channels.size),
                 style = MaterialTheme.typography.titleMedium,
                 color = Primary,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp)
@@ -1288,7 +1443,8 @@ fun ChannelListOverlay(
         items(channels.size) { index ->
             val channel = channels[index]
             val isSelected = channel.id == currentChannelId
-            var isFocused by remember { mutableStateOf(false) }
+            val shouldRequestFocus = preferredFocusedChannelId?.let { it == channel.id } ?: isSelected
+            val channelNumber = if (channel.number > 0) channel.number else index + 1
 
             Surface(
                 onClick = {
@@ -1298,11 +1454,20 @@ fun ChannelListOverlay(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 3.dp)
-                    .onFocusChanged { isFocused = it.isFocused }
+                    .onFocusChanged {
+                        if (it.isFocused) {
+                            onFocusedChannelChange(channel.id)
+                            scope.launch {
+                                val targetIndex = (index - 1).coerceAtLeast(0)
+                                listState.animateScrollToItem(targetIndex)
+                            }
+                        }
+                    }
                     .then(
-                        if (isSelected) Modifier.focusRequester(overlayFocusRequester)
+                        if (shouldRequestFocus) Modifier.focusRequester(overlayFocusRequester)
                         else Modifier
                     ),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
                 shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                 colors = ClickableSurfaceDefaults.colors(
                     containerColor = if (isSelected) Primary.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.05f),
@@ -1317,10 +1482,15 @@ fun ChannelListOverlay(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (isSelected) {
-                        Text("▶", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.player_channel_selected), color = Color.White, style = MaterialTheme.typography.labelSmall)
                     } else {
                         Text("  ", style = MaterialTheme.typography.bodySmall)
                     }
+                    Text(
+                        text = channelNumber.toString().padStart(2, '0'),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.72f)
+                    )
                     Text(
                         text = channel.name,
                         style = MaterialTheme.typography.bodyLarge,
@@ -1330,7 +1500,7 @@ fun ChannelListOverlay(
                         modifier = Modifier.weight(1f)
                     )
                     if (channel.catchUpSupported) {
-                        Text("📼", style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.player_archive_badge), style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
@@ -1346,10 +1516,20 @@ fun EpgOverlay(
     currentProgram: Program?,
     nextProgram: Program?,
     upcomingPrograms: List<Program>,
+    overlayFocusRequester: FocusRequester = remember { FocusRequester() },
+    preferredFocusedProgramToken: Long? = null,
+    onFocusedProgramChange: (Long) -> Unit = {},
     onDismiss: () -> Unit,
     onPlayCatchUp: (Program) -> Unit
 ) {
     val timeFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val filteredUpcoming = remember(upcomingPrograms, currentProgram, nextProgram) {
+        upcomingPrograms.filter { it.id != currentProgram?.id && it.id != nextProgram?.id }
+    }
+    val displayPrograms = remember(filteredUpcoming, nextProgram) {
+        if (nextProgram != null) listOf(nextProgram) + filteredUpcoming else filteredUpcoming
+    }
 
     BackHandler { onDismiss() }
 
@@ -1359,6 +1539,7 @@ fun EpgOverlay(
             .background(Color.Black.copy(alpha = 0.70f))
     ) {
         androidx.compose.foundation.lazy.LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(24.dp),
@@ -1368,11 +1549,7 @@ fun EpgOverlay(
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "📺  ",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Text(
-                        text = "Advanced EPG",
+                        text = stringResource(R.string.epg_title),
                         style = MaterialTheme.typography.titleLarge,
                         color = Primary,
                         fontWeight = FontWeight.Bold
@@ -1389,7 +1566,7 @@ fun EpgOverlay(
                     if (currentChannel.catchUpSupported) {
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "⏪ Catch-Up available (${currentChannel.catchUpDays} days)",
+                            text = stringResource(R.string.epg_catchup_available, currentChannel.catchUpDays),
                             style = MaterialTheme.typography.bodySmall,
                             color = Primary.copy(alpha = 0.8f)
                         )
@@ -1402,7 +1579,7 @@ fun EpgOverlay(
                 androidx.compose.material3.HorizontalDivider(color = SurfaceVariant)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "NOW PLAYING",
+                    text = stringResource(R.string.epg_now_playing),
                     style = MaterialTheme.typography.labelMedium,
                     color = Primary,
                     fontWeight = FontWeight.Bold
@@ -1453,7 +1630,7 @@ fun EpgOverlay(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "$remainingMin min remaining",
+                            text = stringResource(R.string.player_minutes_remaining, remainingMin),
                             style = MaterialTheme.typography.bodySmall,
                             color = OnSurfaceDim
                         )
@@ -1470,7 +1647,7 @@ fun EpgOverlay(
                         )
                     }
                 } else {
-                    Text("No EPG Information", color = OnSurfaceDim)
+                    Text(stringResource(R.string.epg_no_info), color = OnSurfaceDim)
                 }
             }
 
@@ -1481,18 +1658,17 @@ fun EpgOverlay(
                     androidx.compose.material3.HorizontalDivider(color = SurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "UPCOMING SCHEDULE",
+                        text = stringResource(R.string.epg_upcoming_schedule),
                         style = MaterialTheme.typography.labelMedium,
                         color = Primary,
                         fontWeight = FontWeight.Bold
                     )
                 }
-                // Skip the current program if it appears in upcoming list
-                val filteredUpcoming = upcomingPrograms.filter { it.id != currentProgram?.id && it.id != nextProgram?.id }
-                val displayPrograms = if (nextProgram != null) listOf(nextProgram) + filteredUpcoming else filteredUpcoming
                 items(displayPrograms.size) { index ->
                     val program = displayPrograms[index]
                     val isNext = index == 0 && nextProgram != null
+                    val focusToken = if (program.id > 0) program.id else program.startTime
+                    val shouldRequestFocus = preferredFocusedProgramToken?.let { it == focusToken } ?: (index == 0)
                     
                     Surface(
                         onClick = {
@@ -1505,14 +1681,22 @@ fun EpgOverlay(
                             containerColor = if (isNext) Primary.copy(alpha = 0.08f) else Color.Transparent,
                             focusedContainerColor = Primary.copy(alpha = 0.2f)
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (shouldRequestFocus) Modifier.focusRequester(overlayFocusRequester)
+                                else Modifier
+                            )
+                            .onFocusChanged {
+                                if (it.isFocused) onFocusedProgramChange(focusToken)
+                            }
                     ) {
                         Column(
                             modifier = Modifier.padding(12.dp)
                         ) {
                         if (isNext) {
                             Text(
-                                text = "UP NEXT",
+                                text = stringResource(R.string.epg_up_next),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Primary,
                                 fontWeight = FontWeight.Bold
@@ -1543,8 +1727,8 @@ fun EpgOverlay(
                             if (program.hasArchive) {
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    text = "📼",
-                                    style = MaterialTheme.typography.bodySmall
+                                    text = stringResource(R.string.player_archive_badge),
+                                    style = MaterialTheme.typography.labelSmall
                                 )
                             }
                         }

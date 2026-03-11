@@ -127,8 +127,8 @@ fun MultiViewPlannerDialog(
                                         .weight(1f)
                                         .then(if (slotIndex == 0) Modifier.focusRequester(firstSlotFocusRequester) else Modifier),
                                     onSlotClick = {
-                                        if (stillPicking && pendingChannel != null) {
-                                            viewModel.assignChannelToSlot(slotIndex, pendingChannel)
+                                        if (stillPicking) {
+                                            viewModel.assignChannelToSlot(slotIndex, pendingChannel!!)
                                             channelPlaced = true   // stay open
                                         }
                                     },

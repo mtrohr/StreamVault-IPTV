@@ -18,7 +18,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
 
 /**
  * Unit tests for [SyncManager] state machine transitions.
@@ -48,6 +53,7 @@ class SyncManagerTest {
         override suspend fun deactivateAll() = Unit
         override suspend fun activate(id: Long) = Unit
         override suspend fun getByUrlAndUser(url: String, user: String): ProviderEntity? = null
+        override suspend fun updateEpgUrl(id: Long, epgUrl: String) = Unit
     }
 
     companion object {
@@ -140,6 +146,54 @@ class SyncManagerTest {
         val state = mgr.syncState.first() as? SyncState.Error
         assertThat(state).isNotNull()
         assertThat(state!!.message).isNotEmpty()
+    }
+
+    @Test
+    fun `sync_xtream_withFreshCache_andForceFalse_skipsRemoteCalls`() = runTest {
+        val mgr = buildManager(providerType = "XTREAM_CODES")
+        val now = System.currentTimeMillis()
+        whenever(syncMetadataRepo.getMetadata(1L)).thenReturn(
+            com.streamvault.domain.model.SyncMetadata(
+                providerId = 1L,
+                lastLiveSync = now,
+                lastMovieSync = now,
+                lastSeriesSync = now,
+                lastEpgSync = now
+            )
+        )
+
+        val result = mgr.sync(1L, force = false)
+
+        assertThat(result.isSuccess).isTrue()
+        verify(xtreamApi, never()).getLiveCategories(any(), any(), any(), any())
+        verify(xtreamApi, never()).getLiveStreams(any(), any(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `sync_xtream_withFreshCache_andForceTrue_executesRemoteCalls`() = runTest {
+        val mgr = buildManager(providerType = "XTREAM_CODES")
+        val now = System.currentTimeMillis()
+        whenever(syncMetadataRepo.getMetadata(1L)).thenReturn(
+            com.streamvault.domain.model.SyncMetadata(
+                providerId = 1L,
+                lastLiveSync = now,
+                lastMovieSync = now,
+                lastSeriesSync = now,
+                lastEpgSync = now
+            )
+        )
+        whenever(xtreamApi.getLiveCategories(any(), any(), any(), any())).thenReturn(emptyList())
+        whenever(xtreamApi.getLiveStreams(any(), any(), any(), any(), anyOrNull())).thenReturn(emptyList())
+        whenever(xtreamApi.getVodCategories(any(), any(), any(), any())).thenReturn(emptyList())
+        whenever(xtreamApi.getVodStreams(any(), any(), any(), any(), anyOrNull())).thenReturn(emptyList())
+        whenever(xtreamApi.getSeriesCategories(any(), any(), any(), any())).thenReturn(emptyList())
+        whenever(xtreamApi.getSeriesList(any(), any(), any(), any(), anyOrNull())).thenReturn(emptyList())
+
+        val result = mgr.sync(1L, force = true)
+
+        assertThat(result.isSuccess).isTrue()
+        verify(xtreamApi).getLiveCategories(any(), any(), any(), any())
+        verify(xtreamApi).getLiveStreams(any(), any(), any(), any(), anyOrNull())
     }
 
     // ── M3U sync failure ────────────────────────────────────────────
