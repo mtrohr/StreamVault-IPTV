@@ -1,0 +1,176 @@
+package com.streamvault.app.ui.components
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
+import com.streamvault.app.R
+import com.streamvault.app.ui.theme.OnSurface
+import com.streamvault.app.ui.theme.OnSurfaceDim
+import com.streamvault.app.ui.theme.Primary
+import com.streamvault.app.ui.theme.SurfaceElevated
+
+data class SavedCategoryShortcut(
+    val name: String,
+    val count: Int
+)
+
+@Composable
+fun SavedCategoryShortcutsRow(
+    title: String,
+    subtitle: String,
+    emptyHint: String,
+    shortcuts: List<SavedCategoryShortcut>,
+    managementHint: String? = null,
+    primaryShortcutLabel: String? = null,
+    isPrimaryShortcutSelected: Boolean = false,
+    onPrimaryShortcutClick: (() -> Unit)? = null,
+    selectedShortcutName: String? = null,
+    onShortcutLongClick: ((String) -> Unit)? = null,
+    onShortcutClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 48.dp, end = 48.dp, top = 16.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = OnSurface
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OnSurfaceDim
+                )
+                if (!managementHint.isNullOrBlank()) {
+                    Text(
+                        text = managementHint,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Primary.copy(alpha = 0.85f)
+                    )
+                }
+            }
+        }
+
+        if (shortcuts.isEmpty()) {
+            Surface(
+                enabled = false,
+                onClick = { },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 48.dp),
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(14.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = SurfaceElevated
+                )
+            ) {
+                Text(
+                    text = emptyHint,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OnSurfaceDim,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp)
+                )
+            }
+            return
+        }
+
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 48.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (primaryShortcutLabel != null && onPrimaryShortcutClick != null) {
+                item(key = "primary_shortcut") {
+                    Surface(
+                        onClick = onPrimaryShortcutClick,
+                        modifier = Modifier.width(220.dp),
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(14.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = if (isPrimaryShortcutSelected) {
+                                Primary.copy(alpha = 0.18f)
+                            } else {
+                                SurfaceElevated
+                            },
+                            focusedContainerColor = Primary.copy(alpha = 0.22f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = primaryShortcutLabel,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = if (isPrimaryShortcutSelected) Primary else OnSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = stringResource(R.string.library_saved_primary_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = OnSurfaceDim,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+            items(items = shortcuts, key = { it.name }) { shortcut ->
+                val isSelected = shortcut.name == selectedShortcutName
+                Surface(
+                    onClick = { onShortcutClick(shortcut.name) },
+                    onLongClick = onShortcutLongClick?.let { handler ->
+                        { handler(shortcut.name) }
+                    },
+                    modifier = Modifier.width(220.dp),
+                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(14.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = if (isSelected) Primary.copy(alpha = 0.18f) else SurfaceElevated,
+                        focusedContainerColor = Primary.copy(alpha = 0.22f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = shortcut.name,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = if (isSelected) Primary else OnSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = stringResource(R.string.library_saved_items_count, shortcut.count),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = OnSurfaceDim,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

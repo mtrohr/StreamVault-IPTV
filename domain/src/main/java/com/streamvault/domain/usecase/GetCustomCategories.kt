@@ -2,6 +2,7 @@ package com.streamvault.domain.usecase
 
 import com.streamvault.domain.model.Category
 import com.streamvault.domain.model.ContentType
+import com.streamvault.domain.model.VirtualCategoryIds
 import com.streamvault.domain.repository.FavoriteRepository
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -30,7 +31,7 @@ class GetCustomCategories @Inject constructor(
                 categories.add(
                     index = 0,
                     element = Category(
-                        id = -999L,
+                        id = VirtualCategoryIds.FAVORITES,
                         name = "Favorites",
                         type = contentType,
                         isVirtual = true,

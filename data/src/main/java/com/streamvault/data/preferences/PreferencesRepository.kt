@@ -40,6 +40,15 @@ class PreferencesRepository @Inject constructor(
         val PARENTAL_PIN_SALT = stringPreferencesKey("parental_pin_salt")
         val DEFAULT_CATEGORY_ID = longPreferencesKey("default_category_id")
         val APP_LANGUAGE = stringPreferencesKey("app_language")
+        val GUIDE_DENSITY = stringPreferencesKey("guide_density")
+        val GUIDE_CHANNEL_MODE = stringPreferencesKey("guide_channel_mode")
+        val GUIDE_FAVORITES_ONLY = intPreferencesKey("guide_favorites_only")
+        val GUIDE_ANCHOR_TIME = longPreferencesKey("guide_anchor_time")
+        val PROMOTED_LIVE_GROUP_IDS = stringPreferencesKey("promoted_live_group_ids")
+        val MULTIVIEW_PRESET_1 = stringPreferencesKey("multiview_preset_1")
+        val MULTIVIEW_PRESET_2 = stringPreferencesKey("multiview_preset_2")
+        val MULTIVIEW_PRESET_3 = stringPreferencesKey("multiview_preset_3")
+        val MULTIVIEW_PERFORMANCE_MODE = stringPreferencesKey("multiview_performance_mode")
     }
 
     val lastActiveProviderId: Flow<Long?> = context.dataStore.data.map { preferences ->
@@ -127,6 +136,20 @@ class PreferencesRepository @Inject constructor(
         }
     }
 
+    fun getLastLiveCategoryId(providerId: Long): Flow<Long?> {
+        val key = longPreferencesKey("last_live_category_id_$providerId")
+        return context.dataStore.data.map { preferences ->
+            preferences[key]
+        }
+    }
+
+    suspend fun setLastLiveCategoryId(providerId: Long, categoryId: Long) {
+        val key = longPreferencesKey("last_live_category_id_$providerId")
+        context.dataStore.edit { preferences ->
+            preferences[key] = categoryId
+        }
+    }
+
     val appLanguage: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[PreferencesKeys.APP_LANGUAGE] ?: "system"
     }
@@ -134,6 +157,103 @@ class PreferencesRepository @Inject constructor(
     suspend fun setAppLanguage(language: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.APP_LANGUAGE] = language
+        }
+    }
+
+    val guideDensity: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.GUIDE_DENSITY]
+    }
+
+    suspend fun setGuideDensity(density: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.GUIDE_DENSITY] = density
+        }
+    }
+
+    val guideChannelMode: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.GUIDE_CHANNEL_MODE]
+    }
+
+    suspend fun setGuideChannelMode(mode: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.GUIDE_CHANNEL_MODE] = mode
+        }
+    }
+
+    val guideFavoritesOnly: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        (preferences[PreferencesKeys.GUIDE_FAVORITES_ONLY] ?: 0) == 1
+    }
+
+    suspend fun setGuideFavoritesOnly(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.GUIDE_FAVORITES_ONLY] = if (enabled) 1 else 0
+        }
+    }
+
+    val guideAnchorTime: Flow<Long?> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.GUIDE_ANCHOR_TIME]
+    }
+
+    suspend fun setGuideAnchorTime(anchorTimeMs: Long) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.GUIDE_ANCHOR_TIME] = anchorTimeMs
+        }
+    }
+
+    val promotedLiveGroupIds: Flow<Set<Long>> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.PROMOTED_LIVE_GROUP_IDS]
+            ?.split(",")
+            ?.mapNotNull { token -> token.toLongOrNull() }
+            ?.toSet()
+            .orEmpty()
+    }
+
+    suspend fun setPromotedLiveGroupIds(groupIds: Set<Long>) {
+        context.dataStore.edit { preferences ->
+            if (groupIds.isEmpty()) {
+                preferences.remove(PreferencesKeys.PROMOTED_LIVE_GROUP_IDS)
+            } else {
+                preferences[PreferencesKeys.PROMOTED_LIVE_GROUP_IDS] = groupIds.sorted().joinToString(",")
+            }
+        }
+    }
+
+    fun getMultiViewPreset(presetIndex: Int): Flow<List<Long>> {
+        val key = when (presetIndex) {
+            0 -> PreferencesKeys.MULTIVIEW_PRESET_1
+            1 -> PreferencesKeys.MULTIVIEW_PRESET_2
+            else -> PreferencesKeys.MULTIVIEW_PRESET_3
+        }
+        return context.dataStore.data.map { preferences ->
+            preferences[key]
+                ?.split(",")
+                ?.mapNotNull { token -> token.toLongOrNull() }
+                .orEmpty()
+        }
+    }
+
+    suspend fun setMultiViewPreset(presetIndex: Int, channelIds: List<Long>) {
+        val key = when (presetIndex) {
+            0 -> PreferencesKeys.MULTIVIEW_PRESET_1
+            1 -> PreferencesKeys.MULTIVIEW_PRESET_2
+            else -> PreferencesKeys.MULTIVIEW_PRESET_3
+        }
+        context.dataStore.edit { preferences ->
+            if (channelIds.isEmpty()) {
+                preferences.remove(key)
+            } else {
+                preferences[key] = channelIds.joinToString(",")
+            }
+        }
+    }
+
+    val multiViewPerformanceMode: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.MULTIVIEW_PERFORMANCE_MODE]
+    }
+
+    suspend fun setMultiViewPerformanceMode(mode: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.MULTIVIEW_PERFORMANCE_MODE] = mode
         }
     }
 

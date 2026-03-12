@@ -7,40 +7,50 @@ import com.streamvault.domain.manager.ParentalControlManager
 import com.streamvault.domain.model.Category
 import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.ContentType
+import com.streamvault.domain.model.PlaybackHistory
 import com.streamvault.domain.model.Provider
+import com.streamvault.domain.model.VirtualCategoryIds
 import com.streamvault.domain.repository.CategoryRepository
 import com.streamvault.domain.repository.ChannelRepository
 import com.streamvault.domain.repository.EpgRepository
 import com.streamvault.domain.repository.FavoriteRepository
+import com.streamvault.domain.repository.PlaybackHistoryRepository
 import com.streamvault.domain.repository.ProviderRepository
 import com.streamvault.domain.usecase.GetCustomCategories
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.streamvault.app.R
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.app.Application
 
 @HiltViewModel
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModel @Inject constructor(
+    application: Application,
     private val providerRepository: ProviderRepository,
     private val channelRepository: ChannelRepository,
     private val categoryRepository: CategoryRepository,
     private val favoriteRepository: FavoriteRepository,
     private val preferencesRepository: PreferencesRepository,
     private val epgRepository: EpgRepository,
+    private val playbackHistoryRepository: PlaybackHistoryRepository,
     private val getCustomCategories: GetCustomCategories,
     private val parentalControlManager: ParentalControlManager
 ) : ViewModel() {
+    private val appContext = application
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     private val _localChannels = MutableStateFlow<List<Channel>>(emptyList())
+    private val _preferredInitialCategoryId = MutableStateFlow<Long?>(null)
     private var epgJob: Job? = null
     private var loadChannelsJob: Job? = null
     private var categoriesJob: Job? = null
+    private var recentChannelsJob: Job? = null
 
     init {
         loadAllProviders()
@@ -50,6 +60,7 @@ class HomeViewModel @Inject constructor(
                 .collectLatest { provider ->
                     _uiState.update { it.copy(provider = provider) }
                     loadCategoriesAndChannels(provider.id)
+                    observeRecentChannels(provider.id)
                     preferencesRepository.setLastActiveProviderId(provider.id)
                 }
         }
@@ -105,17 +116,58 @@ class HomeViewModel @Inject constructor(
             combine(
                 channelRepository.getCategories(providerId),
                 getCustomCategories(),
-                preferencesRepository.defaultCategoryId
-            ) { providerCats, customCats, defaultId ->
-                Triple(customCats + providerCats, defaultId, Unit)
-            }.collect { (categories, defaultId, _) ->
-                _uiState.update { it.copy(categories = categories) }
+                playbackHistoryRepository.getRecentlyWatchedByProvider(providerId, limit = 24),
+                preferencesRepository.defaultCategoryId,
+                preferencesRepository.getLastLiveCategoryId(providerId)
+            ) { providerCats, customCats, history, defaultId, lastVisitedCategoryId ->
+                val recentCategory = Category(
+                    id = VirtualCategoryIds.RECENT,
+                    name = "Recent",
+                    type = ContentType.LIVE,
+                    isVirtual = true,
+                    count = history.toRecentLiveContentIds().size
+                )
+
+                val orderedCategories = buildList {
+                    val favoritesCategory = customCats.find { it.id == VirtualCategoryIds.FAVORITES }
+                    if (favoritesCategory != null) {
+                        add(favoritesCategory)
+                    }
+                    add(recentCategory)
+                    addAll(
+                        customCats.filter { it.id != VirtualCategoryIds.FAVORITES }
+                    )
+                    addAll(providerCats)
+                }
+
+                CategorySelectionContext(
+                    categories = orderedCategories,
+                    defaultCategoryId = defaultId,
+                    lastVisitedCategoryId = lastVisitedCategoryId
+                )
+            }.collect { selectionContext ->
+                val categories = selectionContext.categories
+                val defaultId = selectionContext.defaultCategoryId
+                val preferredCategoryId = _preferredInitialCategoryId.value
+                val lastVisitedCategory = selectionContext.lastVisitedCategoryId?.let { lastVisitedId ->
+                    categories.find { it.id == lastVisitedId && it.id != VirtualCategoryIds.RECENT }
+                }
+                _uiState.update { it.copy(categories = categories, lastVisitedCategory = lastVisitedCategory) }
 
                 val currentSelected = _uiState.value.selectedCategory
+                val preferredCategory = preferredCategoryId?.let { categoryId ->
+                    categories.find { it.id == categoryId }
+                }
+
+                if (preferredCategory != null && currentSelected?.id != preferredCategory.id) {
+                    _preferredInitialCategoryId.value = null
+                    selectCategory(preferredCategory)
+                    return@collect
+                }
 
                 if (currentSelected == null && categories.isNotEmpty()) {
                     val defaultCat = defaultId?.let { id -> categories.find { it.id == id } }
-                    val favoritesCat = categories.find { it.id == -999L }
+                    val favoritesCat = categories.find { it.id == VirtualCategoryIds.FAVORITES }
 
                     if (defaultCat != null) selectCategory(defaultCat)
                     else if (favoritesCat != null) selectCategory(favoritesCat)
@@ -130,7 +182,7 @@ class HomeViewModel @Inject constructor(
                         loadChannelsForCategory(reselectedCat)
                     } else {
                         val defaultCat = defaultId?.let { id -> categories.find { it.id == id } }
-                        val favoritesCat = categories.find { it.id == -999L }
+                        val favoritesCat = categories.find { it.id == VirtualCategoryIds.FAVORITES }
 
                         if (defaultCat != null) selectCategory(defaultCat)
                         else if (favoritesCat != null) selectCategory(favoritesCat)
@@ -145,7 +197,30 @@ class HomeViewModel @Inject constructor(
         if (_uiState.value.selectedCategory?.id == category.id) return
         parentalControlManager.clearUnlockedCategories(_uiState.value.provider?.id)
         _uiState.update { it.copy(selectedCategory = category, isLoading = true) }
+        _preferredInitialCategoryId.value = null
+        if (category.id != VirtualCategoryIds.RECENT) {
+            val providerId = _uiState.value.provider?.id
+            if (providerId != null) {
+                viewModelScope.launch {
+                    preferencesRepository.setLastLiveCategoryId(providerId, category.id)
+                }
+            }
+        }
         loadChannelsForCategory(category)
+    }
+
+    fun setPreferredInitialCategory(categoryId: Long?) {
+        if (categoryId == null) return
+
+        val matchingCategory = _uiState.value.categories.firstOrNull { it.id == categoryId }
+        if (matchingCategory != null) {
+            if (_uiState.value.selectedCategory?.id != matchingCategory.id) {
+                selectCategory(matchingCategory)
+            }
+            return
+        }
+
+        _preferredInitialCategoryId.value = categoryId
     }
 
     private fun loadChannelsForCategory(category: Category) {
@@ -153,27 +228,19 @@ class HomeViewModel @Inject constructor(
         loadChannelsJob?.cancel()
         loadChannelsJob = viewModelScope.launch {
             val channelsFlow = if (category.isVirtual) {
-                if (category.id == -999L) {
+                if (category.id == VirtualCategoryIds.RECENT) {
+                    playbackHistoryRepository.getRecentlyWatchedByProvider(providerId, limit = 24)
+                        .map { it.toRecentLiveContentIds() }
+                        .flatMapLatest { ids -> loadChannelsByOrderedIds(ids) }
+                } else if (category.id == VirtualCategoryIds.FAVORITES) {
                     favoriteRepository.getFavorites(ContentType.LIVE)
                         .map { favorites -> favorites.sortedBy { it.position }.map { it.contentId } }
-                        .flatMapLatest { ids ->
-                            if (ids.isEmpty()) flowOf(emptyList())
-                            else channelRepository.getChannelsByIds(ids).map { unsorted ->
-                                val map = unsorted.associateBy { it.id }
-                                ids.mapNotNull { map[it] }
-                            }
-                        }
+                        .flatMapLatest { ids -> loadChannelsByOrderedIds(ids) }
                 } else {
                     val groupId = -category.id
                     favoriteRepository.getFavoritesByGroup(groupId)
                         .map { favorites -> favorites.sortedBy { it.position }.map { it.contentId } }
-                        .flatMapLatest { ids ->
-                            if (ids.isEmpty()) flowOf(emptyList())
-                            else channelRepository.getChannelsByIds(ids).map { unsorted ->
-                                val map = unsorted.associateBy { it.id }
-                                ids.mapNotNull { map[it] }
-                            }
-                        }
+                        .flatMapLatest { ids -> loadChannelsByOrderedIds(ids) }
                 }
             } else {
                 channelRepository.getChannelsByCategory(providerId, category.id)
@@ -242,24 +309,101 @@ class HomeViewModel @Inject constructor(
 
     fun createCustomGroup(name: String) {
         val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            _uiState.update { it.copy(userMessage = appContext.getString(R.string.home_group_name_invalid)) }
+            return
+        }
         if (trimmed.equals("Favorites", ignoreCase = true)) {
-            _uiState.update { it.copy(userMessage = "Cannot create group named 'Favorites'") }
+            _uiState.update { it.copy(userMessage = appContext.getString(R.string.home_group_name_reserved)) }
             return
         }
         if (_uiState.value.categories.any { it.name.equals(trimmed, ignoreCase = true) }) {
-            _uiState.update { it.copy(userMessage = "Group '$trimmed' already exists") }
+            _uiState.update { it.copy(userMessage = appContext.getString(R.string.home_group_name_duplicate, trimmed)) }
             return
         }
 
         viewModelScope.launch {
             favoriteRepository.createGroup(trimmed, contentType = ContentType.LIVE)
-            _uiState.update { it.copy(userMessage = "Group '$trimmed' created") }
+            _uiState.update { it.copy(userMessage = appContext.getString(R.string.home_group_created, trimmed)) }
+        }
+    }
+
+    private fun observeRecentChannels(providerId: Long) {
+        recentChannelsJob?.cancel()
+        recentChannelsJob = viewModelScope.launch {
+            playbackHistoryRepository.getRecentlyWatchedByProvider(providerId, limit = 12)
+                .map { it.toRecentLiveContentIds() }
+                .flatMapLatest { ids -> loadChannelsByOrderedIds(ids) }
+                .collect { channels ->
+                    _uiState.update { it.copy(recentChannels = channels) }
+                }
+        }
+    }
+
+    fun requestRenameGroup(category: Category) {
+        if (!category.isVirtual || category.id in setOf(VirtualCategoryIds.FAVORITES, VirtualCategoryIds.RECENT)) return
+        _uiState.update {
+            it.copy(
+                selectedCategoryForOptions = null,
+                showRenameGroupDialog = true,
+                groupToRename = category,
+                renameGroupError = null
+            )
+        }
+    }
+
+    fun cancelRenameGroup() {
+        _uiState.update {
+            it.copy(
+                showRenameGroupDialog = false,
+                groupToRename = null,
+                renameGroupError = null
+            )
+        }
+    }
+
+    fun confirmRenameGroup(name: String) {
+        val category = _uiState.value.groupToRename ?: return
+        val trimmed = name.trim()
+        when {
+            trimmed.isBlank() -> {
+                _uiState.update { it.copy(renameGroupError = appContext.getString(R.string.home_group_name_invalid)) }
+                return
+            }
+            trimmed.equals("Favorites", ignoreCase = true) -> {
+                _uiState.update { it.copy(renameGroupError = appContext.getString(R.string.home_group_name_reserved)) }
+                return
+            }
+            _uiState.value.categories.any { existing ->
+                existing.id != category.id && existing.name.equals(trimmed, ignoreCase = true)
+            } -> {
+                _uiState.update { it.copy(renameGroupError = appContext.getString(R.string.home_group_name_duplicate, trimmed)) }
+                return
+            }
+        }
+
+        viewModelScope.launch {
+            favoriteRepository.renameGroup(-category.id, trimmed)
+            _uiState.update {
+                it.copy(
+                    showRenameGroupDialog = false,
+                    groupToRename = null,
+                    renameGroupError = null,
+                    userMessage = appContext.getString(R.string.home_group_renamed, trimmed)
+                )
+            }
         }
     }
 
     fun requestDeleteGroup(category: Category) {
-        if (!category.isVirtual || category.id == -999L) return
-        _uiState.update { it.copy(showDeleteGroupDialog = true, groupToDelete = category) }
+        if (!category.isVirtual || category.id in setOf(VirtualCategoryIds.FAVORITES, VirtualCategoryIds.RECENT)) return
+        _uiState.update {
+            it.copy(
+                selectedCategoryForOptions = null,
+                showDeleteGroupDialog = true,
+                groupToDelete = category
+            )
+        }
     }
 
     fun cancelDeleteGroup() {
@@ -274,14 +418,14 @@ class HomeViewModel @Inject constructor(
                 it.copy(
                     showDeleteGroupDialog = false,
                     groupToDelete = null,
-                    userMessage = "Group '${category.name}' deleted"
+                    userMessage = appContext.getString(R.string.home_group_deleted, category.name)
                 )
             }
         }
     }
 
     fun addToGroup(channel: Channel, category: Category) {
-        if (!category.isVirtual || category.id == -999L) return
+        if (!category.isVirtual || category.id in setOf(VirtualCategoryIds.FAVORITES, VirtualCategoryIds.RECENT)) return
         viewModelScope.launch {
             val groupId = -category.id
             favoriteRepository.addFavorite(
@@ -295,7 +439,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun removeFromGroup(channel: Channel, category: Category) {
-        if (!category.isVirtual || category.id == -999L) return
+        if (!category.isVirtual || category.id in setOf(VirtualCategoryIds.FAVORITES, VirtualCategoryIds.RECENT)) return
         viewModelScope.launch {
             val groupId = -category.id
             favoriteRepository.removeFavorite(
@@ -310,7 +454,7 @@ class HomeViewModel @Inject constructor(
 
     fun moveChannel(channel: Channel, direction: Int) {
         val currentCategory = _uiState.value.selectedCategory ?: return
-        if (!currentCategory.isVirtual) return
+        if (!currentCategory.isVirtual || currentCategory.id == VirtualCategoryIds.RECENT) return
 
         val currentList = _localChannels.value.toMutableList()
         val index = currentList.indexOfFirst { it.id == channel.id }
@@ -323,7 +467,7 @@ class HomeViewModel @Inject constructor(
         _localChannels.value = currentList
 
         viewModelScope.launch {
-            val groupId = if (currentCategory.id == -999L) null else -currentCategory.id
+            val groupId = if (currentCategory.id == VirtualCategoryIds.FAVORITES) null else -currentCategory.id
 
             val favoritesFlow = if (groupId == null) {
                 favoriteRepository.getFavorites(ContentType.LIVE)
@@ -405,7 +549,16 @@ class HomeViewModel @Inject constructor(
 
     fun enterChannelReorderMode(category: Category) {
         dismissCategoryOptions()
-        _uiState.update { it.copy(isChannelReorderMode = true, reorderCategory = category) }
+        viewModelScope.launch {
+            val reorderChannels = loadReorderChannels(category)
+            _uiState.update {
+                it.copy(
+                    isChannelReorderMode = true,
+                    reorderCategory = category,
+                    filteredChannels = reorderChannels
+                )
+            }
+        }
     }
 
     fun exitChannelReorderMode() {
@@ -442,6 +595,7 @@ class HomeViewModel @Inject constructor(
     fun saveChannelReorder() {
         val state = _uiState.value
         val category = state.reorderCategory ?: return
+        if (category.id == VirtualCategoryIds.RECENT) return
         val currentList = state.filteredChannels
 
         // Exit reorder mode immediately for responsive UI
@@ -453,7 +607,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 // Map the virtual category ID back to the Favorite Group ID
-                val groupId = if (category.id == -999L) null else -category.id
+                val groupId = if (category.id == VirtualCategoryIds.FAVORITES) null else -category.id
 
                 val favoritesFlow = if (groupId == null) {
                     favoriteRepository.getFavorites(ContentType.LIVE)
@@ -481,12 +635,48 @@ class HomeViewModel @Inject constructor(
             }
         }
     }
+
+    private fun loadChannelsByOrderedIds(ids: List<Long>): Flow<List<Channel>> {
+        if (ids.isEmpty()) return flowOf(emptyList())
+
+        return channelRepository.getChannelsByIds(ids).map { unsorted ->
+            val channelsById = unsorted.associateBy { it.id }
+            ids.mapNotNull { channelsById[it] }
+        }
+    }
+
+    private suspend fun loadReorderChannels(category: Category): List<Channel> {
+        if (!category.isVirtual || category.id == VirtualCategoryIds.RECENT) return emptyList()
+
+        val groupId = if (category.id == VirtualCategoryIds.FAVORITES) null else -category.id
+        val favorites = if (groupId == null) {
+            favoriteRepository.getFavorites(ContentType.LIVE).first()
+        } else {
+            favoriteRepository.getFavoritesByGroup(groupId).first()
+        }
+
+        val orderedIds = favorites
+            .sortedBy { it.position }
+            .map { it.contentId }
+
+        return loadChannelsByOrderedIds(orderedIds).first()
+    }
+
+    private fun List<PlaybackHistory>.toRecentLiveContentIds(): List<Long> =
+        asSequence()
+            .filter { it.contentType == ContentType.LIVE }
+            .sortedByDescending { it.lastWatchedAt }
+            .distinctBy { it.contentId }
+            .map { it.contentId }
+            .toList()
 }
 
 data class HomeUiState(
     val provider: Provider? = null,
     val allProviders: List<Provider> = emptyList(),
     val categories: List<Category> = emptyList(),
+    val recentChannels: List<Channel> = emptyList(),
+    val lastVisitedCategory: Category? = null,
     val selectedCategory: Category? = null,
     val filteredChannels: List<Channel> = emptyList(),
     val hasChannels: Boolean = false,
@@ -497,10 +687,19 @@ data class HomeUiState(
     val selectedChannelForDialog: Channel? = null,
     val dialogGroupMemberships: List<Long> = emptyList(),
     val userMessage: String? = null,
+    val showRenameGroupDialog: Boolean = false,
+    val groupToRename: Category? = null,
+    val renameGroupError: String? = null,
     val showDeleteGroupDialog: Boolean = false,
     val groupToDelete: Category? = null,
     val parentalControlLevel: Int = 0,
     val selectedCategoryForOptions: Category? = null,
     val isChannelReorderMode: Boolean = false,
     val reorderCategory: Category? = null
+)
+
+private data class CategorySelectionContext(
+    val categories: List<Category>,
+    val defaultCategoryId: Long?,
+    val lastVisitedCategoryId: Long?
 )

@@ -39,6 +39,7 @@ import com.streamvault.app.ui.components.CategoryRow
 import com.streamvault.app.ui.components.ChannelCard
 import com.streamvault.app.ui.components.dialogs.CategoryOptionsDialog
 import com.streamvault.app.ui.components.dialogs.PinDialog
+import com.streamvault.app.ui.components.dialogs.RenameGroupDialog
 import com.streamvault.app.ui.components.TopNavBar
 import com.streamvault.app.ui.components.SkeletonCard
 import com.streamvault.app.ui.components.shimmerEffect
@@ -52,6 +53,12 @@ import com.streamvault.app.R
 import com.streamvault.app.ui.screens.multiview.MultiViewViewModel
 import com.streamvault.app.ui.screens.multiview.MultiViewPlannerDialog
 import com.streamvault.app.navigation.Routes
+import com.streamvault.domain.model.VirtualCategoryIds
+
+private enum class FocusRestoreTarget {
+    CATEGORY,
+    CHANNEL
+}
 
 
 // ── Screen ─────────────────────────────────────────────────────────
@@ -66,6 +73,7 @@ fun HomeScreen(
     onChannelClick: (Channel, Category?, Provider?) -> Unit,
     onNavigate: (String) -> Unit,
     currentRoute: String,
+    initialCategoryId: Long? = null,
     viewModel: HomeViewModel = hiltViewModel(),
     multiViewViewModel: MultiViewViewModel = hiltViewModel()
 ) {
@@ -85,6 +93,10 @@ fun HomeScreen(
     var pendingLockToggleCategory by remember { mutableStateOf<Category?>(null) }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    LaunchedEffect(initialCategoryId) {
+        viewModel.setPreferredInitialCategory(initialCategoryId)
+    }
 
     LaunchedEffect(uiState.userMessage) {
         uiState.userMessage?.let { message ->
@@ -141,18 +153,20 @@ fun HomeScreen(
                 viewModel.setDefaultCategory(category)
                 viewModel.dismissCategoryOptions()
             },
+            onRename = if (category.isVirtual && category.id !in setOf(VirtualCategoryIds.FAVORITES, VirtualCategoryIds.RECENT)) {
+                { viewModel.requestRenameGroup(category) }
+            } else null,
             onToggleLock = {
                 viewModel.dismissCategoryOptions()
                 pendingLockToggleCategory = category
                 showPinDialog = true
             },
-            onDelete = if (category.isVirtual && category.id != -999L) {
+            onDelete = if (category.isVirtual && category.id !in setOf(VirtualCategoryIds.FAVORITES, VirtualCategoryIds.RECENT)) {
                 {
-                    viewModel.dismissCategoryOptions()
                     viewModel.requestDeleteGroup(category)
                 }
             } else null,
-            onReorderChannels = if (category.isVirtual) {
+            onReorderChannels = if (category.isVirtual && category.id != VirtualCategoryIds.RECENT) {
                 { viewModel.enterChannelReorderMode(category) }
             } else null
         )
@@ -178,7 +192,7 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                "Reordering '${uiState.selectedCategory?.name ?: "Channels"}'",
+                                "Reordering '${uiState.reorderCategory?.name ?: uiState.selectedCategory?.name ?: "Channels"}'",
                                 style = MaterialTheme.typography.titleLarge,
                                 color = Primary
                             )
@@ -266,6 +280,7 @@ fun HomeScreen(
                 val channelFocusRequesters = remember { mutableMapOf<Long, FocusRequester>() }
                 var lastFocusedCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
                 var lastFocusedChannelId by rememberSaveable { mutableStateOf<Long?>(null) }
+                var preferredRestoreTarget by rememberSaveable { mutableStateOf(FocusRestoreTarget.CHANNEL.name) }
                 var shouldRestoreCategoryFocus by remember { mutableStateOf(false) }
                 var shouldRestoreChannelFocus by remember { mutableStateOf(false) }
 
@@ -287,9 +302,20 @@ fun HomeScreen(
                         uiState.filteredChannels.any { it.id == lastFocusedChannelId }
                     val canRestoreCategory = lastFocusedCategoryId != null &&
                         uiState.categories.any { it.id == lastFocusedCategoryId }
+                    val restoreTarget = runCatching {
+                        FocusRestoreTarget.valueOf(preferredRestoreTarget)
+                    }.getOrDefault(FocusRestoreTarget.CHANNEL)
 
-                    shouldRestoreChannelFocus = canRestoreChannel
-                    shouldRestoreCategoryFocus = !canRestoreChannel && canRestoreCategory
+                    shouldRestoreCategoryFocus = restoreTarget == FocusRestoreTarget.CATEGORY && canRestoreCategory
+                    shouldRestoreChannelFocus = when {
+                        restoreTarget == FocusRestoreTarget.CATEGORY -> false
+                        canRestoreChannel -> true
+                        else -> false
+                    }
+
+                    if (!shouldRestoreChannelFocus && !shouldRestoreCategoryFocus && canRestoreCategory) {
+                        shouldRestoreCategoryFocus = true
+                    }
                 }
 
                 LaunchedEffect(shouldRestoreChannelFocus, uiState.filteredChannels) {
@@ -429,7 +455,10 @@ fun HomeScreen(
                                         viewModel.selectCategory(category)
                                     }
                                 },
-                                onLongClick = { viewModel.showCategoryOptions(category) },
+                                onLongClick = {
+                                    preferredRestoreTarget = FocusRestoreTarget.CATEGORY.name
+                                    viewModel.showCategoryOptions(category)
+                                },
                                 onJumpToSearch = { categorySearchFocusRequester.requestFocus() },
                                 onJumpToContent = {
                                     if (uiState.filteredChannels.isNotEmpty()) {
@@ -466,14 +495,19 @@ fun HomeScreen(
                                 style = MaterialTheme.typography.headlineSmall,
                                 color = OnBackground
                             )
-                            SearchInput(
-                                value = uiState.channelSearchQuery,
-                                onValueChange = { viewModel.updateChannelSearchQuery(it) },
-                                placeholder = stringResource(R.string.home_search_channels),
-                                onSearch = { focusManager.clearFocus() },
-                                focusRequester = channelSearchFocusRequester,
-                                modifier = Modifier.width(300.dp)
-                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                SearchInput(
+                                    value = uiState.channelSearchQuery,
+                                    onValueChange = { viewModel.updateChannelSearchQuery(it) },
+                                    placeholder = stringResource(R.string.home_search_channels),
+                                    onSearch = { focusManager.clearFocus() },
+                                    focusRequester = channelSearchFocusRequester,
+                                    modifier = Modifier.width(300.dp)
+                                )
+                            }
                         }
                         
                         if (uiState.isLoading) {
@@ -511,9 +545,16 @@ fun HomeScreen(
                                         color = OnSurface
                                     )
                                     val selectedCategory = uiState.selectedCategory
-                                    if (selectedCategory?.isVirtual == true && selectedCategory.id == -999L) {
+                                    if (selectedCategory?.isVirtual == true && selectedCategory.id == VirtualCategoryIds.FAVORITES) {
                                         Text(
                                             text = stringResource(R.string.home_add_favorites_hint),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = OnSurfaceDim,
+                                            modifier = Modifier.padding(top = 4.dp)
+                                        )
+                                    } else if (selectedCategory?.isVirtual == true && selectedCategory.id == VirtualCategoryIds.RECENT) {
+                                        Text(
+                                            text = stringResource(R.string.home_recent_channels_hint),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = OnSurfaceDim,
                                             modifier = Modifier.padding(top = 4.dp)
@@ -600,6 +641,7 @@ fun HomeScreen(
                                         onLongClick = {
                                             if (!uiState.isChannelReorderMode) {
                                                 ignoreNextClick = true
+                                                preferredRestoreTarget = FocusRestoreTarget.CHANNEL.name
                                                 viewModel.onShowDialog(channel)
                                             }
                                         },
@@ -645,7 +687,7 @@ fun HomeScreen(
         com.streamvault.app.ui.components.dialogs.AddToGroupDialog(
             contentTitle = channel.name,
             channel = channel,
-            groups = uiState.categories.filter { it.isVirtual && it.id != -999L },
+            groups = uiState.categories.filter { it.isVirtual && it.id !in setOf(VirtualCategoryIds.FAVORITES, VirtualCategoryIds.RECENT) },
             isFavorite = channel.isFavorite,
             memberOfGroups = uiState.dialogGroupMemberships,
             onDismiss = { viewModel.onDismissDialog() },
@@ -656,6 +698,15 @@ fun HomeScreen(
             onRemoveFromGroup = { group -> viewModel.removeFromGroup(channel, group) },
             onCreateGroup = { name -> viewModel.createCustomGroup(name) },
             onNavigateToSplitScreen = { onNavigate(Routes.MULTI_VIEW) }
+        )
+    }
+
+    if (uiState.showRenameGroupDialog && uiState.groupToRename != null) {
+        RenameGroupDialog(
+            initialName = uiState.groupToRename!!.name,
+            errorMessage = uiState.renameGroupError,
+            onDismissRequest = { viewModel.cancelRenameGroup() },
+            onConfirm = { name -> viewModel.confirmRenameGroup(name) }
         )
     }
 

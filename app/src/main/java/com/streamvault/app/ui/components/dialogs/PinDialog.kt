@@ -15,6 +15,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -36,22 +37,28 @@ fun PinDialog(
 ) {
     var pin by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
+        keyboardController?.show()
     }
     
     // Auto-submit when length reaches 4
     LaunchedEffect(pin) {
         if (pin.length == 4) {
             delay(300) // Small delay for visual feedback
+            keyboardController?.hide()
             onPinEntered(pin)
             pin = "" // Reset logic usually handled by parent state (error or dismiss)
         }
     }
 
     Dialog(
-        onDismissRequest = onDismissRequest,
+        onDismissRequest = {
+            keyboardController?.hide()
+            onDismissRequest()
+        },
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Box(
@@ -120,7 +127,10 @@ fun PinDialog(
                 )
                 
                 // Cancel Button
-                TextButton(onClick = onDismissRequest) {
+                TextButton(onClick = {
+                    keyboardController?.hide()
+                    onDismissRequest()
+                }) {
                     Text(stringResource(R.string.pin_dialog_cancel), color = Color.White.copy(alpha = 0.7f))
                 }
             }

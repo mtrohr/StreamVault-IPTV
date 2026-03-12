@@ -4,6 +4,7 @@ import android.view.View
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,7 +13,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
@@ -20,7 +23,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
@@ -32,12 +37,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Button
+import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import com.streamvault.app.R
 import com.streamvault.app.ui.theme.Primary
@@ -49,6 +57,7 @@ fun MultiViewScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val firstSlotFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    var showReplacementPicker by remember { mutableStateOf(false) }
 
     BackHandler(onBack = onBack)
 
@@ -67,6 +76,17 @@ fun MultiViewScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
+        if (showReplacementPicker) {
+            ReplaceSlotDialog(
+                candidates = uiState.replacementCandidates,
+                onDismiss = { showReplacementPicker = false },
+                onReplace = { channel ->
+                    viewModel.replaceFocusedSlot(channel)
+                    showReplacementPicker = false
+                }
+            )
+        }
+
         Column(modifier = Modifier.fillMaxSize()) {
             Row(modifier = Modifier.weight(1f)) {
                 PlayerCell(
@@ -106,18 +126,75 @@ fun MultiViewScreen(
         }
 
         val focused = uiState.slots.getOrNull(uiState.focusedSlotIndex)
-        if (focused != null && focused.title.isNotBlank()) {
-            Text(
-                text = "Focused: ${focused.title}",
-                color = Color(0xFF4CAF50),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 8.dp)
-                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 12.dp, vertical = 4.dp)
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            MultiViewPolicyCard(
+                policy = uiState.performancePolicy,
+                telemetry = uiState.telemetry,
+                onModeSelected = viewModel::setPerformanceMode
             )
+            if (focused != null && focused.title.isNotBlank()) {
+                Text(
+                    text = stringResource(R.string.multiview_focused_prefix, focused.title),
+                    color = Color(0xFF4CAF50),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                )
+            }
+            if (uiState.presets.isNotEmpty()) {
+                Spacer(modifier = Modifier.size(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    uiState.presets.forEach { preset ->
+                        val presetLabel = stringResource(R.string.multiview_preset_label, preset.index + 1)
+                        Button(onClick = { viewModel.loadPreset(preset.index) }) {
+                            Text(
+                                text = if (preset.isPopulated) {
+                                    "$presetLabel (${preset.channelCount})"
+                                } else {
+                                    presetLabel
+                                }
+                            )
+                        }
+                        Button(onClick = { viewModel.saveCurrentAsPreset(preset.index) }) {
+                            Text(text = stringResource(R.string.multiview_preset_save, preset.index + 1))
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.size(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { showReplacementPicker = true },
+                    enabled = uiState.replacementCandidates.isNotEmpty()
+                ) {
+                    Text(stringResource(R.string.multiview_replace_slot))
+                }
+                Button(
+                    onClick = { viewModel.removeFocusedSlot() },
+                    enabled = focused != null && !focused.isEmpty
+                ) {
+                    Text(stringResource(R.string.multiview_remove_slot))
+                }
+                if (uiState.pinnedAudioSlotIndex == uiState.focusedSlotIndex) {
+                    Button(onClick = { viewModel.clearPinnedAudio() }) {
+                        Text(stringResource(R.string.multiview_audio_follow_focus))
+                    }
+                } else {
+                    Button(
+                        onClick = { viewModel.pinAudioToFocusedSlot() },
+                        enabled = focused != null && !focused.isEmpty
+                    ) {
+                        Text(stringResource(R.string.multiview_pin_audio))
+                    }
+                }
+            }
         }
     }
 }
@@ -191,6 +268,25 @@ private fun PlayerCell(
                     }
                 }
 
+                !slot.performanceBlockedReason.isNullOrBlank() -> {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = stringResource(R.string.multiview_policy_blocked),
+                            color = Color(0xFFFFC107),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text(
+                            text = slot.performanceBlockedReason.orEmpty(),
+                            color = Color(0xFFFFE082),
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                    }
+                }
+
                 else -> {
                     val engine = slot.playerEngine
                     if (engine != null) {
@@ -226,7 +322,11 @@ private fun PlayerCell(
                                 .padding(horizontal = 8.dp, vertical = 6.dp)
                         ) {
                             Text(
-                                text = "AUDIO",
+                                text = if (slot.isAudioPinned) {
+                                    stringResource(R.string.multiview_audio_pinned_badge)
+                                } else {
+                                    stringResource(R.string.multiview_audio_badge)
+                                },
                                 color = Primary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
@@ -249,6 +349,184 @@ private fun PlayerCell(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MultiViewPolicyCard(
+    policy: MultiViewPerformancePolicyUiModel,
+    telemetry: MultiViewTelemetryUiModel,
+    onModeSelected: (MultiViewPerformanceMode) -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Text(
+            text = stringResource(
+                R.string.multiview_policy_summary,
+                policy.tier.name.lowercase().replaceFirstChar { it.uppercase() },
+                policy.maxActiveSlots
+            ),
+            color = Color.White,
+            style = MaterialTheme.typography.labelLarge
+        )
+        Text(
+            text = policy.summary,
+            color = Color(0xFFB0BEC5),
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.Center
+        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = stringResource(
+                    R.string.multiview_telemetry_snapshot,
+                    telemetry.activeSlots,
+                    telemetry.standbySlots,
+                    telemetry.bufferingSlots,
+                    telemetry.errorSlots
+                ),
+                color = Color.White,
+                style = MaterialTheme.typography.labelMedium
+            )
+            Text(
+                text = stringResource(
+                    R.string.multiview_telemetry_detail,
+                    telemetry.totalDroppedFrames,
+                    telemetry.droppedFramesDelta,
+                    telemetry.sustainedLoadScore,
+                    when (telemetry.thermalStatus) {
+                        MultiViewThermalStatus.NORMAL -> stringResource(R.string.multiview_thermal_normal)
+                        MultiViewThermalStatus.LIGHT -> stringResource(R.string.multiview_thermal_light)
+                        MultiViewThermalStatus.MODERATE -> stringResource(R.string.multiview_thermal_moderate)
+                        MultiViewThermalStatus.SEVERE -> stringResource(R.string.multiview_thermal_severe)
+                        MultiViewThermalStatus.CRITICAL -> stringResource(R.string.multiview_thermal_critical)
+                        MultiViewThermalStatus.UNKNOWN -> stringResource(R.string.multiview_thermal_unknown)
+                    }
+                ),
+                color = Color(0xFFB0BEC5),
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center
+            )
+            if (telemetry.isLowMemory) {
+                Text(
+                    text = stringResource(R.string.multiview_low_memory_warning),
+                    color = Color(0xFFFFC107),
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+            }
+            telemetry.throttledReason?.let { reason ->
+                Text(
+                    text = reason,
+                    color = Color(0xFFFFE082),
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+            }
+            Text(
+                text = telemetry.recommendation,
+                color = Color(0xFF90CAF9),
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MultiViewPerformanceMode.entries.forEach { mode ->
+                Surface(
+                    onClick = { onModeSelected(mode) },
+                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(20.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = if (policy.mode == mode) Color(0xFF1E3A5F) else Color(0xFF1A1A30),
+                        focusedContainerColor = Color(0xFF294B75)
+                    ),
+                    border = ClickableSurfaceDefaults.border(
+                        border = Border(
+                            androidx.compose.foundation.BorderStroke(
+                                width = 1.dp,
+                                color = if (policy.mode == mode) Color.White else Color.Transparent
+                            )
+                        )
+                    )
+                ) {
+                    Text(
+                        text = when (mode) {
+                            MultiViewPerformanceMode.AUTO -> stringResource(R.string.multiview_policy_auto)
+                            MultiViewPerformanceMode.CONSERVATIVE -> stringResource(R.string.multiview_policy_conservative)
+                            MultiViewPerformanceMode.BALANCED -> stringResource(R.string.multiview_policy_balanced)
+                            MultiViewPerformanceMode.MAXIMUM -> stringResource(R.string.multiview_policy_maximum)
+                        },
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReplaceSlotDialog(
+    candidates: List<com.streamvault.domain.model.Channel>,
+    onDismiss: () -> Unit,
+    onReplace: (com.streamvault.domain.model.Channel) -> Unit
+) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        androidx.compose.material3.Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color(0xFF12121F),
+            modifier = Modifier
+                .fillMaxWidth(0.55f)
+                .padding(20.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.multiview_replace_title),
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                if (candidates.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.multiview_replace_empty),
+                        color = Color(0xFFAAAAAA),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        candidates.forEach { channel ->
+                            Surface(
+                                onClick = { onReplace(channel) },
+                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
+                                colors = ClickableSurfaceDefaults.colors(
+                                    containerColor = Color(0xFF1A1A30),
+                                    focusedContainerColor = Color(0xFF2C2C46)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Text(channel.name, color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                                    channel.categoryName?.takeIf { it.isNotBlank() }?.let {
+                                        Text(it, color = Color(0xFFAAAAAA), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Button(onClick = onDismiss) {
+                    Text(stringResource(R.string.settings_cancel))
                 }
             }
         }

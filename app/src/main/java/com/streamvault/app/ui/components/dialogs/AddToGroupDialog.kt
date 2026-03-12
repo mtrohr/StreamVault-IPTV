@@ -18,6 +18,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.Category
 import androidx.compose.ui.res.stringResource
@@ -25,9 +26,6 @@ import com.streamvault.app.R
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.ImeAction
 import kotlinx.coroutines.delay
 import com.streamvault.app.ui.screens.multiview.MultiViewPlannerDialog
 import com.streamvault.app.ui.screens.multiview.MultiViewViewModel
@@ -48,7 +46,6 @@ fun AddToGroupDialog(
     onNavigateToSplitScreen: (() -> Unit)? = null  // navigate to MultiViewScreen when launched
 ) {
     var showCreateGroup by remember { mutableStateOf(false) }
-    var newGroupName by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
 
     // Ghost-click debounce
@@ -81,70 +78,48 @@ fun AddToGroupDialog(
         )
     }
 
-    Dialog(onDismissRequest = safeDismiss) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier
-                .width(400.dp)
-                .padding(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.add_group_manage_title, contentTitle),
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(
-                        onClick = safeDismiss,
-                        modifier = Modifier.focusRequester(focusRequester)
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.add_group_close_cd))
-                    }
-                }
+    if (showCreateGroup) {
+        CreateGroupDialog(
+            onDismissRequest = { showCreateGroup = false },
+            onConfirm = { name ->
+                onCreateGroup(name)
+                showCreateGroup = false
+            }
+        )
+    }
 
-                if (showCreateGroup) {
-                    OutlinedTextField(
-                        value = newGroupName,
-                        onValueChange = { newGroupName = it },
-                        label = { Text(stringResource(R.string.add_group_name_hint)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                if (newGroupName.isNotBlank()) {
-                                    onCreateGroup(newGroupName)
-                                    showCreateGroup = false
-                                    newGroupName = ""
-                                }
-                            }
-                        )
-                    )
+    if (!showCreateGroup && !showSlotPicker) {
+        Dialog(
+            onDismissRequest = safeDismiss,
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier
+                    .width(400.dp)
+                    .padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    // Header
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                        horizontalArrangement = Arrangement.End
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(onClick = { showCreateGroup = false }) {
-                            Text(stringResource(R.string.add_group_cancel))
-                        }
-                        Button(onClick = {
-                            if (newGroupName.isNotBlank()) {
-                                onCreateGroup(newGroupName)
-                                showCreateGroup = false
-                                newGroupName = ""
-                            }
-                        }) {
-                            Text(stringResource(R.string.add_group_create))
+                        Text(
+                            text = stringResource(R.string.add_group_manage_title, contentTitle),
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = safeDismiss,
+                            modifier = Modifier.focusRequester(focusRequester)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.add_group_close_cd))
                         }
                     }
-                } else {
+
                     LazyColumn(
                         modifier = Modifier.weight(1f, fill = false),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -259,17 +234,17 @@ fun AddToGroupDialog(
                             }
                         }
 
-                        item {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedButton(
-                                onClick = { showCreateGroup = true },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(stringResource(R.string.add_group_create_new_btn))
-                            }
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { showCreateGroup = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(stringResource(R.string.add_group_create_new_btn))
                         }
+                    }
                     }
                 }
             }

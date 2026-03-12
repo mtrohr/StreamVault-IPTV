@@ -111,8 +111,23 @@ interface MovieDao {
     @Query("SELECT * FROM movies WHERE provider_id = :providerId ORDER BY name ASC")
     fun getByProvider(providerId: Long): Flow<List<MovieEntity>>
 
+    @Query("SELECT * FROM movies WHERE provider_id = :providerId ORDER BY name ASC LIMIT :limit OFFSET :offset")
+    fun getByProviderPage(providerId: Long, limit: Int, offset: Int): Flow<List<MovieEntity>>
+
     @Query("SELECT * FROM movies WHERE provider_id = :providerId AND category_id = :categoryId ORDER BY name ASC")
     fun getByCategory(providerId: Long, categoryId: Long): Flow<List<MovieEntity>>
+
+    @Query("SELECT * FROM movies WHERE provider_id = :providerId AND category_id = :categoryId ORDER BY name ASC LIMIT :limit OFFSET :offset")
+    fun getByCategoryPage(providerId: Long, categoryId: Long, limit: Int, offset: Int): Flow<List<MovieEntity>>
+
+    @Query("SELECT * FROM movies WHERE provider_id = :providerId AND category_id = :categoryId ORDER BY name ASC LIMIT :limit")
+    fun getByCategoryPreview(providerId: Long, categoryId: Long, limit: Int): Flow<List<MovieEntity>>
+
+    @Query("SELECT * FROM movies WHERE provider_id = :providerId ORDER BY rating DESC, name ASC LIMIT :limit")
+    fun getTopRatedPreview(providerId: Long, limit: Int): Flow<List<MovieEntity>>
+
+    @Query("SELECT * FROM movies WHERE provider_id = :providerId ORDER BY release_date DESC, name ASC LIMIT :limit")
+    fun getFreshPreview(providerId: Long, limit: Int): Flow<List<MovieEntity>>
 
     @Query(
         """
@@ -183,6 +198,9 @@ interface MovieDao {
     @Query("SELECT COUNT(*) FROM movies WHERE provider_id = :providerId")
     fun getCount(providerId: Long): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM movies WHERE provider_id = :providerId AND category_id = :categoryId")
+    fun getCountByCategory(providerId: Long, categoryId: Long): Flow<Int>
+
     @Query("UPDATE movies SET is_user_protected = :isProtected WHERE provider_id = :providerId AND category_id = :categoryId")
     suspend fun updateProtectionStatus(providerId: Long, categoryId: Long, isProtected: Boolean)
 }
@@ -192,8 +210,23 @@ interface SeriesDao {
     @Query("SELECT * FROM series WHERE provider_id = :providerId ORDER BY name ASC")
     fun getByProvider(providerId: Long): Flow<List<SeriesEntity>>
 
+    @Query("SELECT * FROM series WHERE provider_id = :providerId ORDER BY name ASC LIMIT :limit OFFSET :offset")
+    fun getByProviderPage(providerId: Long, limit: Int, offset: Int): Flow<List<SeriesEntity>>
+
     @Query("SELECT * FROM series WHERE provider_id = :providerId AND category_id = :categoryId ORDER BY name ASC")
     fun getByCategory(providerId: Long, categoryId: Long): Flow<List<SeriesEntity>>
+
+    @Query("SELECT * FROM series WHERE provider_id = :providerId AND category_id = :categoryId ORDER BY name ASC LIMIT :limit OFFSET :offset")
+    fun getByCategoryPage(providerId: Long, categoryId: Long, limit: Int, offset: Int): Flow<List<SeriesEntity>>
+
+    @Query("SELECT * FROM series WHERE provider_id = :providerId AND category_id = :categoryId ORDER BY name ASC LIMIT :limit")
+    fun getByCategoryPreview(providerId: Long, categoryId: Long, limit: Int): Flow<List<SeriesEntity>>
+
+    @Query("SELECT * FROM series WHERE provider_id = :providerId ORDER BY rating DESC, name ASC LIMIT :limit")
+    fun getTopRatedPreview(providerId: Long, limit: Int): Flow<List<SeriesEntity>>
+
+    @Query("SELECT * FROM series WHERE provider_id = :providerId ORDER BY last_modified DESC, name ASC LIMIT :limit")
+    fun getFreshPreview(providerId: Long, limit: Int): Flow<List<SeriesEntity>>
 
     @Query(
         """
@@ -243,6 +276,9 @@ interface SeriesDao {
 
     @Query("SELECT COUNT(*) FROM series WHERE provider_id = :providerId")
     fun getCount(providerId: Long): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM series WHERE provider_id = :providerId AND category_id = :categoryId")
+    fun getCountByCategory(providerId: Long, categoryId: Long): Flow<Int>
 
     @Query("UPDATE series SET is_user_protected = :isProtected WHERE provider_id = :providerId AND category_id = :categoryId")
     suspend fun updateProtectionStatus(providerId: Long, categoryId: Long, isProtected: Boolean)
@@ -409,6 +445,9 @@ interface PlaybackHistoryDao {
 
     @Query("SELECT * FROM playback_history WHERE provider_id = :providerId ORDER BY last_watched_at DESC LIMIT :limit")
     fun getRecentlyWatchedByProvider(providerId: Long, limit: Int = 100): Flow<List<PlaybackHistoryEntity>>
+
+    @Query("SELECT * FROM playback_history ORDER BY last_watched_at DESC")
+    suspend fun getAllSync(): List<PlaybackHistoryEntity>
 
     @Query("SELECT * FROM playback_history WHERE content_id = :contentId AND content_type = :contentType AND provider_id = :providerId")
     suspend fun get(contentId: Long, contentType: String, providerId: Long): PlaybackHistoryEntity?

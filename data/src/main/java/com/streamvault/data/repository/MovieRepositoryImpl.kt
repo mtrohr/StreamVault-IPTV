@@ -7,7 +7,9 @@ import com.streamvault.data.local.entity.CategoryEntity
 import com.streamvault.data.mapper.toDomain
 import com.streamvault.domain.model.Category
 import com.streamvault.domain.model.ContentType
+import com.streamvault.domain.model.LibraryBrowseQuery
 import com.streamvault.domain.model.Movie
+import com.streamvault.domain.model.PagedResult
 import com.streamvault.domain.model.Result
 import com.streamvault.domain.repository.MovieRepository
 import kotlinx.coroutines.flow.Flow
@@ -49,6 +51,59 @@ class MovieRepositoryImpl @Inject constructor(
             }
         }.map { list -> list.map { it.toDomain() } }
 
+    override fun getMoviesByCategoryPage(
+        providerId: Long,
+        categoryId: Long,
+        limit: Int,
+        offset: Int
+    ): Flow<List<Movie>> =
+        combine(
+            movieDao.getByCategoryPage(providerId, categoryId, limit, offset),
+            preferencesRepository.parentalControlLevel
+        ) { entities: List<MovieEntity>, level: Int ->
+            if (level == 2) {
+                entities.filter { !it.isUserProtected }
+            } else {
+                entities
+            }
+        }.map { list -> list.map { it.toDomain() } }
+
+    override fun getMoviesByCategoryPreview(providerId: Long, categoryId: Long, limit: Int): Flow<List<Movie>> =
+        combine(
+            movieDao.getByCategoryPreview(providerId, categoryId, limit),
+            preferencesRepository.parentalControlLevel
+        ) { entities: List<MovieEntity>, level: Int ->
+            if (level == 2) {
+                entities.filter { !it.isUserProtected }
+            } else {
+                entities
+            }
+        }.map { list -> list.map { it.toDomain() } }
+
+    override fun getTopRatedPreview(providerId: Long, limit: Int): Flow<List<Movie>> =
+        combine(
+            movieDao.getTopRatedPreview(providerId, limit),
+            preferencesRepository.parentalControlLevel
+        ) { entities: List<MovieEntity>, level: Int ->
+            if (level == 2) {
+                entities.filter { !it.isUserProtected }
+            } else {
+                entities
+            }
+        }.map { list -> list.map { it.toDomain() } }
+
+    override fun getFreshPreview(providerId: Long, limit: Int): Flow<List<Movie>> =
+        combine(
+            movieDao.getFreshPreview(providerId, limit),
+            preferencesRepository.parentalControlLevel
+        ) { entities: List<MovieEntity>, level: Int ->
+            if (level == 2) {
+                entities.filter { !it.isUserProtected }
+            } else {
+                entities
+            }
+        }.map { list -> list.map { it.toDomain() } }
+
     override fun getMoviesByIds(ids: List<Long>): Flow<List<Movie>> =
         movieDao.getByIds(ids).map { entities -> entities.map { it.toDomain() } }
 
@@ -64,6 +119,41 @@ class MovieRepositoryImpl @Inject constructor(
                 mapped
             }
         }
+
+    override fun getCategoryItemCounts(providerId: Long): Flow<Map<Long, Int>> =
+        movieDao.getCategoryCounts(providerId).map { counts ->
+            counts.associate { it.categoryId to it.item_count }
+        }
+
+    override fun getLibraryCount(providerId: Long): Flow<Int> =
+        movieDao.getCount(providerId)
+
+    override fun browseMovies(query: LibraryBrowseQuery): Flow<PagedResult<Movie>> {
+        val categoryId = query.categoryId
+        val pageFlow = if (query.categoryId == null) {
+            movieDao.getByProviderPage(query.providerId, query.limit, query.offset)
+        } else {
+            movieDao.getByCategoryPage(query.providerId, categoryId!!, query.limit, query.offset)
+        }
+        val countFlow = if (query.categoryId == null) {
+            movieDao.getCount(query.providerId)
+        } else {
+            movieDao.getCountByCategory(query.providerId, categoryId!!)
+        }
+        return combine(pageFlow, countFlow, preferencesRepository.parentalControlLevel) { entities, totalCount, level ->
+            val filtered = if (level == 2) {
+                entities.filter { !it.isUserProtected }
+            } else {
+                entities
+            }
+            PagedResult(
+                items = filtered.map { it.toDomain() },
+                totalCount = totalCount,
+                offset = query.offset,
+                limit = query.limit
+            )
+        }
+    }
 
     override fun searchMovies(providerId: Long, query: String): Flow<List<Movie>> =
         query.toFtsPrefixQuery().let { ftsQuery ->

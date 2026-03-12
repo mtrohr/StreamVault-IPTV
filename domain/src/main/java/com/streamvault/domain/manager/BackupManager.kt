@@ -1,13 +1,51 @@
 package com.streamvault.domain.manager
 
+import com.streamvault.domain.model.PlaybackHistory
+import com.streamvault.domain.model.Provider
 import kotlinx.coroutines.flow.Flow
 import com.streamvault.domain.model.Result
 
 data class BackupData(
-    val version: Int = 1,
+    val version: Int = 2,
     val preferences: Map<String, String>? = null,
+    val providers: List<Provider>? = null,
     val favorites: List<com.streamvault.domain.model.Favorite>? = null,
-    val virtualGroups: List<com.streamvault.domain.model.VirtualGroup>? = null
+    val virtualGroups: List<com.streamvault.domain.model.VirtualGroup>? = null,
+    val playbackHistory: List<PlaybackHistory>? = null,
+    val multiViewPresets: Map<String, List<Long>>? = null
+)
+
+enum class BackupConflictStrategy {
+    KEEP_EXISTING,
+    REPLACE_EXISTING
+}
+
+data class BackupPreview(
+    val version: Int,
+    val providerCount: Int,
+    val favoriteCount: Int,
+    val groupCount: Int,
+    val playbackHistoryCount: Int,
+    val multiViewPresetCount: Int,
+    val preferenceCount: Int,
+    val providerConflicts: Int,
+    val favoriteConflicts: Int,
+    val groupConflicts: Int,
+    val historyConflicts: Int
+)
+
+data class BackupImportPlan(
+    val importPreferences: Boolean = true,
+    val importProviders: Boolean = true,
+    val importSavedLibrary: Boolean = true,
+    val importPlaybackHistory: Boolean = true,
+    val importMultiViewPresets: Boolean = true,
+    val conflictStrategy: BackupConflictStrategy = BackupConflictStrategy.KEEP_EXISTING
+)
+
+data class BackupImportResult(
+    val importedSections: List<String> = emptyList(),
+    val skippedSections: List<String> = emptyList()
 )
 
 interface BackupManager {
@@ -17,7 +55,15 @@ interface BackupManager {
     suspend fun exportConfig(uriString: String): com.streamvault.domain.model.Result<Unit>
 
     /**
+     * Reads a backup and returns a preview with conflict counts before importing.
+     */
+    suspend fun inspectBackup(uriString: String): Result<BackupPreview>
+
+    /**
      * Imports the configuration from the provided URI string (SAF document URI)
      */
-    suspend fun importConfig(uriString: String): com.streamvault.domain.model.Result<Unit>
+    suspend fun importConfig(
+        uriString: String,
+        plan: BackupImportPlan = BackupImportPlan()
+    ): Result<BackupImportResult>
 }

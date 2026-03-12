@@ -3,21 +3,45 @@ package com.streamvault.app.ui.screens.movies
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.streamvault.data.preferences.PreferencesRepository
+import com.streamvault.domain.model.Category
+import com.streamvault.domain.model.ContentType
+import com.streamvault.domain.model.LibraryBrowseQuery
 import com.streamvault.domain.model.Movie
 import com.streamvault.domain.model.PlaybackHistory
+import com.streamvault.domain.repository.FavoriteRepository
 import com.streamvault.domain.repository.MovieRepository
 import com.streamvault.domain.repository.PlaybackHistoryRepository
 import com.streamvault.domain.repository.ProviderRepository
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
-import javax.inject.Inject
-import com.streamvault.domain.model.Category
-import com.streamvault.domain.model.ContentType
-import com.streamvault.domain.repository.FavoriteRepository
 import com.streamvault.domain.usecase.GetCustomCategories
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+enum class MovieLibraryLens {
+    FAVORITES,
+    CONTINUE,
+    TOP_RATED,
+    FRESH
+}
 
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class MoviesViewModel @Inject constructor(
     private val providerRepository: ProviderRepository,
     private val movieRepository: MovieRepository,
@@ -26,74 +50,217 @@ class MoviesViewModel @Inject constructor(
     private val favoriteRepository: FavoriteRepository,
     private val getCustomCategories: GetCustomCategories
 ) : ViewModel() {
+    private companion object {
+        const val UNCATEGORIZED = "Uncategorized"
+        const val FAVORITES_CATEGORY = "\u2605 Favorites"
+        const val FAVORITES_SENTINEL_ID = -999L
+        const val FULL_LIBRARY_CATEGORY = "__full_library__"
+        const val PREVIEW_ROW_LIMIT = 18
+        const val SELECTED_CATEGORY_PAGE_SIZE = 60
+    }
 
     private val _uiState = MutableStateFlow(MoviesUiState())
     val uiState: StateFlow<MoviesUiState> = _uiState.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
-    private val _localMovies = MutableStateFlow<List<Movie>>(emptyList())
+    private val _selectedCategoryLoadLimit = MutableStateFlow(SELECTED_CATEGORY_PAGE_SIZE)
 
     init {
         viewModelScope.launch {
             providerRepository.getActiveProvider()
                 .filterNotNull()
-                .collectLatest { provider ->
-                    // Movies by category
-                    launch {
-                        combine(
-                            movieRepository.getMovies(provider.id),
-                            favoriteRepository.getAllFavorites(ContentType.MOVIE),
-                            getCustomCategories(ContentType.MOVIE),
-                            _searchQuery
-                        ) { movies, allFavorites, customCats, query ->
-                            // 1. Mark global favorites
-                            val globalFavoriteIds = allFavorites.filter { it.groupId == null }.map { it.contentId }.toSet()
-                            val enrichedMovies = movies.map { it.copy(isFavorite = globalFavoriteIds.contains(it.id)) }
-
-                            // 2. Filter by search query
-                            val filtered = if (query.isBlank()) enrichedMovies
-                            else enrichedMovies.filter { it.name.contains(query, ignoreCase = true) }
-
-                            // 3. Group by default category
-                            val grouped = filtered.groupBy { it.categoryName ?: "Uncategorized" }.toMutableMap()
-
-                            // 4. Always add "★ Favorites" even if empty
-                            grouped["★ Favorites"] = enrichedMovies.filter { it.isFavorite }
-
-                            // 5. Always add Custom Groups even if empty, and populate them
-                            customCats.filter { it.id != -999L }.forEach { customCategory ->
-                                val groupId = -customCategory.id // Restore actual group DB ID
-                                val movieIdsInGroup = allFavorites.filter { it.groupId == groupId }.map { it.contentId }.toSet()
-                                grouped[customCategory.name] = enrichedMovies.filter { movieIdsInGroup.contains(it.id) }
-                            }
-
-                            // 6. Sort category names, ensuring "★ Favorites" is first, followed by custom groups
-                            val customNames = customCats.map { it.name }
-                            val categoryNames = grouped.keys.sortedWith(compareBy<String> {
-                                when (it) {
-                                    "★ Favorites" -> 0
-                                    in customNames -> 1
-                                    else -> 2
-                                }
-                            }.thenBy { it })
-
-                            grouped to categoryNames
-                        }.collect { (grouped, categoryNames) ->
-                            val isReordering = _uiState.value.isReorderMode
-                            _uiState.update { it.copy(
-                                moviesByCategory = grouped,
-                                categoryNames = categoryNames,
-                                filteredMovies = if (isReordering) it.filteredMovies else emptyList(),
-                                isLoading = false
-                            ) }
-                        }
+                .flatMapLatest { provider ->
+                    combine(
+                        favoriteRepository.getAllFavorites(ContentType.MOVIE),
+                        getCustomCategories(ContentType.MOVIE),
+                        movieRepository.getCategories(provider.id),
+                        movieRepository.getCategoryItemCounts(provider.id),
+                        movieRepository.getLibraryCount(provider.id)
+                    ) { allFavorites, customCategories, providerCategories, providerCategoryCounts, libraryCount ->
+                        MovieCatalogDependencies(
+                            allFavorites = allFavorites,
+                            customCategories = customCategories,
+                            providerCategories = providerCategories,
+                            providerCategoryCounts = providerCategoryCounts,
+                            libraryCount = libraryCount
+                        )
+                    }.combine(_searchQuery) { dependencies, query ->
+                        MovieCatalogParams(
+                            providerId = provider.id,
+                            allFavorites = dependencies.allFavorites,
+                            customCategories = dependencies.customCategories,
+                            providerCategories = dependencies.providerCategories,
+                            providerCategoryCounts = dependencies.providerCategoryCounts,
+                            libraryCount = dependencies.libraryCount,
+                            query = query.trim()
+                        )
                     }
-                    // Continue Watching — last 20 movie/series items for this provider
+                }
+                .flatMapLatest { params ->
+                    flow {
+                        emit(
+                            if (params.query.isBlank()) {
+                                buildPreviewCatalog(params)
+                            } else {
+                                val searchResults = movieRepository.searchMovies(params.providerId, params.query).first()
+                                buildSearchCatalog(
+                                    movies = searchResults,
+                                    allFavorites = params.allFavorites,
+                                    customCategories = params.customCategories
+                                ).copy(libraryCount = searchResults.size)
+                            }
+                        )
+                    }
+                }
+                .collect { snapshot ->
+                    val isReordering = _uiState.value.isReorderMode
+                    _uiState.update {
+                        it.copy(
+                            moviesByCategory = snapshot.grouped,
+                            categoryNames = snapshot.categoryNames,
+                            categoryCounts = snapshot.categoryCounts,
+                            libraryCount = snapshot.libraryCount,
+                            filteredMovies = if (isReordering) it.filteredMovies else emptyList(),
+                            isLoading = false
+                        )
+                    }
+                }
+        }
+
+        viewModelScope.launch {
+            providerRepository.getActiveProvider()
+                .filterNotNull()
+                .flatMapLatest { provider ->
+                    combine(
+                        favoriteRepository.getAllFavorites(ContentType.MOVIE),
+                        getCustomCategories(ContentType.MOVIE),
+                        movieRepository.getCategories(provider.id),
+                        movieRepository.getCategoryItemCounts(provider.id)
+                    ) { allFavorites, customCategories, providerCategories, providerCategoryCounts ->
+                        MovieCategorySelectionDependencies(
+                            allFavorites = allFavorites,
+                            customCategories = customCategories,
+                            providerCategories = providerCategories,
+                            providerCategoryCounts = providerCategoryCounts
+                        )
+                    }.combine(
+                        combine(
+                            _uiState.map { it.selectedCategory }.distinctUntilChanged(),
+                            _selectedCategoryLoadLimit,
+                            _searchQuery
+                        ) { selectedCategory, loadLimit, query ->
+                            Triple(selectedCategory, loadLimit, query.trim())
+                        }
+                    ) { dependencies, selection ->
+                        SelectedMovieCategoryRequest(
+                            providerId = provider.id,
+                            selectedCategory = selection.first,
+                            loadLimit = selection.second,
+                            query = selection.third,
+                            allFavorites = dependencies.allFavorites,
+                            customCategories = dependencies.customCategories,
+                            providerCategories = dependencies.providerCategories,
+                            providerCategoryCounts = dependencies.providerCategoryCounts
+                        )
+                    }
+                }
+                .flatMapLatest { request ->
+                    flow {
+                        emit(loadSelectedCategoryItems(request))
+                    }
+                }
+                .collect { snapshot ->
+                    _uiState.update {
+                        it.copy(
+                            selectedCategoryItems = snapshot.items,
+                            selectedCategoryLoadedCount = snapshot.loadedCount,
+                            selectedCategoryTotalCount = snapshot.totalCount,
+                            canLoadMoreSelectedCategory = snapshot.canLoadMore
+                        )
+                    }
+                }
+        }
+
+        viewModelScope.launch {
+            providerRepository.getActiveProvider()
+                .filterNotNull()
+                .collectLatest { provider ->
                     launch {
                         playbackHistoryRepository.getRecentlyWatchedByProvider(provider.id, limit = 20)
                             .collect { history ->
-                                _uiState.update { it.copy(continueWatching = history) }
+                                _uiState.update {
+                                    it.copy(
+                                        continueWatching = history.filter { entry ->
+                                            entry.contentType == ContentType.MOVIE
+                                        }
+                                    )
+                                }
                             }
+                    }
+                }
+        }
+
+        viewModelScope.launch {
+            providerRepository.getActiveProvider()
+                .filterNotNull()
+                .flatMapLatest { provider ->
+                    combine(
+                        favoriteRepository.getAllFavorites(ContentType.MOVIE),
+                        playbackHistoryRepository.getRecentlyWatchedByProvider(provider.id, limit = 24),
+                        movieRepository.getTopRatedPreview(provider.id, PREVIEW_ROW_LIMIT),
+                        movieRepository.getFreshPreview(provider.id, PREVIEW_ROW_LIMIT)
+                    ) { allFavorites, history, topRated, fresh ->
+                        MovieLibraryLensDependencies(
+                            providerId = provider.id,
+                            allFavorites = allFavorites,
+                            history = history,
+                            topRated = topRated,
+                            fresh = fresh
+                        )
+                    }
+                }
+                .collectLatest { dependencies ->
+                    val globalFavoriteIds = dependencies.allFavorites
+                        .asSequence()
+                        .filter { it.groupId == null }
+                        .map { it.contentId }
+                        .toSet()
+                    val favoriteIds = dependencies.allFavorites
+                        .asSequence()
+                        .filter { it.groupId == null }
+                        .sortedBy { it.position }
+                        .map { it.contentId }
+                        .take(PREVIEW_ROW_LIMIT)
+                        .toList()
+                    val continueIds = dependencies.history
+                        .asSequence()
+                        .filter { it.contentType == ContentType.MOVIE }
+                        .sortedByDescending { it.lastWatchedAt }
+                        .distinctBy { it.contentId }
+                        .map { it.contentId }
+                        .take(PREVIEW_ROW_LIMIT)
+                        .toList()
+
+                    val favoritePreview = if (favoriteIds.isEmpty()) {
+                        emptyList()
+                    } else {
+                        movieRepository.getMoviesByIds(favoriteIds).first().orderByIds(favoriteIds)
+                    }.markFavorites(globalFavoriteIds)
+                    val continuePreview = if (continueIds.isEmpty()) {
+                        emptyList()
+                    } else {
+                        movieRepository.getMoviesByIds(continueIds).first().orderByIds(continueIds)
+                    }.markFavorites(globalFavoriteIds)
+
+                    _uiState.update {
+                        it.copy(
+                            libraryLensRows = mapOf(
+                                MovieLibraryLens.FAVORITES to favoritePreview,
+                                MovieLibraryLens.CONTINUE to continuePreview,
+                                MovieLibraryLens.TOP_RATED to dependencies.topRated.markFavorites(globalFavoriteIds),
+                                MovieLibraryLens.FRESH to dependencies.fresh.markFavorites(globalFavoriteIds)
+                            ).filterValues { rows -> rows.isNotEmpty() }
+                        )
                     }
                 }
         }
@@ -103,16 +270,34 @@ class MoviesViewModel @Inject constructor(
                 _uiState.update { it.copy(parentalControlLevel = level) }
             }
         }
-        
+
         viewModelScope.launch {
-            getCustomCategories(ContentType.MOVIE).collect { cats ->
-                _uiState.update { it.copy(categories = cats) }
+            getCustomCategories(ContentType.MOVIE).collect { categories ->
+                _uiState.update { it.copy(categories = categories) }
             }
         }
     }
 
     fun selectCategory(categoryName: String?) {
-        _uiState.update { it.copy(selectedCategory = categoryName) }
+        _selectedCategoryLoadLimit.value = SELECTED_CATEGORY_PAGE_SIZE
+        _uiState.update {
+            it.copy(
+                selectedCategory = categoryName,
+                selectedCategoryItems = emptyList(),
+                selectedCategoryLoadedCount = 0,
+                selectedCategoryTotalCount = 0,
+                canLoadMoreSelectedCategory = false
+            )
+        }
+    }
+
+    fun selectFullLibraryBrowse() {
+        selectCategory(FULL_LIBRARY_CATEGORY)
+    }
+
+    fun loadMoreSelectedCategory() {
+        if (!_uiState.value.canLoadMoreSelectedCategory) return
+        _selectedCategoryLoadLimit.update { it + SELECTED_CATEGORY_PAGE_SIZE }
     }
 
     fun setSearchQuery(query: String) {
@@ -127,13 +312,14 @@ class MoviesViewModel @Inject constructor(
     fun onShowDialog(movie: Movie) {
         viewModelScope.launch {
             val memberships = favoriteRepository.getGroupMemberships(movie.id, ContentType.MOVIE)
-            val isFav = favoriteRepository.isFavorite(movie.id, ContentType.MOVIE)
-            val updatedMovie = movie.copy(isFavorite = isFav)
-            _uiState.update { it.copy(
-                showDialog = true, 
-                selectedMovieForDialog = updatedMovie,
-                dialogGroupMemberships = memberships
-            ) }
+            val isFavorite = favoriteRepository.isFavorite(movie.id, ContentType.MOVIE)
+            _uiState.update {
+                it.copy(
+                    showDialog = true,
+                    selectedMovieForDialog = movie.copy(isFavorite = isFavorite),
+                    dialogGroupMemberships = memberships
+                )
+            }
         }
     }
 
@@ -157,8 +343,7 @@ class MoviesViewModel @Inject constructor(
 
     fun addToGroup(movie: Movie, group: Category) {
         viewModelScope.launch {
-            val groupId = -group.id
-            favoriteRepository.addFavorite(movie.id, ContentType.MOVIE, groupId)
+            favoriteRepository.addFavorite(movie.id, ContentType.MOVIE, groupId = -group.id)
             val memberships = favoriteRepository.getGroupMemberships(movie.id, ContentType.MOVIE)
             _uiState.update { it.copy(dialogGroupMemberships = memberships) }
         }
@@ -166,25 +351,39 @@ class MoviesViewModel @Inject constructor(
 
     fun removeFromGroup(movie: Movie, group: Category) {
         viewModelScope.launch {
-            val groupId = -group.id
-            favoriteRepository.removeFavorite(movie.id, ContentType.MOVIE, groupId)
+            favoriteRepository.removeFavorite(movie.id, ContentType.MOVIE, groupId = -group.id)
             val memberships = favoriteRepository.getGroupMemberships(movie.id, ContentType.MOVIE)
             _uiState.update { it.copy(dialogGroupMemberships = memberships) }
         }
     }
 
     fun createCustomGroup(name: String) {
+        val normalizedName = name.trim()
+        val validationError = validateGroupName(normalizedName)
+        if (validationError != null) {
+            _uiState.update { it.copy(userMessage = validationError) }
+            return
+        }
+
         viewModelScope.launch {
-            favoriteRepository.createGroup(name, contentType = ContentType.MOVIE)
+            favoriteRepository.createGroup(normalizedName, contentType = ContentType.MOVIE)
+            _uiState.update { it.copy(userMessage = "Created group $normalizedName") }
         }
     }
 
-    // ── Category Options (Long-Press) ──────────────────────────────────
     fun showCategoryOptions(categoryName: String) {
-        // Find matching Category object or construct a dummy Virtual mapping
         val matchedCategory = _uiState.value.categories.find { it.name == categoryName }
-            ?: if (categoryName == "★ Favorites") Category(id = -999L, name = "★ Favorites", type = ContentType.MOVIE, isVirtual = true) else null
-        
+            ?: if (categoryName == FAVORITES_CATEGORY) {
+                Category(
+                    id = FAVORITES_SENTINEL_ID,
+                    name = FAVORITES_CATEGORY,
+                    type = ContentType.MOVIE,
+                    isVirtual = true
+                )
+            } else {
+                null
+            }
+
         if (matchedCategory != null) {
             _uiState.update { it.copy(selectedCategoryForOptions = matchedCategory) }
         }
@@ -194,9 +393,59 @@ class MoviesViewModel @Inject constructor(
         _uiState.update { it.copy(selectedCategoryForOptions = null) }
     }
 
+    fun requestRenameGroup(category: Category) {
+        if (!category.isVirtual || category.id == FAVORITES_SENTINEL_ID) return
+        _uiState.update {
+            it.copy(
+                selectedCategoryForOptions = null,
+                showRenameGroupDialog = true,
+                groupToRename = category,
+                renameGroupError = null
+            )
+        }
+    }
+
+    fun cancelRenameGroup() {
+        _uiState.update {
+            it.copy(
+                showRenameGroupDialog = false,
+                groupToRename = null,
+                renameGroupError = null
+            )
+        }
+    }
+
+    fun confirmRenameGroup(name: String) {
+        val category = _uiState.value.groupToRename ?: return
+        val normalizedName = name.trim()
+        val validationError = validateGroupName(normalizedName, currentGroupId = category.id)
+        if (validationError != null) {
+            _uiState.update { it.copy(renameGroupError = validationError) }
+            return
+        }
+
+        viewModelScope.launch {
+            favoriteRepository.renameGroup(-category.id, normalizedName)
+            _uiState.update {
+                it.copy(
+                    showRenameGroupDialog = false,
+                    groupToRename = null,
+                    renameGroupError = null,
+                    userMessage = "Renamed group to $normalizedName"
+                )
+            }
+        }
+    }
+
     fun requestDeleteGroup(category: Category) {
-        if (!category.isVirtual || category.id == -999L) return
-        _uiState.update { it.copy(showDeleteGroupDialog = true, groupToDelete = category) }
+        if (!category.isVirtual || category.id == FAVORITES_SENTINEL_ID) return
+        _uiState.update {
+            it.copy(
+                selectedCategoryForOptions = null,
+                showDeleteGroupDialog = true,
+                groupToDelete = category
+            )
+        }
     }
 
     fun cancelDeleteGroup() {
@@ -210,53 +459,57 @@ class MoviesViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     showDeleteGroupDialog = false,
-                    groupToDelete = null
+                    groupToDelete = null,
+                    userMessage = "Deleted group ${category.name}"
                 )
             }
         }
     }
 
-    // ── Reorder ────────────────────────────────────────────────────────
+    fun userMessageShown() {
+        _uiState.update { it.copy(userMessage = null) }
+    }
+
     fun enterCategoryReorderMode(category: Category) {
         dismissCategoryOptions()
-        // Capture a local snapshot of the current view to allow instant drag-and-drop
-        val currentCategoryName = category.name
-        val moviesInView = _uiState.value.moviesByCategory[currentCategoryName] ?: emptyList()
-        _localMovies.value = moviesInView
-        
-        _uiState.update { it.copy(
-            isReorderMode = true, 
-            reorderCategory = category,
-            filteredMovies = moviesInView
-        ) }
+        viewModelScope.launch {
+            val moviesInView = loadReorderMovies(category)
+            _uiState.update {
+                it.copy(
+                    isReorderMode = true,
+                    reorderCategory = category,
+                    filteredMovies = moviesInView
+                )
+            }
+        }
     }
 
     fun exitCategoryReorderMode() {
-        _uiState.update { it.copy(
-            isReorderMode = false, 
-            reorderCategory = null,
-            filteredMovies = emptyList() // Clear local snapshot rendering
-        ) }
+        _uiState.update {
+            it.copy(
+                isReorderMode = false,
+                reorderCategory = null,
+                filteredMovies = emptyList()
+            )
+        }
     }
 
     fun moveItemUp(movie: Movie) {
-        val state = _uiState.value
-        val list = state.filteredMovies.toMutableList()
-        val idx = list.indexOf(movie)
-        if (idx > 0) {
-            list.removeAt(idx)
-            list.add(idx - 1, movie)
+        val list = _uiState.value.filteredMovies.toMutableList()
+        val index = list.indexOf(movie)
+        if (index > 0) {
+            list.removeAt(index)
+            list.add(index - 1, movie)
             _uiState.update { it.copy(filteredMovies = list) }
         }
     }
 
     fun moveItemDown(movie: Movie) {
-        val state = _uiState.value
-        val list = state.filteredMovies.toMutableList()
-        val idx = list.indexOf(movie)
-        if (idx >= 0 && idx < list.size - 1) {
-            list.removeAt(idx)
-            list.add(idx + 1, movie)
+        val list = _uiState.value.filteredMovies.toMutableList()
+        val index = list.indexOf(movie)
+        if (index >= 0 && index < list.lastIndex) {
+            list.removeAt(index)
+            list.add(index + 1, movie)
             _uiState.update { it.copy(filteredMovies = list) }
         }
     }
@@ -266,12 +519,11 @@ class MoviesViewModel @Inject constructor(
         val category = state.reorderCategory ?: return
         val currentList = state.filteredMovies
 
-        // Provide an instant UI reversion out of reorder state
         exitCategoryReorderMode()
 
         viewModelScope.launch {
             try {
-                val groupId = if (category.id == -999L) null else -category.id
+                val groupId = if (category.id == FAVORITES_SENTINEL_ID) null else -category.id
                 val favoritesFlow = if (groupId == null) {
                     favoriteRepository.getFavorites(ContentType.MOVIE)
                 } else {
@@ -280,25 +532,338 @@ class MoviesViewModel @Inject constructor(
 
                 val favorites = favoritesFlow.first()
                 val favoriteMap = favorites.associateBy { it.contentId }
-
-                val reorderedFavorites = currentList.mapNotNull { mov ->
-                    favoriteMap[mov.id]
-                }.mapIndexed { i, fav ->
-                    fav.copy(position = i)
+                val reorderedFavorites = currentList.mapNotNull { movie ->
+                    favoriteMap[movie.id]
+                }.mapIndexed { index, favorite ->
+                    favorite.copy(position = index)
                 }
 
                 favoriteRepository.reorderFavorites(reorderedFavorites)
-            } catch (e: Exception) {
-                // Ignore silently for now
+            } catch (_: Exception) {
             }
         }
     }
+
+    private suspend fun loadReorderMovies(category: Category): List<Movie> {
+        if (!category.isVirtual) return emptyList()
+
+        val groupId = if (category.id == FAVORITES_SENTINEL_ID) null else -category.id
+        val favorites = if (groupId == null) {
+            favoriteRepository.getFavorites(ContentType.MOVIE).first()
+        } else {
+            favoriteRepository.getFavoritesByGroup(groupId).first()
+        }
+
+        val orderedIds = favorites
+            .sortedBy { it.position }
+            .map { it.contentId }
+
+        if (orderedIds.isEmpty()) return emptyList()
+        return movieRepository.getMoviesByIds(orderedIds).first().orderByIds(orderedIds)
+    }
+
+    private suspend fun buildPreviewCatalog(
+        params: MovieCatalogParams
+    ): MovieCatalogSnapshot {
+        val globalFavoriteIds = params.allFavorites
+            .asSequence()
+            .filter { it.groupId == null }
+            .map { it.contentId }
+            .toSet()
+        val previewRows = linkedMapOf<String, List<Movie>>()
+        val countMap = linkedMapOf<String, Int>()
+
+        val favoritesIds = params.allFavorites
+            .asSequence()
+            .filter { it.groupId == null }
+            .sortedBy { it.position }
+            .map { it.contentId }
+            .toList()
+        if (favoritesIds.isNotEmpty()) {
+            val preview = movieRepository.getMoviesByIds(favoritesIds.take(PREVIEW_ROW_LIMIT)).first()
+                .markFavorites(globalFavoriteIds)
+            if (preview.isNotEmpty()) {
+                previewRows[FAVORITES_CATEGORY] = preview
+                countMap[FAVORITES_CATEGORY] = favoritesIds.size
+            }
+        }
+
+        params.customCategories
+            .filter { it.id != FAVORITES_SENTINEL_ID }
+            .forEach { category ->
+                val ids = params.allFavorites
+                    .asSequence()
+                    .filter { it.groupId == -category.id }
+                    .sortedBy { it.position }
+                    .map { it.contentId }
+                    .toList()
+                if (ids.isNotEmpty()) {
+                    val preview = movieRepository.getMoviesByIds(ids.take(PREVIEW_ROW_LIMIT)).first()
+                        .markFavorites(globalFavoriteIds)
+                    if (preview.isNotEmpty()) {
+                        previewRows[category.name] = preview
+                        countMap[category.name] = ids.size
+                    }
+                }
+            }
+
+        val providerPreviews = coroutineScope {
+            params.providerCategories
+                .sortedBy { it.name.lowercase() }
+                .map { category ->
+                    async {
+                        val preview = movieRepository
+                            .getMoviesByCategoryPreview(params.providerId, category.id, PREVIEW_ROW_LIMIT)
+                            .first()
+                            .markFavorites(globalFavoriteIds)
+                        category to preview
+                    }
+                }
+                .awaitAll()
+        }
+
+        providerPreviews.forEach { (category, preview) ->
+            if (preview.isNotEmpty()) {
+                previewRows[category.name] = preview
+                countMap[category.name] = params.providerCategoryCounts[category.id] ?: preview.size
+            }
+        }
+
+        return MovieCatalogSnapshot(
+            grouped = previewRows,
+            categoryNames = previewRows.keys.toList(),
+            categoryCounts = countMap,
+            libraryCount = params.libraryCount
+        )
+    }
+
+    private fun buildSearchCatalog(
+        movies: List<Movie>,
+        allFavorites: List<com.streamvault.domain.model.Favorite>,
+        customCategories: List<Category>
+    ): MovieCatalogSnapshot {
+        val globalFavoriteIds = allFavorites
+            .asSequence()
+            .filter { it.groupId == null }
+            .map { it.contentId }
+            .toSet()
+        val enrichedMovies = movies.map { it.copy(isFavorite = globalFavoriteIds.contains(it.id)) }
+        val grouped = enrichedMovies
+            .groupBy { it.categoryName ?: UNCATEGORIZED }
+            .toMutableMap()
+
+        grouped[FAVORITES_CATEGORY] = enrichedMovies.filter { it.isFavorite }
+
+        customCategories
+            .filter { it.id != FAVORITES_SENTINEL_ID }
+            .forEach { customCategory ->
+                val movieIdsInGroup = allFavorites
+                    .asSequence()
+                    .filter { it.groupId == -customCategory.id }
+                    .map { it.contentId }
+                    .toSet()
+                grouped[customCategory.name] = enrichedMovies.filter { it.id in movieIdsInGroup }
+            }
+
+        val customNames = customCategories.map { it.name }.toSet()
+        val categoryNames = grouped.keys.sortedWith(
+            compareBy<String> {
+                when (it) {
+                    FAVORITES_CATEGORY -> 0
+                    in customNames -> 1
+                    else -> 2
+                }
+            }.thenBy { it }
+        )
+
+        val categoryCounts = categoryNames.associateWith { name -> grouped[name]?.size ?: 0 }
+
+        return MovieCatalogSnapshot(
+            grouped = grouped,
+            categoryNames = categoryNames,
+            categoryCounts = categoryCounts,
+            libraryCount = movies.size
+        )
+    }
+
+    private suspend fun loadSelectedCategoryItems(
+        request: SelectedMovieCategoryRequest
+    ): SelectedMovieCategorySnapshot {
+        if (request.selectedCategory.isNullOrBlank() || request.query.isNotBlank()) {
+            return SelectedMovieCategorySnapshot()
+        }
+
+        val globalFavoriteIds = request.allFavorites
+            .asSequence()
+            .filter { it.groupId == null }
+            .map { it.contentId }
+            .toSet()
+
+        val (selectedItems, totalCount) = when (request.selectedCategory) {
+            FULL_LIBRARY_CATEGORY -> {
+                val result = movieRepository
+                    .browseMovies(
+                        LibraryBrowseQuery(
+                            providerId = request.providerId,
+                            categoryId = null,
+                            limit = request.loadLimit,
+                            offset = 0
+                        )
+                    )
+                    .first()
+                result.items to result.totalCount
+            }
+            FAVORITES_CATEGORY -> {
+                val ids = request.allFavorites
+                    .asSequence()
+                    .filter { it.groupId == null }
+                    .sortedBy { it.position }
+                    .map { it.contentId }
+                    .toList()
+                val pagedIds = ids.take(request.loadLimit)
+                val items = if (pagedIds.isEmpty()) {
+                    emptyList()
+                } else {
+                    movieRepository.getMoviesByIds(pagedIds).first().orderByIds(pagedIds)
+                }
+                items to ids.size
+            }
+            else -> {
+                val customCategory = request.customCategories.firstOrNull { it.name == request.selectedCategory }
+                if (customCategory != null) {
+                    val ids = request.allFavorites
+                        .asSequence()
+                        .filter { it.groupId == -customCategory.id }
+                        .sortedBy { it.position }
+                        .map { it.contentId }
+                        .toList()
+                    val pagedIds = ids.take(request.loadLimit)
+                    val items = if (pagedIds.isEmpty()) {
+                        emptyList()
+                    } else {
+                        movieRepository.getMoviesByIds(pagedIds).first().orderByIds(pagedIds)
+                    }
+                    items to ids.size
+                } else {
+                    val providerCategory = request.providerCategories.firstOrNull { it.name == request.selectedCategory }
+                    if (providerCategory != null) {
+                        val result = movieRepository
+                            .browseMovies(
+                                LibraryBrowseQuery(
+                                    providerId = request.providerId,
+                                    categoryId = providerCategory.id,
+                                    limit = request.loadLimit,
+                                    offset = 0
+                                )
+                            )
+                            .first()
+                        result.items to result.totalCount
+                    } else {
+                        emptyList<Movie>() to 0
+                    }
+                }
+            }
+        }
+
+        val enrichedItems = selectedItems.markFavorites(globalFavoriteIds)
+        return SelectedMovieCategorySnapshot(
+            items = enrichedItems,
+            loadedCount = enrichedItems.size,
+            totalCount = totalCount,
+            canLoadMore = totalCount > enrichedItems.size
+        )
+    }
+
+    private fun validateGroupName(name: String, currentGroupId: Long? = null): String? {
+        if (name.isBlank()) return "Enter a group name"
+        if (name.equals("favorites", ignoreCase = true)) return "Favorites is reserved"
+
+        val duplicate = _uiState.value.categories.any { category ->
+            category.id != currentGroupId && category.name.equals(name, ignoreCase = true)
+        }
+        return if (duplicate) "A movie group with that name already exists" else null
+    }
+
+    private fun List<Movie>.markFavorites(globalFavoriteIds: Set<Long>): List<Movie> =
+        map { movie -> movie.copy(isFavorite = movie.id in globalFavoriteIds) }
+
+    private fun List<Movie>.orderByIds(ids: List<Long>): List<Movie> {
+        val movieMap = associateBy { it.id }
+        return ids.mapNotNull { movieMap[it] }
+    }
 }
+
+private data class MovieCatalogParams(
+    val providerId: Long,
+    val allFavorites: List<com.streamvault.domain.model.Favorite>,
+    val customCategories: List<Category>,
+    val providerCategories: List<Category>,
+    val providerCategoryCounts: Map<Long, Int>,
+    val libraryCount: Int,
+    val query: String
+)
+
+private data class MovieCatalogDependencies(
+    val allFavorites: List<com.streamvault.domain.model.Favorite>,
+    val customCategories: List<Category>,
+    val providerCategories: List<Category>,
+    val providerCategoryCounts: Map<Long, Int>,
+    val libraryCount: Int
+)
+
+private data class MovieCatalogSnapshot(
+    val grouped: Map<String, List<Movie>>,
+    val categoryNames: List<String>,
+    val categoryCounts: Map<String, Int>,
+    val libraryCount: Int
+)
+
+private data class MovieLibraryLensDependencies(
+    val providerId: Long,
+    val allFavorites: List<com.streamvault.domain.model.Favorite>,
+    val history: List<PlaybackHistory>,
+    val topRated: List<Movie>,
+    val fresh: List<Movie>
+)
+
+private data class MovieCategorySelectionDependencies(
+    val allFavorites: List<com.streamvault.domain.model.Favorite>,
+    val customCategories: List<Category>,
+    val providerCategories: List<Category>,
+    val providerCategoryCounts: Map<Long, Int>
+)
+
+private data class SelectedMovieCategoryRequest(
+    val providerId: Long,
+    val selectedCategory: String?,
+    val loadLimit: Int,
+    val query: String,
+    val allFavorites: List<com.streamvault.domain.model.Favorite>,
+    val customCategories: List<Category>,
+    val providerCategories: List<Category>,
+    val providerCategoryCounts: Map<Long, Int>
+)
+
+private data class SelectedMovieCategorySnapshot(
+    val items: List<Movie> = emptyList(),
+    val loadedCount: Int = 0,
+    val totalCount: Int = 0,
+    val canLoadMore: Boolean = false
+)
 
 data class MoviesUiState(
     val moviesByCategory: Map<String, List<Movie>> = emptyMap(),
     val categoryNames: List<String> = emptyList(),
+    val categoryCounts: Map<String, Int> = emptyMap(),
+    val libraryCount: Int = 0,
+    val favoriteCategoryName: String = "\u2605 Favorites",
+    val fullLibraryCategoryName: String = "__full_library__",
+    val libraryLensRows: Map<MovieLibraryLens, List<Movie>> = emptyMap(),
     val selectedCategory: String? = null,
+    val selectedCategoryItems: List<Movie> = emptyList(),
+    val selectedCategoryLoadedCount: Int = 0,
+    val selectedCategoryTotalCount: Int = 0,
+    val canLoadMoreSelectedCategory: Boolean = false,
     val searchQuery: String = "",
     val continueWatching: List<PlaybackHistory> = emptyList(),
     val isLoading: Boolean = true,
@@ -307,14 +872,14 @@ data class MoviesUiState(
     val selectedMovieForDialog: Movie? = null,
     val categories: List<Category> = emptyList(),
     val dialogGroupMemberships: List<Long> = emptyList(),
-    
-    // Category Options & Deletion
+    val userMessage: String? = null,
     val selectedCategoryForOptions: Category? = null,
+    val showRenameGroupDialog: Boolean = false,
+    val groupToRename: Category? = null,
+    val renameGroupError: String? = null,
     val showDeleteGroupDialog: Boolean = false,
     val groupToDelete: Category? = null,
-    
-    // Reorder State
     val isReorderMode: Boolean = false,
     val reorderCategory: Category? = null,
-    val filteredMovies: List<Movie> = emptyList() // The active sortable list
+    val filteredMovies: List<Movie> = emptyList()
 )

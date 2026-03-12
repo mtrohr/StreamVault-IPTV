@@ -1,10 +1,15 @@
 package com.streamvault.app.ui.screens.home
 
+import android.app.Application
 import com.streamvault.data.preferences.PreferencesRepository
 import com.streamvault.domain.manager.ParentalControlManager
 import com.streamvault.domain.model.Category
 import com.streamvault.domain.model.Channel
+import com.streamvault.domain.model.ContentType
+import com.streamvault.domain.model.PlaybackHistory
 import com.streamvault.domain.model.Provider
+import com.streamvault.domain.model.ProviderType
+import com.streamvault.domain.model.VirtualCategoryIds
 import com.streamvault.domain.repository.*
 import com.streamvault.domain.usecase.GetCustomCategories
 import kotlinx.coroutines.Dispatchers
@@ -26,8 +31,10 @@ class HomeViewModelTest {
     private val favoriteRepository: FavoriteRepository = mock()
     private val preferencesRepository: PreferencesRepository = mock()
     private val epgRepository: EpgRepository = mock()
+    private val playbackHistoryRepository: PlaybackHistoryRepository = mock()
     private val getCustomCategories: GetCustomCategories = mock()
     private val parentalControlManager: ParentalControlManager = mock()
+    private val application: Application = mock()
 
     private lateinit var viewModel: HomeViewModel
 
@@ -43,14 +50,19 @@ class HomeViewModelTest {
         whenever(preferencesRepository.parentalControlLevel).thenReturn(flowOf(0))
         whenever(favoriteRepository.getFavorites(any())).thenReturn(flowOf(emptyList()))
         whenever(preferencesRepository.defaultCategoryId).thenReturn(flowOf(null))
+        whenever(preferencesRepository.getLastLiveCategoryId(any())).thenReturn(flowOf(null))
+        whenever(playbackHistoryRepository.getRecentlyWatchedByProvider(any(), any())).thenReturn(flowOf(emptyList()))
+        whenever(getCustomCategories()).thenReturn(flowOf(emptyList()))
 
         viewModel = HomeViewModel(
+            application,
             providerRepository,
             channelRepository,
             categoryRepository,
             favoriteRepository,
             preferencesRepository,
             epgRepository,
+            playbackHistoryRepository,
             getCustomCategories,
             parentalControlManager
         )
@@ -102,5 +114,240 @@ class HomeViewModelTest {
         val state = viewModel.uiState.value
         assertThat(state.selectedCategory).isEqualTo(category)
         verify(parentalControlManager).clearUnlockedCategories(anyOrNull())
+    }
+
+    @Test
+    fun `recent live history becomes a virtual recent category`() = runTest {
+        val provider = Provider(
+            id = 9L,
+            name = "Provider",
+            type = ProviderType.M3U,
+            serverUrl = "http://test"
+        )
+        whenever(providerRepository.getActiveProvider()).thenReturn(flowOf(provider))
+        whenever(channelRepository.getCategories(provider.id)).thenReturn(flowOf(emptyList()))
+        whenever(getCustomCategories()).thenReturn(
+            flowOf(
+                listOf(
+                    Category(
+                        id = VirtualCategoryIds.FAVORITES,
+                        name = "Favorites",
+                        isVirtual = true
+                    )
+                )
+            )
+        )
+        whenever(playbackHistoryRepository.getRecentlyWatchedByProvider(eq(provider.id), any())).thenReturn(
+            flowOf(
+                listOf(
+                    PlaybackHistory(
+                        contentId = 21L,
+                        contentType = ContentType.LIVE,
+                        providerId = provider.id,
+                        title = "News",
+                        streamUrl = "http://stream"
+                    )
+                )
+            )
+        )
+        whenever(channelRepository.getChannelsByIds(listOf(21L))).thenReturn(
+            flowOf(
+                listOf(
+                    Channel(
+                        id = 21L,
+                        name = "News",
+                        streamUrl = "http://stream",
+                        providerId = provider.id
+                    )
+                )
+            )
+        )
+        whenever(favoriteRepository.getFavorites(ContentType.LIVE)).thenReturn(flowOf(emptyList()))
+
+        viewModel = HomeViewModel(
+            application,
+            providerRepository,
+            channelRepository,
+            categoryRepository,
+            favoriteRepository,
+            preferencesRepository,
+            epgRepository,
+            playbackHistoryRepository,
+            getCustomCategories,
+            parentalControlManager
+        )
+
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.categories.map { it.id }).contains(VirtualCategoryIds.RECENT)
+        assertThat(viewModel.uiState.value.recentChannels.map { it.id }).containsExactly(21L)
+    }
+
+    @Test
+    fun `recent category stays visible in live tv even when history is empty`() = runTest {
+        val provider = Provider(
+            id = 12L,
+            name = "Provider",
+            type = ProviderType.M3U,
+            serverUrl = "http://test"
+        )
+        whenever(providerRepository.getActiveProvider()).thenReturn(flowOf(provider))
+        whenever(channelRepository.getCategories(provider.id)).thenReturn(flowOf(emptyList()))
+        whenever(getCustomCategories()).thenReturn(
+            flowOf(
+                listOf(
+                    Category(
+                        id = VirtualCategoryIds.FAVORITES,
+                        name = "Favorites",
+                        isVirtual = true
+                    )
+                )
+            )
+        )
+        whenever(playbackHistoryRepository.getRecentlyWatchedByProvider(eq(provider.id), any())).thenReturn(flowOf(emptyList()))
+        whenever(favoriteRepository.getFavorites(ContentType.LIVE)).thenReturn(flowOf(emptyList()))
+
+        viewModel = HomeViewModel(
+            application,
+            providerRepository,
+            channelRepository,
+            categoryRepository,
+            favoriteRepository,
+            preferencesRepository,
+            epgRepository,
+            playbackHistoryRepository,
+            getCustomCategories,
+            parentalControlManager
+        )
+
+        advanceUntilIdle()
+
+        val categories = viewModel.uiState.value.categories
+        assertThat(categories.map { it.id }).containsExactly(
+            VirtualCategoryIds.FAVORITES,
+            VirtualCategoryIds.RECENT
+        )
+        assertThat(categories.first { it.id == VirtualCategoryIds.RECENT }.count).isEqualTo(0)
+    }
+
+    @Test
+    fun `last visited live category is exposed for quick return`() = runTest {
+        val provider = Provider(
+            id = 14L,
+            name = "Provider",
+            type = ProviderType.M3U,
+            serverUrl = "http://test"
+        )
+        val sportsCategory = Category(id = 5L, name = "Sports")
+        whenever(providerRepository.getActiveProvider()).thenReturn(flowOf(provider))
+        whenever(channelRepository.getCategories(provider.id)).thenReturn(flowOf(listOf(sportsCategory)))
+        whenever(getCustomCategories()).thenReturn(
+            flowOf(
+                listOf(
+                    Category(
+                        id = VirtualCategoryIds.FAVORITES,
+                        name = "Favorites",
+                        isVirtual = true
+                    )
+                )
+            )
+        )
+        whenever(playbackHistoryRepository.getRecentlyWatchedByProvider(eq(provider.id), any())).thenReturn(flowOf(emptyList()))
+        whenever(preferencesRepository.getLastLiveCategoryId(provider.id)).thenReturn(flowOf(sportsCategory.id))
+        whenever(favoriteRepository.getFavorites(ContentType.LIVE)).thenReturn(flowOf(emptyList()))
+
+        viewModel = HomeViewModel(
+            application,
+            providerRepository,
+            channelRepository,
+            categoryRepository,
+            favoriteRepository,
+            preferencesRepository,
+            epgRepository,
+            playbackHistoryRepository,
+            getCustomCategories,
+            parentalControlManager
+        )
+
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.lastVisitedCategory?.id).isEqualTo(sportsCategory.id)
+        assertThat(viewModel.uiState.value.lastVisitedCategory?.name).isEqualTo("Sports")
+    }
+
+    @Test
+    fun `selecting a live category remembers it for the current provider`() = runTest {
+        val provider = Provider(
+            id = 20L,
+            name = "Provider",
+            type = ProviderType.M3U,
+            serverUrl = "http://test"
+        )
+        val category = Category(id = 7L, name = "Kids")
+        whenever(providerRepository.getActiveProvider()).thenReturn(flowOf(provider))
+        whenever(channelRepository.getCategories(provider.id)).thenReturn(flowOf(listOf(category)))
+        whenever(channelRepository.getChannelsByCategory(provider.id, category.id)).thenReturn(flowOf(emptyList()))
+        whenever(getCustomCategories()).thenReturn(flowOf(emptyList()))
+        whenever(playbackHistoryRepository.getRecentlyWatchedByProvider(eq(provider.id), any())).thenReturn(flowOf(emptyList()))
+        whenever(favoriteRepository.getFavorites(ContentType.LIVE)).thenReturn(flowOf(emptyList()))
+
+        viewModel = HomeViewModel(
+            application,
+            providerRepository,
+            channelRepository,
+            categoryRepository,
+            favoriteRepository,
+            preferencesRepository,
+            epgRepository,
+            playbackHistoryRepository,
+            getCustomCategories,
+            parentalControlManager
+        )
+
+        advanceUntilIdle()
+        viewModel.selectCategory(category)
+        advanceUntilIdle()
+
+        verify(preferencesRepository).setLastLiveCategoryId(provider.id, category.id)
+    }
+
+    @Test
+    fun `selecting recent does not overwrite remembered live group`() = runTest {
+        val provider = Provider(
+            id = 21L,
+            name = "Provider",
+            type = ProviderType.M3U,
+            serverUrl = "http://test"
+        )
+        val recentCategory = Category(
+            id = VirtualCategoryIds.RECENT,
+            name = "Recent",
+            type = ContentType.LIVE,
+            isVirtual = true
+        )
+        whenever(providerRepository.getActiveProvider()).thenReturn(flowOf(provider))
+        whenever(channelRepository.getCategories(provider.id)).thenReturn(flowOf(emptyList()))
+        whenever(getCustomCategories()).thenReturn(flowOf(emptyList()))
+        whenever(playbackHistoryRepository.getRecentlyWatchedByProvider(eq(provider.id), any())).thenReturn(flowOf(emptyList()))
+        whenever(favoriteRepository.getFavorites(ContentType.LIVE)).thenReturn(flowOf(emptyList()))
+
+        viewModel = HomeViewModel(
+            application,
+            providerRepository,
+            channelRepository,
+            categoryRepository,
+            favoriteRepository,
+            preferencesRepository,
+            epgRepository,
+            playbackHistoryRepository,
+            getCustomCategories,
+            parentalControlManager
+        )
+
+        advanceUntilIdle()
+        viewModel.selectCategory(recentCategory)
+        advanceUntilIdle()
+
+        verify(preferencesRepository, never()).setLastLiveCategoryId(provider.id, recentCategory.id)
     }
 }

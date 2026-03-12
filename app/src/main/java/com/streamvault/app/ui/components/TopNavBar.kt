@@ -52,12 +52,18 @@ fun TopNavBar(
     modifier: Modifier = Modifier
 ) {
     val tabs = listOf(
-        NavTab(stringResource(id = R.string.nav_live_tv), Routes.HOME),
+        NavTab(stringResource(id = R.string.nav_home), Routes.HOME),
+        NavTab(stringResource(id = R.string.nav_live_tv), Routes.LIVE_TV),
         NavTab(stringResource(id = R.string.nav_movies), Routes.MOVIES),
         NavTab(stringResource(id = R.string.nav_series), Routes.SERIES),
         NavTab(stringResource(id = R.string.nav_epg), Routes.EPG),
         NavTab(stringResource(id = R.string.nav_settings), Routes.SETTINGS)
     )
+    val subtitle = when (currentRoute) {
+        Routes.FAVORITES -> stringResource(id = R.string.favorites_title)
+        Routes.SEARCH -> stringResource(id = R.string.search_title)
+        else -> tabs.firstOrNull { it.route == currentRoute }?.label ?: stringResource(id = R.string.app_name)
+    }
 
     val focusRequesters = remember { mutableMapOf<String, FocusRequester>() }
 
@@ -82,7 +88,7 @@ fun TopNavBar(
                 color = TextPrimary
             )
             Text(
-                text = stringResource(id = R.string.nav_live_tv),
+                text = subtitle,
                 style = MaterialTheme.typography.labelSmall,
                 color = TextTertiary
             )

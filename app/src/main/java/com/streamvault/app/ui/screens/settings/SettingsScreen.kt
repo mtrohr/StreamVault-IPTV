@@ -4,11 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.*
@@ -28,15 +30,22 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 
 import com.streamvault.app.ui.components.dialogs.PinDialog
+import com.streamvault.app.ui.components.TvEmptyState
 import com.streamvault.app.ui.components.TopNavBar
 import com.streamvault.app.ui.theme.*
+import com.streamvault.domain.manager.BackupConflictStrategy
 import com.streamvault.domain.model.Provider
 import com.streamvault.domain.model.ProviderType
 import com.streamvault.domain.model.ProviderStatus
+import com.streamvault.domain.model.RecordingItem
+import com.streamvault.domain.model.RecordingStatus
+import com.streamvault.app.ui.screens.settings.ProviderDiagnosticsUiModel
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.text.style.TextAlign
 import com.streamvault.app.R
+import java.util.Locale
 
 
 @Composable
@@ -53,6 +62,24 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val activeProvider = uiState.providers.firstOrNull { it.id == uiState.activeProviderId }
+    val appLanguageLabel = remember(uiState.appLanguage, context) {
+        when (uiState.appLanguage) {
+            "ar" -> "العربية"
+            "he" -> "עברית"
+            "ru" -> "Русский"
+            "en" -> "English"
+            else -> context.getString(R.string.settings_system_default)
+        }
+    }
+    val protectionSummary = remember(uiState.parentalControlLevel, context) {
+        when (uiState.parentalControlLevel) {
+            0 -> context.getString(R.string.settings_level_off)
+            1 -> context.getString(R.string.settings_level_locked)
+            2 -> context.getString(R.string.settings_level_hidden)
+            else -> context.getString(R.string.settings_level_unknown)
+        }
+    }
 
     // Parental Control State
     var showPinDialog by remember { mutableStateOf(false) }
@@ -70,7 +97,7 @@ fun SettingsScreen(
     val openDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
-        uri?.let { viewModel.importConfig(it.toString()) }
+        uri?.let { viewModel.inspectBackup(it.toString()) }
     }
 
 
@@ -106,31 +133,40 @@ fun SettingsScreen(
                 )
             }
 
+            item {
+                SettingsOverviewCard(
+                    activeProviderName = activeProvider?.name ?: stringResource(R.string.settings_overview_no_provider),
+                    providerCount = uiState.providers.size,
+                    protectionSummary = protectionSummary,
+                    languageLabel = appLanguageLabel
+                )
+            }
+
             // Providers section
             item {
-                Text(
-                    text = stringResource(R.string.settings_providers),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                SettingsSectionHeader(
+                    title = stringResource(R.string.settings_providers),
+                    subtitle = stringResource(R.string.settings_providers_subtitle)
                 )
             }
 
             if (uiState.providers.isEmpty()) {
                 item {
-                    Text(
-                        text = stringResource(R.string.settings_no_providers),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = OnSurface
+                    TvEmptyState(
+                        title = stringResource(R.string.settings_no_providers),
+                        subtitle = stringResource(R.string.settings_no_providers_subtitle),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, bottom = 8.dp)
                     )
                 }
             } else {
-                items(uiState.providers.size) { index ->
-                    val provider = uiState.providers[index]
+                items(uiState.providers, key = { it.id }) { provider ->
                     ProviderSettingsCard(
                         provider = provider,
                         isActive = provider.id == uiState.activeProviderId,
                         isSyncing = uiState.isSyncing,
+                        diagnostics = uiState.diagnosticsByProvider[provider.id],
                         syncWarnings = uiState.syncWarningsByProvider[provider.id].orEmpty(),
                         onRetryWarningAction = { action -> viewModel.retryWarningAction(provider.id, action) },
                         onConnect = { viewModel.setActiveProvider(provider.id) },
@@ -177,11 +213,9 @@ fun SettingsScreen(
             // Parental Control
             item {
                 Spacer(Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.settings_parental_control),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                SettingsSectionHeader(
+                    title = stringResource(R.string.settings_parental_control),
+                    subtitle = stringResource(R.string.settings_parental_subtitle)
                 )
                 ParentalControlCard(
                     level = uiState.parentalControlLevel,
@@ -199,11 +233,9 @@ fun SettingsScreen(
             // Language Settings
             item {
                 Spacer(Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.settings_language),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                SettingsSectionHeader(
+                    title = stringResource(R.string.settings_language),
+                    subtitle = stringResource(R.string.settings_language_subtitle)
                 )
 
                 Surface(
@@ -246,11 +278,9 @@ fun SettingsScreen(
             // Backup & Restore settings
             item {
                 Spacer(Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.settings_backup_restore),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                SettingsSectionHeader(
+                    title = stringResource(R.string.settings_backup_restore),
+                    subtitle = stringResource(R.string.settings_backup_subtitle)
                 )
                 
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -268,7 +298,7 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodyLarge,
                             color = OnBackground,
                             modifier = Modifier.padding(16.dp),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            textAlign = TextAlign.Center
                         )
                     }
                     
@@ -286,20 +316,53 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodyLarge,
                             color = OnBackground,
                             modifier = Modifier.padding(16.dp),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            textAlign = TextAlign.Center
                         )
                     }
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(16.dp))
+                SettingsSectionHeader(
+                    title = stringResource(R.string.settings_recording_title),
+                    subtitle = stringResource(R.string.settings_recording_subtitle)
+                )
+                RecordingOverviewCard(
+                    outputDirectory = uiState.recordingStorageState.outputDirectory,
+                    availableBytes = uiState.recordingStorageState.availableBytes,
+                    isWritable = uiState.recordingStorageState.isWritable,
+                    activeCount = uiState.recordingItems.count { it.status == RecordingStatus.RECORDING },
+                    scheduledCount = uiState.recordingItems.count { it.status == RecordingStatus.SCHEDULED }
+                )
+            }
+
+            if (uiState.recordingItems.isEmpty()) {
+                item {
+                    TvEmptyState(
+                        title = stringResource(R.string.settings_recording_empty_title),
+                        subtitle = stringResource(R.string.settings_recording_empty_subtitle),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, bottom = 8.dp)
+                    )
+                }
+            } else {
+                items(uiState.recordingItems, key = { it.id }) { item ->
+                    RecordingItemCard(
+                        item = item,
+                        onStop = { viewModel.stopRecording(item.id) },
+                        onCancel = { viewModel.cancelRecording(item.id) }
+                    )
                 }
             }
 
             // Decoder settings
             item {
                 Spacer(Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.settings_playback),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                SettingsSectionHeader(
+                    title = stringResource(R.string.settings_playback),
+                    subtitle = stringResource(R.string.settings_playback_subtitle)
                 )
                 SettingsRow(label = stringResource(R.string.settings_decoder_mode), value = stringResource(R.string.settings_decoder_auto))
                 SettingsRow(label = stringResource(R.string.settings_buffer_duration), value = stringResource(R.string.settings_buffer_5s))
@@ -308,11 +371,9 @@ fun SettingsScreen(
             // About section
             item {
                 Spacer(Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.settings_about),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                SettingsSectionHeader(
+                    title = stringResource(R.string.settings_about),
+                    subtitle = stringResource(R.string.settings_about_subtitle)
                 )
                 SettingsRow(label = stringResource(R.string.settings_app_version), value = "1.0.0")
                 SettingsRow(label = stringResource(R.string.settings_build), value = stringResource(R.string.settings_build_desc))
@@ -466,6 +527,22 @@ fun SettingsScreen(
                     }
                 )
             }
+        }
+
+        val backupPreview = uiState.backupPreview
+        if (backupPreview != null && uiState.pendingBackupUri != null) {
+            BackupImportPreviewDialog(
+                preview = backupPreview,
+                plan = uiState.backupImportPlan,
+                onDismiss = { viewModel.dismissBackupPreview() },
+                onStrategySelected = { viewModel.setBackupConflictStrategy(it) },
+                onImportPreferencesChanged = { viewModel.setImportPreferences(it) },
+                onImportProvidersChanged = { viewModel.setImportProviders(it) },
+                onImportSavedLibraryChanged = { viewModel.setImportSavedLibrary(it) },
+                onImportPlaybackHistoryChanged = { viewModel.setImportPlaybackHistory(it) },
+                onImportMultiViewChanged = { viewModel.setImportMultiViewPresets(it) },
+                onConfirm = { viewModel.confirmBackupImport() }
+            )
         }
     }
 }
@@ -633,6 +710,7 @@ private fun ProviderSettingsCard(
     provider: Provider,
     isActive: Boolean,
     isSyncing: Boolean,
+    diagnostics: ProviderDiagnosticsUiModel?,
     syncWarnings: List<String>,
     onRetryWarningAction: (ProviderWarningAction) -> Unit,
     onConnect: () -> Unit,
@@ -705,13 +783,20 @@ private fun ProviderSettingsCard(
             color = if (expDate != null && expDate < System.currentTimeMillis() && expDate != Long.MAX_VALUE) ErrorColor else OnSurfaceDim
         )
 
+        diagnostics?.let { model ->
+            ProviderDiagnosticsPanel(
+                provider = provider,
+                diagnostics = model
+            )
+        }
+
         if (syncWarnings.isNotEmpty()) {
             val hasEpgWarning = syncWarnings.any { it.contains("EPG", ignoreCase = true) }
             val hasMoviesWarning = syncWarnings.any { it.contains("Movies", ignoreCase = true) }
             val hasSeriesWarning = syncWarnings.any { it.contains("Series", ignoreCase = true) }
 
             Text(
-                text = "Warnings: ${syncWarnings.take(3).joinToString(", ")}",
+                text = stringResource(R.string.settings_provider_warnings, syncWarnings.take(3).joinToString(", ")),
                 style = MaterialTheme.typography.bodySmall,
                 color = Secondary
             )
@@ -728,7 +813,7 @@ private fun ProviderSettingsCard(
                         )
                     ) {
                         Text(
-                            text = "Retry EPG",
+                            text = stringResource(R.string.settings_retry_epg),
                             style = MaterialTheme.typography.labelSmall,
                             color = Secondary,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
@@ -746,7 +831,7 @@ private fun ProviderSettingsCard(
                         )
                     ) {
                         Text(
-                            text = "Retry Movies",
+                            text = stringResource(R.string.settings_retry_movies),
                             style = MaterialTheme.typography.labelSmall,
                             color = Secondary,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
@@ -764,7 +849,7 @@ private fun ProviderSettingsCard(
                         )
                     ) {
                         Text(
-                            text = "Retry Series",
+                            text = stringResource(R.string.settings_retry_series),
                             style = MaterialTheme.typography.labelSmall,
                             color = Secondary,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
@@ -867,12 +952,12 @@ private fun ProviderSettingsCard(
 @Composable
 private fun ProviderStatusBadge(status: ProviderStatus) {
     val (label, color) = when (status) {
-        ProviderStatus.ACTIVE -> "Active" to Primary
-        ProviderStatus.PARTIAL -> "Partial" to Secondary
-        ProviderStatus.ERROR -> "Error" to ErrorColor
-        ProviderStatus.EXPIRED -> "Expired" to ErrorColor
-        ProviderStatus.DISABLED -> "Disabled" to OnSurfaceDim
-        ProviderStatus.UNKNOWN -> "Unknown" to OnSurfaceDim
+        ProviderStatus.ACTIVE -> stringResource(R.string.settings_status_active) to Primary
+        ProviderStatus.PARTIAL -> stringResource(R.string.settings_status_partial) to Secondary
+        ProviderStatus.ERROR -> stringResource(R.string.settings_status_error) to ErrorColor
+        ProviderStatus.EXPIRED -> stringResource(R.string.settings_status_expired) to ErrorColor
+        ProviderStatus.DISABLED -> stringResource(R.string.settings_status_disabled) to OnSurfaceDim
+        ProviderStatus.UNKNOWN -> stringResource(R.string.settings_status_unknown) to OnSurfaceDim
     }
 
     Text(
@@ -887,6 +972,215 @@ private fun ProviderStatusBadge(status: ProviderStatus) {
 }
 
 @Composable
+private fun SettingsOverviewCard(
+    activeProviderName: String,
+    providerCount: Int,
+    protectionSummary: String,
+    languageLabel: String
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        colors = SurfaceDefaults.colors(containerColor = SurfaceElevated),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.settings_overview_title),
+                style = MaterialTheme.typography.titleLarge,
+                color = OnBackground
+            )
+            Text(
+                text = stringResource(R.string.settings_overview_subtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = OnSurfaceDim
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                SettingsOverviewStat(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.settings_overview_provider_label),
+                    value = activeProviderName
+                )
+                SettingsOverviewStat(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.settings_overview_count_label),
+                    value = providerCount.toString()
+                )
+                SettingsOverviewStat(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.settings_overview_protection_label),
+                    value = protectionSummary
+                )
+                SettingsOverviewStat(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.settings_overview_language_label),
+                    value = languageLabel
+                )
+            }
+        }
+
+    }
+}
+
+@Composable
+private fun ProviderDiagnosticsPanel(
+    provider: Provider,
+    diagnostics: ProviderDiagnosticsUiModel
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = stringResource(R.string.settings_provider_diagnostics_title),
+            style = MaterialTheme.typography.titleSmall,
+            color = Primary
+        )
+        Text(
+            text = diagnostics.capabilitySummary,
+            style = MaterialTheme.typography.bodySmall,
+            color = OnSurfaceDim
+        )
+        Text(
+            text = "${diagnostics.sourceLabel} • ${diagnostics.connectionSummary}",
+            style = MaterialTheme.typography.bodySmall,
+            color = OnSurface
+        )
+        Text(
+            text = diagnostics.expirySummary,
+            style = MaterialTheme.typography.bodySmall,
+            color = OnSurface
+        )
+        Text(
+            text = diagnostics.archiveSummary,
+            style = MaterialTheme.typography.bodySmall,
+            color = OnSurfaceDim
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ProviderDiagnosticPill(
+                title = stringResource(R.string.settings_diagnostic_live),
+                count = diagnostics.liveCount,
+                timestamp = diagnostics.lastLiveSync
+            )
+            ProviderDiagnosticPill(
+                title = stringResource(R.string.settings_diagnostic_movies),
+                count = diagnostics.movieCount,
+                timestamp = diagnostics.lastMovieSync
+            )
+            if (provider.type == ProviderType.XTREAM_CODES) {
+                ProviderDiagnosticPill(
+                    title = stringResource(R.string.settings_diagnostic_series),
+                    count = diagnostics.seriesCount,
+                    timestamp = diagnostics.lastSeriesSync
+                )
+            }
+            ProviderDiagnosticPill(
+                title = stringResource(R.string.settings_diagnostic_epg),
+                count = diagnostics.epgCount,
+                timestamp = diagnostics.lastEpgSync
+            )
+        }
+        Text(
+            text = stringResource(R.string.settings_diagnostic_status, diagnostics.lastSyncStatus),
+            style = MaterialTheme.typography.labelSmall,
+            color = OnSurface
+        )
+    }
+}
+
+@Composable
+private fun ProviderDiagnosticPill(
+    title: String,
+    count: Int,
+    timestamp: Long
+) {
+    val syncLabel = remember(timestamp) {
+        if (timestamp <= 0L) {
+            null
+        } else {
+            java.text.SimpleDateFormat("MMM d, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
+        }
+    }
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        colors = SurfaceDefaults.colors(
+            containerColor = Color.White.copy(alpha = 0.06f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                color = OnSurfaceDim
+            )
+            Text(
+                text = stringResource(R.string.settings_diagnostic_items, count),
+                style = MaterialTheme.typography.labelLarge,
+                color = OnBackground
+            )
+            Text(
+                text = syncLabel ?: stringResource(R.string.settings_diagnostic_never),
+                style = MaterialTheme.typography.labelSmall,
+                color = OnSurface
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsOverviewStat(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .background(SurfaceHighlight.copy(alpha = 0.28f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = label.uppercase(Locale.getDefault()),
+            style = MaterialTheme.typography.labelSmall,
+            color = OnSurfaceDim
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleSmall,
+            color = OnBackground,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
+private fun SettingsSectionHeader(
+    title: String,
+    subtitle: String
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = Primary
+        )
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = OnSurfaceDim
+        )
+    }
+}
+
+@Composable
 private fun SettingsRow(label: String, value: String) {
     Row(
         modifier = Modifier
@@ -897,4 +1191,299 @@ private fun SettingsRow(label: String, value: String) {
         Text(text = label, style = MaterialTheme.typography.bodyMedium, color = OnSurface)
         Text(text = value, style = MaterialTheme.typography.bodyMedium, color = OnBackground)
     }
+}
+
+@Composable
+private fun BackupImportPreviewDialog(
+    preview: com.streamvault.domain.manager.BackupPreview,
+    plan: com.streamvault.domain.manager.BackupImportPlan,
+    onDismiss: () -> Unit,
+    onStrategySelected: (BackupConflictStrategy) -> Unit,
+    onImportPreferencesChanged: (Boolean) -> Unit,
+    onImportProvidersChanged: (Boolean) -> Unit,
+    onImportSavedLibraryChanged: (Boolean) -> Unit,
+    onImportPlaybackHistoryChanged: (Boolean) -> Unit,
+    onImportMultiViewChanged: (Boolean) -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_backup_preview_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(R.string.settings_backup_preview_subtitle, preview.version),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OnSurfaceDim
+                )
+                BackupPreviewRow(stringResource(R.string.settings_backup_section_preferences), preview.preferenceCount, 0)
+                BackupPreviewRow(stringResource(R.string.settings_backup_section_providers), preview.providerCount, preview.providerConflicts)
+                BackupPreviewRow(stringResource(R.string.settings_backup_section_saved), preview.favoriteCount + preview.groupCount, preview.favoriteConflicts + preview.groupConflicts)
+                BackupPreviewRow(stringResource(R.string.settings_backup_section_history), preview.playbackHistoryCount, preview.historyConflicts)
+                BackupPreviewRow(stringResource(R.string.settings_backup_section_multiview), preview.multiViewPresetCount, 0)
+                Text(
+                    text = stringResource(R.string.settings_backup_conflict_strategy),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Primary
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    BackupStrategyChip(
+                        title = stringResource(R.string.settings_backup_keep_existing),
+                        selected = plan.conflictStrategy == BackupConflictStrategy.KEEP_EXISTING,
+                        onClick = { onStrategySelected(BackupConflictStrategy.KEEP_EXISTING) }
+                    )
+                    BackupStrategyChip(
+                        title = stringResource(R.string.settings_backup_replace_existing),
+                        selected = plan.conflictStrategy == BackupConflictStrategy.REPLACE_EXISTING,
+                        onClick = { onStrategySelected(BackupConflictStrategy.REPLACE_EXISTING) }
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.settings_backup_import_sections),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Primary
+                )
+                BackupToggleRow(stringResource(R.string.settings_backup_section_preferences), plan.importPreferences, onImportPreferencesChanged)
+                BackupToggleRow(stringResource(R.string.settings_backup_section_providers), plan.importProviders, onImportProvidersChanged)
+                BackupToggleRow(stringResource(R.string.settings_backup_section_saved), plan.importSavedLibrary, onImportSavedLibraryChanged)
+                BackupToggleRow(stringResource(R.string.settings_backup_section_history), plan.importPlaybackHistory, onImportPlaybackHistoryChanged)
+                BackupToggleRow(stringResource(R.string.settings_backup_section_multiview), plan.importMultiViewPresets, onImportMultiViewChanged)
+            }
+        },
+        confirmButton = { Button(onClick = onConfirm) { Text(stringResource(R.string.settings_backup_import_confirm)) } },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.settings_cancel)) } }
+    )
+}
+
+@Composable
+private fun BackupPreviewRow(
+    title: String,
+    itemCount: Int,
+    conflictCount: Int
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = OnBackground)
+            Text(
+                text = if (conflictCount > 0) {
+                    stringResource(R.string.settings_backup_conflict_count, conflictCount)
+                } else {
+                    stringResource(R.string.settings_backup_no_conflicts)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (conflictCount > 0) Secondary else OnSurfaceDim
+            )
+        }
+        Text(
+            text = stringResource(R.string.settings_backup_item_count, itemCount),
+            style = MaterialTheme.typography.labelLarge,
+            color = OnBackground
+        )
+    }
+}
+
+@Composable
+private fun BackupStrategyChip(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(24.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (selected) Primary.copy(alpha = 0.2f) else SurfaceElevated,
+            focusedContainerColor = Primary.copy(alpha = 0.35f)
+        )
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) Primary else OnBackground,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+        )
+    }
+}
+
+@Composable
+private fun BackupToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = OnBackground)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun RecordingOverviewCard(
+    outputDirectory: String?,
+    availableBytes: Long?,
+    isWritable: Boolean,
+    activeCount: Int,
+    scheduledCount: Int
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        colors = SurfaceDefaults.colors(containerColor = SurfaceElevated),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.settings_recording_storage_title),
+                style = MaterialTheme.typography.titleSmall,
+                color = Primary
+            )
+            Text(
+                text = outputDirectory ?: stringResource(R.string.settings_recording_storage_unknown),
+                style = MaterialTheme.typography.bodySmall,
+                color = OnSurfaceDim
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                SettingsOverviewStat(
+                    label = stringResource(R.string.settings_recording_active_label),
+                    value = activeCount.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                SettingsOverviewStat(
+                    label = stringResource(R.string.settings_recording_scheduled_label),
+                    value = scheduledCount.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                SettingsOverviewStat(
+                    label = stringResource(R.string.settings_recording_space_label),
+                    value = availableBytes?.let(::formatBytes) ?: stringResource(R.string.settings_recording_storage_unknown),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Text(
+                text = if (isWritable) stringResource(R.string.settings_recording_storage_ready) else stringResource(R.string.settings_recording_storage_unavailable),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isWritable) Primary else ErrorColor
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecordingItemCard(
+    item: RecordingItem,
+    onStop: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        colors = SurfaceDefaults.colors(containerColor = SurfaceElevated),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(item.programTitle ?: item.channelName, style = MaterialTheme.typography.titleSmall, color = OnBackground)
+                    Text(item.channelName, style = MaterialTheme.typography.bodySmall, color = OnSurfaceDim)
+                }
+                Text(
+                    text = when (item.status) {
+                        RecordingStatus.SCHEDULED -> stringResource(R.string.settings_recording_status_scheduled)
+                        RecordingStatus.RECORDING -> stringResource(R.string.settings_recording_status_recording)
+                        RecordingStatus.COMPLETED -> stringResource(R.string.settings_recording_status_completed)
+                        RecordingStatus.FAILED -> stringResource(R.string.settings_recording_status_failed)
+                        RecordingStatus.CANCELLED -> stringResource(R.string.settings_recording_status_cancelled)
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = when (item.status) {
+                        RecordingStatus.RECORDING -> Primary
+                        RecordingStatus.COMPLETED -> OnBackground
+                        RecordingStatus.FAILED -> ErrorColor
+                        RecordingStatus.CANCELLED -> OnSurfaceDim
+                        RecordingStatus.SCHEDULED -> Secondary
+                    }
+                )
+            }
+            Text(
+                text = stringResource(
+                    R.string.settings_recording_time_window,
+                    formatTimestamp(item.scheduledStartMs),
+                    formatTimestamp(item.scheduledEndMs)
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = OnSurface
+            )
+            item.failureReason?.takeIf { it.isNotBlank() }?.let { reason ->
+                Text(reason, style = MaterialTheme.typography.bodySmall, color = ErrorColor)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (item.status == RecordingStatus.RECORDING) {
+                    Surface(
+                        onClick = onStop,
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = ErrorColor.copy(alpha = 0.2f),
+                            focusedContainerColor = ErrorColor.copy(alpha = 0.35f)
+                        )
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_recording_stop),
+                            color = ErrorColor,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+                if (item.status == RecordingStatus.SCHEDULED) {
+                    Surface(
+                        onClick = onCancel,
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = SurfaceHighlight,
+                            focusedContainerColor = Primary.copy(alpha = 0.2f)
+                        )
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_recording_cancel),
+                            color = OnBackground,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatBytes(bytes: Long): String {
+    if (bytes <= 0L) return "0 B"
+    val kb = 1024.0
+    val mb = kb * 1024.0
+    val gb = mb * 1024.0
+    return when {
+        bytes >= gb -> String.format(Locale.getDefault(), "%.1f GB", bytes / gb)
+        bytes >= mb -> String.format(Locale.getDefault(), "%.1f MB", bytes / mb)
+        bytes >= kb -> String.format(Locale.getDefault(), "%.1f KB", bytes / kb)
+        else -> "$bytes B"
+    }
+}
+
+private fun formatTimestamp(timestampMs: Long): String {
+    if (timestampMs <= 0L) return "--:--"
+    return java.text.SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(java.util.Date(timestampMs))
 }

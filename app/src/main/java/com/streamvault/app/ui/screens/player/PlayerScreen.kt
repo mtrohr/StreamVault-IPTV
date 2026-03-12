@@ -52,6 +52,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -80,6 +81,10 @@ fun PlayerScreen(
     providerId: Long? = null,
     isVirtual: Boolean = false,
     contentType: String = "LIVE",
+    archiveStartMs: Long? = null,
+    archiveEndMs: Long? = null,
+    archiveTitle: String? = null,
+    returnRoute: String? = null,
     onBack: () -> Unit,
     onNavigate: ((String) -> Unit)? = null,
     viewModel: PlayerViewModel = hiltViewModel(),
@@ -100,6 +105,8 @@ fun PlayerScreen(
     val showChannelListOverlay by viewModel.showChannelListOverlay.collectAsState()
     val showEpgOverlay by viewModel.showEpgOverlay.collectAsState()
     val currentChannelList by viewModel.currentChannelList.collectAsState()
+    val recentChannels by viewModel.recentChannels.collectAsState()
+    val lastVisitedCategory by viewModel.lastVisitedCategory.collectAsState()
     val displayChannelNumber by viewModel.displayChannelNumber.collectAsState()
     val upcomingPrograms by viewModel.upcomingPrograms.collectAsState()
     val showChannelInfoOverlay by viewModel.showChannelInfoOverlay.collectAsState()
@@ -111,8 +118,11 @@ fun PlayerScreen(
     val aspectRatio by viewModel.aspectRatio.collectAsState()
     val showDiagnostics by viewModel.showDiagnostics.collectAsState()
     val playerStats by viewModel.playerStats.collectAsState()
+    val playerDiagnostics by viewModel.playerDiagnostics.collectAsState()
     val currentPosition by viewModel.playerEngine.currentPosition.collectAsState()
     val duration by viewModel.playerEngine.duration.collectAsState()
+    val playerNotice by viewModel.playerNotice.collectAsState()
+    val currentChannelRecording by viewModel.currentChannelRecording.collectAsState()
 
     var showTrackSelection by remember { mutableStateOf<TrackType?>(null) }
     var showProgramHistory by remember { mutableStateOf(false) }
@@ -204,8 +214,20 @@ fun PlayerScreen(
         )
     }
 
-    LaunchedEffect(streamUrl, epgChannelId) {
-        viewModel.prepare(streamUrl, epgChannelId, internalChannelId, categoryId ?: -1, providerId ?: -1, isVirtual, contentType)
+    LaunchedEffect(streamUrl, epgChannelId, title, internalChannelId, categoryId, providerId, isVirtual, contentType, archiveStartMs, archiveEndMs, archiveTitle) {
+        viewModel.prepare(
+            streamUrl = streamUrl,
+            epgChannelId = epgChannelId,
+            internalChannelId = internalChannelId,
+            categoryId = categoryId ?: -1,
+            providerId = providerId ?: -1,
+            isVirtual = isVirtual,
+            contentType = contentType,
+            title = title,
+            archiveStartMs = archiveStartMs,
+            archiveEndMs = archiveEndMs,
+            archiveTitle = archiveTitle
+        )
     }
 
     LaunchedEffect(showControls) {
@@ -215,6 +237,17 @@ fun PlayerScreen(
             viewModel.hideControlsAfterDelay()
         } else {
             try { focusRequester.requestFocus() } catch (_: Exception) {}
+        }
+    }
+
+    val handlePlayerNoticeAction: (PlayerNoticeAction) -> Unit = remember(returnRoute, onNavigate) {
+        { action ->
+            if (action == PlayerNoticeAction.OPEN_GUIDE && !returnRoute.isNullOrBlank() && onNavigate != null) {
+                viewModel.dismissPlayerNotice()
+                onNavigate(returnRoute)
+            } else {
+                viewModel.runPlayerNoticeAction(action)
+            }
         }
     }
 
@@ -288,6 +321,9 @@ fun PlayerScreen(
                         KeyEvent.KEYCODE_BACK -> {
                             if (viewModel.hasPendingNumericChannelInput()) {
                                 viewModel.clearNumericChannelInput()
+                                true
+                            } else if (playerNotice != null) {
+                                viewModel.dismissPlayerNotice()
                                 true
                             } else if (showProgramHistory) {
                                 showProgramHistory = false
@@ -431,6 +467,58 @@ fun PlayerScreen(
             }
         }
 
+        AnimatedVisibility(
+            visible = playerNotice != null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 116.dp)
+        ) {
+            Surface(
+                onClick = viewModel::dismissPlayerNotice,
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color(0xCC5B1F1F),
+                    focusedContainerColor = Color(0xFFE45757)
+                )
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+                    Text(
+                        text = playerNotice?.message.orEmpty(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White
+                    )
+                    if (!playerNotice?.actions.isNullOrEmpty()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            playerNotice?.actions.orEmpty().forEach { action ->
+                                Surface(
+                                    onClick = { handlePlayerNoticeAction(action) },
+                                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                                    colors = ClickableSurfaceDefaults.colors(
+                                        containerColor = Color.White.copy(alpha = 0.12f),
+                                        focusedContainerColor = Color.White.copy(alpha = 0.22f)
+                                    )
+                                ) {
+                                    Text(
+                                        text = when (action) {
+                                            PlayerNoticeAction.RETRY -> stringResource(R.string.player_retry)
+                                            PlayerNoticeAction.LAST_CHANNEL -> stringResource(R.string.player_last_channel_action)
+                                            PlayerNoticeAction.ALTERNATE_STREAM -> stringResource(R.string.player_try_alternate_stream)
+                                            PlayerNoticeAction.OPEN_GUIDE -> stringResource(R.string.player_open_guide_action)
+                                        },
+                                        color = Color.White,
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Error overlay
         if (playbackState == PlaybackState.ERROR) {
             Box(
@@ -465,27 +553,48 @@ fun PlayerScreen(
                     )
                     
                     Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Retry button
-                    Surface(
-                        onClick = { viewModel.retryStream(streamUrl, epgChannelId) },
-                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Primary,
-                            focusedContainerColor = PrimaryVariant
-                        )
+
+                    val recoveryActions = buildList {
+                        add(PlayerNoticeAction.RETRY)
+                        if (contentType == "LIVE" && viewModel.hasAlternateStream()) add(PlayerNoticeAction.ALTERNATE_STREAM)
+                        if (contentType == "LIVE" && viewModel.hasLastChannel()) add(PlayerNoticeAction.LAST_CHANNEL)
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = stringResource(R.string.player_retry),
-                            color = OnBackground,
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-                        )
+                        recoveryActions.forEach { action ->
+                            Surface(
+                                onClick = { handlePlayerNoticeAction(action) },
+                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                                colors = ClickableSurfaceDefaults.colors(
+                                    containerColor = if (action == PlayerNoticeAction.RETRY) Primary else Color.White.copy(alpha = 0.08f),
+                                    focusedContainerColor = if (action == PlayerNoticeAction.RETRY) PrimaryVariant else Color.White.copy(alpha = 0.18f)
+                                )
+                            ) {
+                                Text(
+                                    text = when (action) {
+                                        PlayerNoticeAction.RETRY -> stringResource(R.string.player_retry)
+                                        PlayerNoticeAction.LAST_CHANNEL -> stringResource(R.string.player_last_channel_action)
+                                        PlayerNoticeAction.ALTERNATE_STREAM -> stringResource(R.string.player_try_alternate_stream)
+                                        PlayerNoticeAction.OPEN_GUIDE -> stringResource(R.string.player_open_guide_action)
+                                    },
+                                    color = if (action == PlayerNoticeAction.RETRY) OnBackground else Color.White,
+                                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
                     }
                     
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     Text(
-                        text = stringResource(R.string.player_error_back),
+                        text = if (contentType == "LIVE" && viewModel.hasLastChannel()) {
+                            stringResource(R.string.player_error_live_hint)
+                        } else {
+                            stringResource(R.string.player_error_back)
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = OnSurfaceDim
                     )
@@ -611,6 +720,12 @@ fun PlayerScreen(
                                     if (currentChannel?.catchUpSupported == true) {
                                         QuickSettingsButton(stringResource(R.string.player_restart)) { viewModel.restartCurrentProgram() }
                                         QuickSettingsButton(stringResource(R.string.player_archive)) { showProgramHistory = true }
+                                    }
+                                    if (currentChannelRecording?.status == com.streamvault.domain.model.RecordingStatus.RECORDING) {
+                                        QuickSettingsButton(stringResource(R.string.player_stop_recording)) { viewModel.stopCurrentRecording() }
+                                    } else {
+                                        QuickSettingsButton(stringResource(R.string.player_record)) { viewModel.startManualRecording() }
+                                        QuickSettingsButton(stringResource(R.string.player_schedule_recording)) { viewModel.scheduleRecording() }
                                     }
                                     QuickSettingsButton(stringResource(R.string.player_aspect_ratio_label, aspectRatio.modeName)) { viewModel.toggleAspectRatio() }
                                     if (availableSubtitleTracks.isNotEmpty()) {
@@ -1027,6 +1142,7 @@ fun PlayerScreen(
         if (showDiagnostics) {
             DiagnosticsOverlay(
                 stats = playerStats,
+                diagnostics = playerDiagnostics,
                 modifier = Modifier.align(Alignment.TopStart).padding(32.dp)
             )
         }
@@ -1043,10 +1159,13 @@ fun PlayerScreen(
         ) {
             ChannelListOverlay(
                 channels = currentChannelList,
-                currentChannelId = internalChannelId,
+                recentChannels = recentChannels,
+                currentChannelId = currentChannel?.id ?: internalChannelId,
                 overlayFocusRequester = channelListFocusRequester,
                 preferredFocusedChannelId = lastFocusedChannelListItemId,
                 onFocusedChannelChange = { channelId -> lastFocusedChannelListItemId = channelId },
+                lastVisitedCategoryName = lastVisitedCategory?.name,
+                onOpenLastGroup = { viewModel.openLastVisitedCategory() },
                 onSelectChannel = { channelId -> viewModel.zapToChannel(channelId) },
                 onDismiss = { viewModel.closeOverlays() }
             )
@@ -1094,10 +1213,19 @@ fun PlayerScreen(
                 currentProgram = currentProgram,
                 nextProgram = nextProgram,
                 focusRequester = channelInfoFocusRequester,
+                lastVisitedCategoryName = lastVisitedCategory?.name,
                 onDismiss = { viewModel.closeChannelInfoOverlay() },
                 onOpenFullEpg = {
                     viewModel.closeChannelInfoOverlay()
                     viewModel.openEpgOverlay()
+                },
+                onOpenLastGroup = {
+                    viewModel.closeChannelInfoOverlay()
+                    viewModel.openLastVisitedCategory()
+                },
+                onOpenRecentChannels = {
+                    viewModel.closeChannelInfoOverlay()
+                    viewModel.openChannelListOverlay()
                 },
                 onOpenFullControls = {
                     viewModel.closeChannelInfoOverlay()
@@ -1123,8 +1251,11 @@ fun ChannelInfoOverlay(
     currentProgram: Program?,
     nextProgram: Program?,
     focusRequester: FocusRequester,
+    lastVisitedCategoryName: String?,
     onDismiss: () -> Unit,
     onOpenFullEpg: () -> Unit,
+    onOpenLastGroup: () -> Unit,
+    onOpenRecentChannels: () -> Unit,
     onOpenFullControls: () -> Unit,
     onRestartProgram: () -> Unit,
     onToggleAspectRatio: () -> Unit,
@@ -1297,6 +1428,18 @@ fun ChannelInfoOverlay(
                         onClick = onToggleAspectRatio,
                         modifier = Modifier.focusRequester(focusRequester)
                     )
+                    if (!lastVisitedCategoryName.isNullOrBlank()) {
+                        QuickActionButton(
+                            icon = "LG",
+                            label = stringResource(R.string.player_last_group_label, lastVisitedCategoryName),
+                            onClick = onOpenLastGroup
+                        )
+                    }
+                    QuickActionButton(
+                        icon = "RC",
+                        label = stringResource(R.string.player_recent_channels),
+                        onClick = onOpenRecentChannels
+                    )
                     QuickActionButton(
                         icon = "EPG",
                         label = stringResource(R.string.player_full_epg),
@@ -1398,10 +1541,13 @@ private fun TrackItem(
 @Composable
 fun ChannelListOverlay(
     channels: List<com.streamvault.domain.model.Channel>,
+    recentChannels: List<com.streamvault.domain.model.Channel>,
     currentChannelId: Long,
     overlayFocusRequester: FocusRequester = remember { FocusRequester() },
     preferredFocusedChannelId: Long? = null,
     onFocusedChannelChange: (Long) -> Unit = {},
+    lastVisitedCategoryName: String? = null,
+    onOpenLastGroup: () -> Unit = {},
     onSelectChannel: (Long) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1433,12 +1579,108 @@ fun ChannelListOverlay(
         contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
     ) {
         item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.player_channel_list_title, channels.size),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Primary
+                )
+                if (!lastVisitedCategoryName.isNullOrBlank()) {
+                    Surface(
+                        onClick = onOpenLastGroup,
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(999.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color.White.copy(alpha = 0.08f),
+                            focusedContainerColor = Primary
+                        )
+                    ) {
+                        Text(
+                            text = stringResource(R.string.player_last_group_label, lastVisitedCategoryName),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+            }
+        }
+        if (!lastVisitedCategoryName.isNullOrBlank()) {
+            item {
+                Text(
+                    text = stringResource(R.string.player_last_group_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OnSurfaceDim,
+                    modifier = Modifier.padding(horizontal = 24.dp)
+                )
+            }
+        }
+        item {
             Text(
-                text = stringResource(R.string.player_channel_list_title, channels.size),
-                style = MaterialTheme.typography.titleMedium,
-                color = Primary,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp)
+                text = stringResource(R.string.player_channel_list_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = OnSurfaceDim,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
             )
+        }
+        if (recentChannels.isNotEmpty()) {
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.player_recent_channels),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = OnSurfaceDim,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+                    )
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        items(recentChannels, key = { it.id }) { channel ->
+                            Surface(
+                                onClick = {
+                                    onSelectChannel(channel.id)
+                                    onDismiss()
+                                },
+                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(999.dp)),
+                                colors = ClickableSurfaceDefaults.colors(
+                                    containerColor = Color.White.copy(alpha = 0.08f),
+                                    focusedContainerColor = Primary
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    val recentNumber = if (channel.number > 0) channel.number.toString() else "?"
+                                    Text(
+                                        text = recentNumber,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color.White.copy(alpha = 0.75f)
+                                    )
+                                    Text(
+                                        text = channel.name,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.White,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         items(channels.size) { index ->
             val channel = channels[index]
@@ -1572,6 +1814,12 @@ fun EpgOverlay(
                         )
                     }
                 }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.player_epg_overlay_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OnSurfaceDim
+                )
             }
 
             // Now Playing section
@@ -1808,6 +2056,7 @@ private fun formatDuration(ms: Long): String {
 @Composable
 fun DiagnosticsOverlay(
     stats: com.streamvault.player.PlayerStats,
+    diagnostics: PlayerDiagnosticsUiState,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -1818,11 +2067,45 @@ fun DiagnosticsOverlay(
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Player Diagnostics", color = Primary, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(4.dp))
+            if (diagnostics.providerName.isNotBlank()) {
+                Text("Provider: ${diagnostics.providerName}", color = Color.White, style = MaterialTheme.typography.bodySmall)
+            }
+            if (diagnostics.providerSourceLabel.isNotBlank()) {
+                Text("Source: ${diagnostics.providerSourceLabel}", color = Color.White, style = MaterialTheme.typography.bodySmall)
+            }
+            Text("Decoder: ${diagnostics.decoderMode.name}", color = Color.White, style = MaterialTheme.typography.bodySmall)
+            Text("Stream Class: ${diagnostics.streamClassLabel}", color = Color.White, style = MaterialTheme.typography.bodySmall)
+            Text("Playback State: ${diagnostics.playbackStateLabel}", color = Color.White, style = MaterialTheme.typography.bodySmall)
+            if (diagnostics.archiveSupportLabel.isNotBlank()) {
+                Text("Archive: ${diagnostics.archiveSupportLabel}", color = Color.White, style = MaterialTheme.typography.bodySmall)
+            }
+            Text("Alternate Streams: ${diagnostics.alternativeStreamCount}", color = Color.White, style = MaterialTheme.typography.bodySmall)
+            if (diagnostics.channelErrorCount > 0) {
+                Text("Channel Errors: ${diagnostics.channelErrorCount}", color = Color.White, style = MaterialTheme.typography.bodySmall)
+            }
             Text("Resolution: ${stats.width}x${stats.height}", color = Color.White, style = MaterialTheme.typography.bodySmall)
             Text("Video Codec: ${stats.videoCodec}", color = Color.White, style = MaterialTheme.typography.bodySmall)
             Text("Audio Codec: ${stats.audioCodec}", color = Color.White, style = MaterialTheme.typography.bodySmall)
             Text("Video Bitrate: ${stats.videoBitrate / 1000} kbps", color = Color.White, style = MaterialTheme.typography.bodySmall)
             Text("Dropped Frames: ${stats.droppedFrames}", color = Color.White, style = MaterialTheme.typography.bodySmall)
+            diagnostics.lastFailureReason?.let { reason ->
+                Spacer(Modifier.height(4.dp))
+                Text("Last Failure: $reason", color = Color.White, style = MaterialTheme.typography.bodySmall)
+            }
+            if (diagnostics.recentRecoveryActions.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Text("Recovery Actions", color = Primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                diagnostics.recentRecoveryActions.forEach { action ->
+                    Text("• $action", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            if (diagnostics.troubleshootingHints.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Text("Troubleshooting", color = Primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                diagnostics.troubleshootingHints.forEach { hint ->
+                    Text("- $hint", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                }
+            }
         }
     }
 }

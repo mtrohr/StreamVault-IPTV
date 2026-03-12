@@ -50,6 +50,59 @@ class SeriesRepositoryImpl @Inject constructor(
             }
         }.map { list: List<SeriesEntity> -> list.map { it.toDomain() } }
 
+    override fun getSeriesByCategoryPage(
+        providerId: Long,
+        categoryId: Long,
+        limit: Int,
+        offset: Int
+    ): Flow<List<Series>> =
+        combine(
+            seriesDao.getByCategoryPage(providerId, categoryId, limit, offset),
+            preferencesRepository.parentalControlLevel
+        ) { entities: List<SeriesEntity>, level: Int ->
+            if (level == 2) {
+                entities.filter { !it.isUserProtected }
+            } else {
+                entities
+            }
+        }.map { list: List<SeriesEntity> -> list.map { it.toDomain() } }
+
+    override fun getSeriesByCategoryPreview(providerId: Long, categoryId: Long, limit: Int): Flow<List<Series>> =
+        combine(
+            seriesDao.getByCategoryPreview(providerId, categoryId, limit),
+            preferencesRepository.parentalControlLevel
+        ) { entities: List<SeriesEntity>, level: Int ->
+            if (level == 2) {
+                entities.filter { !it.isUserProtected }
+            } else {
+                entities
+            }
+        }.map { list: List<SeriesEntity> -> list.map { it.toDomain() } }
+
+    override fun getTopRatedPreview(providerId: Long, limit: Int): Flow<List<Series>> =
+        combine(
+            seriesDao.getTopRatedPreview(providerId, limit),
+            preferencesRepository.parentalControlLevel
+        ) { entities: List<SeriesEntity>, level: Int ->
+            if (level == 2) {
+                entities.filter { !it.isUserProtected }
+            } else {
+                entities
+            }
+        }.map { list: List<SeriesEntity> -> list.map { it.toDomain() } }
+
+    override fun getFreshPreview(providerId: Long, limit: Int): Flow<List<Series>> =
+        combine(
+            seriesDao.getFreshPreview(providerId, limit),
+            preferencesRepository.parentalControlLevel
+        ) { entities: List<SeriesEntity>, level: Int ->
+            if (level == 2) {
+                entities.filter { !it.isUserProtected }
+            } else {
+                entities
+            }
+        }.map { list: List<SeriesEntity> -> list.map { it.toDomain() } }
+
     override fun getSeriesByIds(ids: List<Long>): Flow<List<Series>> =
         seriesDao.getByIds(ids).map { entities -> entities.map { it.toDomain() } }
 
@@ -65,6 +118,41 @@ class SeriesRepositoryImpl @Inject constructor(
                 mapped
             }
         }
+
+    override fun getCategoryItemCounts(providerId: Long): Flow<Map<Long, Int>> =
+        seriesDao.getCategoryCounts(providerId).map { counts ->
+            counts.associate { it.categoryId to it.item_count }
+        }
+
+    override fun getLibraryCount(providerId: Long): Flow<Int> =
+        seriesDao.getCount(providerId)
+
+    override fun browseSeries(query: LibraryBrowseQuery): Flow<PagedResult<Series>> {
+        val categoryId = query.categoryId
+        val pageFlow = if (query.categoryId == null) {
+            seriesDao.getByProviderPage(query.providerId, query.limit, query.offset)
+        } else {
+            seriesDao.getByCategoryPage(query.providerId, categoryId!!, query.limit, query.offset)
+        }
+        val countFlow = if (query.categoryId == null) {
+            seriesDao.getCount(query.providerId)
+        } else {
+            seriesDao.getCountByCategory(query.providerId, categoryId!!)
+        }
+        return combine(pageFlow, countFlow, preferencesRepository.parentalControlLevel) { entities: List<SeriesEntity>, totalCount: Int, level: Int ->
+            val filtered = if (level == 2) {
+                entities.filter { !it.isUserProtected }
+            } else {
+                entities
+            }
+            PagedResult(
+                items = filtered.map { it.toDomain() },
+                totalCount = totalCount,
+                offset = query.offset,
+                limit = query.limit
+            )
+        }
+    }
 
     override fun searchSeries(providerId: Long, query: String): Flow<List<Series>> =
         query.toFtsPrefixQuery().let { ftsQuery ->

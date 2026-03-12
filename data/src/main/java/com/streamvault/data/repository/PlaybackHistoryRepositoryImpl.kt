@@ -28,6 +28,17 @@ class PlaybackHistoryRepositoryImpl @Inject constructor(
         return dao.get(contentId, contentType.name, providerId)?.toDomain()
     }
 
+    override suspend fun recordPlayback(history: PlaybackHistory) {
+        val existing = dao.get(history.contentId, history.contentType.name, history.providerId)
+        val updatedHistory = history.copy(
+            resumePositionMs = 0,
+            totalDurationMs = 0,
+            watchCount = (existing?.watchCount ?: 0) + 1,
+            lastWatchedAt = System.currentTimeMillis()
+        )
+        dao.insertOrUpdate(updatedHistory.toEntity())
+    }
+
     override suspend fun updateResumePosition(history: PlaybackHistory) {
         val existing = dao.get(history.contentId, history.contentType.name, history.providerId)
 

@@ -7,9 +7,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.streamvault.app.ui.theme.LocalSpacing
+import com.streamvault.app.ui.theme.Primary
 import com.streamvault.app.ui.theme.TextPrimary
 import com.streamvault.app.ui.theme.TextTertiary
 import androidx.compose.ui.res.stringResource
@@ -40,11 +44,21 @@ fun <T> CategoryRow(
                 color = TextPrimary
             )
             if (onSeeAll != null) {
-                Text(
-                    text = stringResource(R.string.category_see_all),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = TextTertiary
-                )
+                Surface(
+                    onClick = onSeeAll,
+                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(999.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Primary.copy(alpha = 0.12f),
+                        focusedContainerColor = Primary.copy(alpha = 0.22f),
+                        contentColor = TextTertiary
+                    )
+                ) {
+                    Text(
+                        text = stringResource(R.string.category_see_all),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
+                }
             }
         }
 

@@ -1,0 +1,126 @@
+package com.streamvault.app.ui.screens.search
+
+import com.google.common.truth.Truth.assertThat
+import com.streamvault.domain.model.Provider
+import com.streamvault.domain.model.ProviderType
+import com.streamvault.data.preferences.PreferencesRepository
+import com.streamvault.domain.repository.ChannelRepository
+import com.streamvault.domain.repository.MovieRepository
+import com.streamvault.domain.repository.ProviderRepository
+import com.streamvault.domain.repository.SeriesRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.launch
+import org.junit.After
+import org.junit.Before
+import org.junit.Test
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class SearchViewModelTest {
+
+    private val providerRepository: ProviderRepository = mock()
+    private val channelRepository: ChannelRepository = mock()
+    private val movieRepository: MovieRepository = mock()
+    private val seriesRepository: SeriesRepository = mock()
+    private val preferencesRepository: PreferencesRepository = mock()
+
+    private lateinit var viewModel: SearchViewModel
+
+    @Before
+    fun setup() {
+        Dispatchers.setMain(StandardTestDispatcher())
+        whenever(providerRepository.getActiveProvider()).thenReturn(flowOf(null))
+        whenever(preferencesRepository.parentalControlLevel).thenReturn(flowOf(0))
+
+        viewModel = SearchViewModel(
+            providerRepository,
+            channelRepository,
+            movieRepository,
+            seriesRepository,
+            preferencesRepository
+        )
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
+    @Test
+    fun `submitted queries are stored trimmed deduplicated and capped`() = runTest {
+        viewModel.onQueryChange(" news ")
+        viewModel.onSearchSubmitted()
+        viewModel.onQueryChange("sports")
+        viewModel.onSearchSubmitted()
+        viewModel.onQueryChange("NEWS")
+        viewModel.onSearchSubmitted()
+        viewModel.onQueryChange("movies")
+        viewModel.onSearchSubmitted()
+        viewModel.onQueryChange("series")
+        viewModel.onSearchSubmitted()
+        viewModel.onQueryChange("kids")
+        viewModel.onSearchSubmitted()
+        viewModel.onQueryChange("music")
+        viewModel.onSearchSubmitted()
+
+        assertThat(viewModel.recentQueries.value).containsExactly(
+            "music",
+            "kids",
+            "series",
+            "movies",
+            "NEWS",
+            "sports"
+        ).inOrder()
+    }
+
+    @Test
+    fun `clearRecentQueries removes all stored search shortcuts`() = runTest {
+        viewModel.onQueryChange("news")
+        viewModel.onSearchSubmitted()
+
+        viewModel.clearRecentQueries()
+
+        assertThat(viewModel.recentQueries.value).isEmpty()
+    }
+
+    @Test
+    fun `ui state exposes provider and query readiness before results load`() = runTest {
+        whenever(providerRepository.getActiveProvider()).thenReturn(
+            flowOf(
+                Provider(
+                    id = 1L,
+                    name = "Provider",
+                    type = ProviderType.M3U,
+                    serverUrl = "http://test"
+                )
+            )
+        )
+
+        viewModel = SearchViewModel(
+            providerRepository,
+            channelRepository,
+            movieRepository,
+            seriesRepository,
+            preferencesRepository
+        )
+
+        val collectorJob = backgroundScope.launch { viewModel.uiState.collect { } }
+        advanceUntilIdle()
+        viewModel.onQueryChange("a")
+        testScheduler.advanceTimeBy(400)
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.hasActiveProvider).isTrue()
+        assertThat(viewModel.uiState.value.queryLength).isEqualTo(1)
+        assertThat(viewModel.uiState.value.hasSearched).isFalse()
+        collectorJob.cancel()
+    }
+}

@@ -48,6 +48,9 @@ abstract class RepositoryModule {
     @Binds @Singleton
     abstract fun bindBackupManager(impl: com.streamvault.data.manager.BackupManagerImpl): com.streamvault.domain.manager.BackupManager
 
+    @Binds @Singleton
+    abstract fun bindRecordingManager(impl: com.streamvault.data.manager.RecordingManagerImpl): com.streamvault.domain.manager.RecordingManager
+
     companion object {
         @Provides
         @Singleton
