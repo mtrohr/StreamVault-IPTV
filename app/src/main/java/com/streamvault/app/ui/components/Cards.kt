@@ -1,6 +1,5 @@
 package com.streamvault.app.ui.components
 
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -42,6 +41,8 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.streamvault.app.R
+import com.streamvault.app.ui.components.shell.MoviePosterCard
+import com.streamvault.app.ui.components.shell.SeriesPosterCard
 import com.streamvault.app.ui.theme.AccentAmber
 import com.streamvault.app.ui.theme.AccentCyan
 import com.streamvault.app.ui.theme.AccentRed
@@ -57,6 +58,7 @@ import com.streamvault.app.ui.theme.TextTertiary
 import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.Movie
 import com.streamvault.domain.model.Series
+import com.streamvault.app.ui.design.FocusSpec
 
 @Composable
 fun FocusableCard(
@@ -73,18 +75,12 @@ fun FocusableCard(
 
     val scale by animateFloatAsState(
         targetValue = if (isFocused) {
-            if (isReorderMode && !isDragging) 1f else 1.1f
+            if (isReorderMode && !isDragging) 1f else FocusSpec.FocusedScale
         } else {
-            if (isDragging) 1.1f else 1f
+            if (isDragging) FocusSpec.FocusedScale else 1f
         },
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 160),
         label = "cardScale"
-    )
-
-    val shadowElevation by animateFloatAsState(
-        targetValue = if (isDragging) 16f else if (isFocused) 8f else 0f,
-        animationSpec = tween(durationMillis = 200),
-        label = "cardElevation"
     )
 
     Surface(
@@ -96,7 +92,6 @@ fun FocusableCard(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-                this.shadowElevation = shadowElevation
                 shape = RoundedCornerShape(12.dp)
                 clip = false
             }
@@ -113,7 +108,7 @@ fun FocusableCard(
             ),
             focusedBorder = Border(
                 border = BorderStroke(
-                    width = if (isDragging) 4.dp else 3.dp,
+                    width = if (isDragging) 4.dp else FocusSpec.BorderWidth,
                     color = if (isDragging) AccentAmber else FocusBorder
                 ),
                 shape = RoundedCornerShape(12.dp)
@@ -140,8 +135,8 @@ fun ChannelCard(
         onClick = onClick,
         onLongClick = onLongClick,
         modifier = modifier,
-        width = 280.dp,
-        height = 157.dp,
+        width = 220.dp,
+        height = 124.dp,
         isReorderMode = isReorderMode,
         isDragging = isDragging
     ) { isFocused ->
@@ -258,20 +253,15 @@ fun MovieCard(
         onClick = onClick,
         onLongClick = onLongClick,
         modifier = modifier,
-        width = 160.dp,
-        height = 240.dp,
+        width = 136.dp,
+        height = 204.dp,
         isReorderMode = isReorderMode,
         isDragging = isDragging
     ) {
-        if (!movie.posterUrl.isNullOrBlank() && !isLocked) {
-            AsyncImage(
-                model = movie.posterUrl,
-                contentDescription = movie.name,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(SurfaceElevated),
-                contentScale = ContentScale.Fit
+        if (!isLocked) {
+            MoviePosterCard(
+                movie = movie,
+                modifier = Modifier.fillMaxSize()
             )
         } else {
             Box(
@@ -283,42 +273,6 @@ fun MovieCard(
                 StatusBadge(
                     label = if (isLocked) "LOCKED" else "MOVIE",
                     containerColor = SurfaceHighlight
-                )
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(0.6f)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
-                    )
-                )
-        )
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = if (isLocked) stringResource(R.string.card_locked) else movie.name,
-                style = MaterialTheme.typography.titleSmall,
-                color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            if (!isLocked && movie.year != null) {
-                Text(
-                    text = movie.year!!,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.7f)
                 )
             }
         }
@@ -377,20 +331,15 @@ fun SeriesCard(
         onClick = onClick,
         onLongClick = onLongClick,
         modifier = modifier,
-        width = 160.dp,
-        height = 240.dp,
+        width = 136.dp,
+        height = 204.dp,
         isReorderMode = isReorderMode,
         isDragging = isDragging
     ) {
-        if (!series.posterUrl.isNullOrBlank() && !isLocked) {
-            AsyncImage(
-                model = series.posterUrl,
-                contentDescription = series.name,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(SurfaceElevated),
-                contentScale = ContentScale.Fit
+        if (!isLocked) {
+            SeriesPosterCard(
+                series = series,
+                modifier = Modifier.fillMaxSize()
             )
         } else {
             Box(
@@ -402,42 +351,6 @@ fun SeriesCard(
                 StatusBadge(
                     label = if (isLocked) "LOCKED" else "SERIES",
                     containerColor = SurfaceHighlight
-                )
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(0.6f)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
-                    )
-                )
-        )
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = if (isLocked) stringResource(R.string.card_locked) else series.name,
-                style = MaterialTheme.typography.titleSmall,
-                color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (!isLocked && !subtitle.isNullOrBlank()) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.7f),
-                    maxLines = 1
                 )
             }
         }

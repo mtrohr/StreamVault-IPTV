@@ -51,7 +51,14 @@ import androidx.tv.material3.Text
 import com.streamvault.app.R
 import com.streamvault.app.ui.components.SelectionChip
 import com.streamvault.app.ui.components.SelectionChipRow
-import com.streamvault.app.ui.components.TopNavBar
+import com.streamvault.app.ui.components.dialogs.PremiumDialog
+import com.streamvault.app.ui.components.dialogs.PremiumDialogActionButton
+import com.streamvault.app.ui.components.dialogs.PremiumDialogFooterButton
+import com.streamvault.app.ui.components.shell.AppNavigationChrome
+import com.streamvault.app.ui.components.shell.AppHeroHeader
+import com.streamvault.app.ui.components.shell.AppScreenScaffold
+import com.streamvault.app.ui.components.shell.AppSectionHeader
+import com.streamvault.app.ui.components.shell.StatusPill
 import com.streamvault.app.ui.theme.CardBackground
 import com.streamvault.app.ui.theme.OnBackground
 import com.streamvault.app.ui.theme.OnPrimary
@@ -341,46 +348,53 @@ fun FavoritesScreen(
         )
     )
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopNavBar(currentRoute = currentRoute, onNavigate = onNavigate)
-
-        when {
-            uiState.isLoading -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = stringResource(R.string.favorites_loading),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = OnSurface
-                    )
-                }
-            }
-
-            uiState.sections.isEmpty() -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        AppScreenScaffold(
+            currentRoute = currentRoute,
+            onNavigate = onNavigate,
+            title = stringResource(R.string.favorites_title),
+            subtitle = stringResource(R.string.saved_shell_subtitle),
+            navigationChrome = AppNavigationChrome.TopBar,
+            compactHeader = true,
+            showScreenHeader = false
+        ) {
+            when {
+                uiState.isLoading -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
-                            text = stringResource(R.string.favorites_no_favorites),
-                            style = MaterialTheme.typography.titleLarge,
+                            text = stringResource(R.string.favorites_loading),
+                            style = MaterialTheme.typography.bodyLarge,
                             color = OnSurface
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = stringResource(R.string.favorites_empty_hint),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = OnSurfaceDim
                         )
                     }
                 }
-            }
 
-            else -> {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(32.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
+                uiState.sections.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = stringResource(R.string.favorites_no_favorites),
+                                style = MaterialTheme.typography.titleLarge,
+                                color = OnSurface
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = stringResource(R.string.favorites_empty_hint),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = OnSurfaceDim
+                            )
+                        }
+                    }
+                }
+
+                else -> {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 32.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
                         item(key = "summary") {
                             SavedLibrarySummaryCard(
                                 summary = providerScopedSummary,
@@ -578,31 +592,32 @@ fun FavoritesScreen(
                                 )
                             }
                         }
-                    }
+                        }
 
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = uiState.isReorderMode && activeReorderSection != null,
-                        enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
-                        exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 24.dp)
-                    ) {
-                        ReorderPanel(
-                            section = activeReorderSection,
-                            movingFavoriteId = uiState.reorderItem?.id
-                        )
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = uiState.isReorderMode && activeReorderSection != null,
+                            enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+                            exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 24.dp)
+                        ) {
+                            ReorderPanel(
+                                section = activeReorderSection,
+                                movingFavoriteId = uiState.reorderItem?.id
+                            )
+                        }
                     }
-
-                    SnackbarHost(
-                        hostState = snackbarHostState,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 18.dp)
-                    )
                 }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 18.dp)
+        )
     }
 
     androidx.compose.runtime.LaunchedEffect(uiState.userMessage) {
@@ -665,29 +680,24 @@ private fun SavedLibrarySummaryCard(
     currentFilter: SavedLibraryFilter
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
-        colors = androidx.tv.material3.SurfaceDefaults.colors(containerColor = SurfaceElevated)
+        colors = SurfaceDefaults.colors(containerColor = SurfaceElevated)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = stringResource(R.string.favorites_overview_title),
-                style = MaterialTheme.typography.titleLarge,
-                color = OnSurface
-            )
-            Text(
-                text = stringResource(
+            AppSectionHeader(
+                title = stringResource(R.string.favorites_overview_title),
+                subtitle = stringResource(
                     R.string.favorites_overview_subtitle,
                     summary.totalItems,
                     summary.customGroupCount
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = OnSurfaceDim
+                )
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SavedLibraryStatPill(
                     label = stringResource(R.string.search_live_tv),
                     value = summary.liveCount,
@@ -704,17 +714,9 @@ private fun SavedLibrarySummaryCard(
                     highlighted = currentFilter == SavedLibraryFilter.SERIES
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                SavedLibraryStatPill(
-                    label = stringResource(R.string.favorites_continue_short),
-                    value = summary.continueWatchingCount,
-                    highlighted = false
-                )
-                SavedLibraryStatPill(
-                    label = stringResource(R.string.favorites_recent_short),
-                    value = summary.recentLiveCount,
-                    highlighted = false
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatusPill(label = stringResource(R.string.favorites_continue_short) + " ${summary.continueWatchingCount}")
+                StatusPill(label = stringResource(R.string.favorites_recent_short) + " ${summary.recentLiveCount}")
             }
         }
     }
@@ -734,8 +736,8 @@ private fun SavedLibraryStatPill(
     ) {
         Text(
             text = "$label $value",
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.labelMedium,
             color = if (highlighted) Primary else OnSurface
         )
     }
@@ -890,40 +892,32 @@ private fun SavedItemOptionsDialog(
     onRemove: () -> Unit,
     onMoveToGroup: (FavoriteUiModel, Long) -> Unit
 ) {
-    androidx.compose.material3.AlertDialog(
+    PremiumDialog(
+        title = item.title,
+        subtitle = stringResource(R.string.library_saved_manage_hint),
         onDismissRequest = onDismiss,
-        title = { androidx.compose.material3.Text(item.title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                androidx.tv.material3.Button(
-                    onClick = onRemove,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = if (item.favorite.groupId == null) {
-                            stringResource(R.string.saved_item_remove_saved)
-                        } else {
-                            stringResource(R.string.saved_item_remove_group)
-                        }
-                    )
-                }
-                moveTargets.forEach { target ->
-                    androidx.tv.material3.Button(
-                        onClick = { onMoveToGroup(item, target.group.id) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = stringResource(R.string.saved_item_move_to, target.group.name)
-                        )
-                    }
-                }
+        content = {
+            PremiumDialogActionButton(
+                label = if (item.favorite.groupId == null) {
+                    stringResource(R.string.saved_item_remove_saved)
+                } else {
+                    stringResource(R.string.saved_item_remove_group)
+                },
+                onClick = onRemove,
+                destructive = true
+            )
+            moveTargets.forEach { target ->
+                PremiumDialogActionButton(
+                    label = stringResource(R.string.saved_item_move_to, target.group.name),
+                    onClick = { onMoveToGroup(item, target.group.id) }
+                )
             }
         },
-        confirmButton = {},
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                androidx.compose.material3.Text(stringResource(R.string.settings_cancel))
-            }
+        footer = {
+            PremiumDialogFooterButton(
+                label = stringResource(R.string.settings_cancel),
+                onClick = onDismiss
+            )
         }
     )
 }
@@ -938,64 +932,48 @@ private fun SavedGroupOptionsDialog(
     onMerge: () -> Unit,
     onDelete: () -> Unit
 ) {
-    androidx.compose.material3.AlertDialog(
+    PremiumDialog(
+        title = group.group.name,
+        subtitle = stringResource(R.string.saved_group_manage_subtitle),
         onDismissRequest = onDismiss,
-        title = { androidx.compose.material3.Text(group.group.name) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (group.itemCount > 1) {
-                    androidx.tv.material3.Button(
-                        onClick = onReorder,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(stringResource(R.string.category_options_reorder))
-                    }
-                }
-                onTogglePromotion?.let { toggle ->
-                    androidx.tv.material3.Button(
-                        onClick = toggle,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = if (group.isPromotedOnHome) {
-                                stringResource(R.string.saved_group_demote_home)
-                            } else {
-                                stringResource(R.string.saved_group_promote_home)
-                            }
-                        )
-                    }
-                }
-                if (canMerge) {
-                    androidx.tv.material3.Button(
-                        onClick = onMerge,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(stringResource(R.string.saved_group_merge))
-                    }
-                }
-                androidx.tv.material3.Button(
-                    onClick = onDelete,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = androidx.tv.material3.ButtonDefaults.colors(
-                        containerColor = Color(0x44D32F2F),
-                        contentColor = Color.White
-                    )
-                ) {
-                    Text(
-                        text = if (group.itemCount == 0) {
-                            stringResource(R.string.saved_group_delete_empty)
-                        } else {
-                            stringResource(R.string.category_options_delete)
-                        }
-                    )
-                }
+        content = {
+            if (group.itemCount > 1) {
+                PremiumDialogActionButton(
+                    label = stringResource(R.string.category_options_reorder),
+                    onClick = onReorder
+                )
             }
+            onTogglePromotion?.let { toggle ->
+                PremiumDialogActionButton(
+                    label = if (group.isPromotedOnHome) {
+                        stringResource(R.string.saved_group_demote_home)
+                    } else {
+                        stringResource(R.string.saved_group_promote_home)
+                    },
+                    onClick = toggle
+                )
+            }
+            if (canMerge) {
+                PremiumDialogActionButton(
+                    label = stringResource(R.string.saved_group_merge),
+                    onClick = onMerge
+                )
+            }
+            PremiumDialogActionButton(
+                label = if (group.itemCount == 0) {
+                    stringResource(R.string.saved_group_delete_empty)
+                } else {
+                    stringResource(R.string.category_options_delete)
+                },
+                onClick = onDelete,
+                destructive = true
+            )
         },
-        confirmButton = {},
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                androidx.compose.material3.Text(stringResource(R.string.settings_cancel))
-            }
+        footer = {
+            PremiumDialogFooterButton(
+                label = stringResource(R.string.settings_cancel),
+                onClick = onDismiss
+            )
         }
     )
 }
@@ -1007,26 +985,23 @@ private fun MergeSavedGroupDialog(
     onDismiss: () -> Unit,
     onTargetSelected: (Long) -> Unit
 ) {
-    androidx.compose.material3.AlertDialog(
+    PremiumDialog(
+        title = stringResource(R.string.saved_group_merge_title, source.group.name),
+        subtitle = stringResource(R.string.saved_group_manage_subtitle),
         onDismissRequest = onDismiss,
-        title = { androidx.compose.material3.Text(stringResource(R.string.saved_group_merge_title, source.group.name)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                targets.forEach { target ->
-                    androidx.tv.material3.Button(
-                        onClick = { onTargetSelected(target.group.id) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(text = target.group.name)
-                    }
-                }
+        content = {
+            targets.forEach { target ->
+                PremiumDialogActionButton(
+                    label = target.group.name,
+                    onClick = { onTargetSelected(target.group.id) }
+                )
             }
         },
-        confirmButton = {},
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                androidx.compose.material3.Text(stringResource(R.string.settings_cancel))
-            }
+        footer = {
+            PremiumDialogFooterButton(
+                label = stringResource(R.string.settings_cancel),
+                onClick = onDismiss
+            )
         }
     )
 }

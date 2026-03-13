@@ -484,7 +484,15 @@ fun AppNavigation() {
                 },
                 onSeriesClick = { series ->
                      navController.navigate(Routes.seriesDetail(series.id))
-                }
+                },
+                onNavigate = { route ->
+                    navController.navigate(route) {
+                        popUpTo(Routes.HOME) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                currentRoute = Routes.SEARCH
             )
         }
 

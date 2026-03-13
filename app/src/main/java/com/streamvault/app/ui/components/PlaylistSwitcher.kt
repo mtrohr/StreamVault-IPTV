@@ -1,17 +1,34 @@
 package com.streamvault.app.ui.components
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.unit.dp
-import androidx.tv.material3.*
-import com.streamvault.app.ui.theme.*
-import com.streamvault.domain.model.Provider
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.SurfaceDefaults
+import androidx.tv.material3.Text
 import com.streamvault.app.R
+import com.streamvault.app.ui.theme.OnBackground
+import com.streamvault.app.ui.theme.OnSurfaceDim
+import com.streamvault.app.ui.theme.Primary
+import com.streamvault.app.ui.theme.SurfaceElevated
+import com.streamvault.domain.model.Provider
 
 @Composable
 fun PlaylistSwitcher(
@@ -24,7 +41,6 @@ fun PlaylistSwitcher(
     var isFocused by remember { mutableStateOf(false) }
 
     Box(modifier = modifier) {
-        // Current provider button
         Surface(
             onClick = { showProviderList = !showProviderList },
             modifier = Modifier.onFocusChanged { isFocused = it.isFocused },
@@ -40,8 +56,9 @@ fun PlaylistSwitcher(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "📺",
-                    style = MaterialTheme.typography.bodyMedium
+                    text = "PROVIDER",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isFocused) Primary else OnSurfaceDim
                 )
                 Text(
                     text = currentProvider?.name ?: stringResource(R.string.playlist_no_provider),
@@ -49,23 +66,20 @@ fun PlaylistSwitcher(
                     color = if (isFocused) Primary else OnBackground
                 )
                 Text(
-                    text = if (showProviderList) "▲" else "▼",
+                    text = if (showProviderList) "^" else "v",
                     style = MaterialTheme.typography.bodySmall,
                     color = OnSurfaceDim
                 )
             }
         }
 
-        // Provider list dropdown
         if (showProviderList && allProviders.isNotEmpty()) {
             Surface(
                 modifier = Modifier
                     .padding(top = 48.dp)
                     .width(250.dp),
                 shape = RoundedCornerShape(8.dp),
-                colors = SurfaceDefaults.colors(
-                    containerColor = SurfaceElevated
-                )
+                colors = SurfaceDefaults.colors(containerColor = SurfaceElevated)
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {
                     allProviders.forEach { provider ->
@@ -115,8 +129,8 @@ private fun ProviderItem(
             )
             if (isSelected) {
                 Text(
-                    text = "✓",
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = "Selected",
+                    style = MaterialTheme.typography.labelSmall,
                     color = Primary
                 )
             }

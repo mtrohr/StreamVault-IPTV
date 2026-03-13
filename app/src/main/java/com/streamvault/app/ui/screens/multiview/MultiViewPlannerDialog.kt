@@ -1,38 +1,50 @@
 package com.streamvault.app.ui.screens.multiview
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.tv.material3.Border
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
+import com.streamvault.app.R
+import com.streamvault.app.ui.components.dialogs.PremiumDialog
+import com.streamvault.app.ui.components.dialogs.PremiumDialogFooterButton
+import com.streamvault.app.ui.components.shell.AppMessageState
+import com.streamvault.app.ui.components.shell.StatusPill
+import com.streamvault.app.ui.design.AppColors
+import com.streamvault.app.ui.design.FocusSpec
 import com.streamvault.domain.model.Channel
+import kotlinx.coroutines.delay
 
-/**
- * Split Screen Manager dialog — two modes:
- *
- *  • Picker mode  [pendingChannel] != null — user chose "Add to Split Screen" from long-press.
- *    Shows the 2×2 grid; tapping a slot places the channel and STAYS OPEN so they can
- *    hit "Start Split Screen" right away.
- *
- *  • Manager mode [pendingChannel] == null — opened from the sidebar button or player overlay.
- *    Shows all 4 slots with individual remove buttons + Launch button.
- */
 @Composable
 fun MultiViewPlannerDialog(
     pendingChannel: Channel? = null,
@@ -43,196 +55,118 @@ fun MultiViewPlannerDialog(
     val slots by viewModel.slotsFlow.collectAsState()
     val isPickerMode = pendingChannel != null
     val hasAny = slots.any { it != null }
-
-    // Track whether channel was just placed (picker mode only)
     var channelPlaced by remember { mutableStateOf(false) }
-    val firstSlotFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    val firstSlotFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
-        // Ensure focus starts on a slot, not a button below
-        try {
-            kotlinx.coroutines.delay(150)
-            firstSlotFocusRequester.requestFocus()
-        } catch (e: Exception) {}
+        delay(150)
+        runCatching { firstSlotFocusRequester.requestFocus() }
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF12121F))
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+    val subtitle = when {
+        isPickerMode && !channelPlaced && pendingChannel != null ->
+            stringResource(R.string.multiview_planner_pick_slot, pendingChannel.name)
+        channelPlaced && pendingChannel != null ->
+            stringResource(R.string.multiview_planner_added, pendingChannel.name)
+        hasAny ->
+            stringResource(R.string.multiview_planner_ready_subtitle)
+        else ->
+            stringResource(R.string.multiview_planner_empty)
+    }
 
-                // ── Header ─────────────────────────────────────────
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "🔳  Split Screen",
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    if (!isPickerMode || channelPlaced) {
-                        TextButton(onClick = {
-                            viewModel.clearAll()
-                            onDismiss()
-                        }) {
-                            Text("Clear All", color = Color(0xFFFF5252), fontSize = 13.sp)
-                        }
-                    }
-                }
+    PremiumDialog(
+        title = stringResource(R.string.multiview_planner_title),
+        subtitle = subtitle,
+        onDismissRequest = onDismiss,
+        widthFraction = 0.58f,
+        content = {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                StatusPill(
+                    label = stringResource(R.string.multiview_policy_balanced),
+                    containerColor = AppColors.BrandMuted
+                )
+                StatusPill(
+                    label = stringResource(R.string.multiview_policy_summary, stringResource(R.string.multiview_policy_auto), slots.count { it != null }),
+                    containerColor = AppColors.SurfaceEmphasis
+                )
+            }
 
-                // Subtitle
-                if (isPickerMode && !channelPlaced) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Pick a slot for: ${pendingChannel!!.name}",
-                        color = Color(0xFF90CAF9),
-                        fontSize = 13.sp
-                    )
-                } else if (channelPlaced) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "✓ ${pendingChannel?.name} added",
-                        color = Color(0xFF81C784),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // ── 2×2 Slot Grid ──────────────────────────────────
-                val stillPicking = isPickerMode && !channelPlaced
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    for (row in 0 until 2) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            for (col in 0 until 2) {
-                                val slotIndex = row * 2 + col
-                                val occupant = slots.getOrNull(slotIndex)
-                                SlotCell(
-                                    slotIndex = slotIndex,
-                                    occupant = occupant,
-                                    isPickerMode = stillPicking,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .then(if (slotIndex == 0) Modifier.focusRequester(firstSlotFocusRequester) else Modifier),
-                                    onSlotClick = {
-                                        if (stillPicking) {
-                                            viewModel.assignChannelToSlot(slotIndex, pendingChannel!!)
-                                            channelPlaced = true   // stay open
-                                        }
-                                    },
-                                    onClearSlot = { viewModel.clearSlot(slotIndex) }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // ── Bottom actions ──────────────────────────────────
-                val showLaunch = !isPickerMode || channelPlaced
-                if (showLaunch) {
-                    androidx.tv.material3.Button(
-                        onClick = onLaunch,
-                        enabled = hasAny,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = androidx.tv.material3.ButtonDefaults.colors(
-                            containerColor = Color(0xFF1B5E20),
-                            focusedContainerColor = Color(0xFF2E7D32),
-                            disabledContainerColor = Color(0xFF1A2E1A)
-                        ),
-                        border = androidx.tv.material3.ButtonDefaults.border(
-                            focusedBorder = androidx.tv.material3.Border(
-                                border = androidx.compose.foundation.BorderStroke(3.dp, Color.White)
-                            )
-                        ),
-                        scale = androidx.tv.material3.ButtonDefaults.scale(focusedScale = 1.05f)
-                    ) {
-                        Text(
-                            text = if (hasAny) "▶  Start Split Screen" else "Add channels to slots first",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                for (row in 0 until 2) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        if (!isPickerMode || channelPlaced) {
-                            androidx.tv.material3.Button(
-                                onClick = {
-                                    viewModel.clearAll()
-                                    onDismiss()
+                        for (col in 0 until 2) {
+                            val slotIndex = row * 2 + col
+                            val occupant = slots.getOrNull(slotIndex)
+                            MultiViewSlotCard(
+                                slotIndex = slotIndex,
+                                occupant = occupant,
+                                isPickerMode = isPickerMode && !channelPlaced,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .then(
+                                        if (slotIndex == 0) Modifier.focusRequester(firstSlotFocusRequester)
+                                        else Modifier
+                                    ),
+                                onSlotClick = {
+                                    if (pendingChannel != null && isPickerMode && !channelPlaced) {
+                                        viewModel.assignChannelToSlot(slotIndex, pendingChannel)
+                                        channelPlaced = true
+                                    }
                                 },
-                                colors = androidx.tv.material3.ButtonDefaults.colors(
-                                    containerColor = Color.Transparent,
-                                    focusedContainerColor = Color(0xFFB71C1C)
-                                ),
-                                border = androidx.tv.material3.ButtonDefaults.border(
-                                    focusedBorder = androidx.tv.material3.Border(
-                                        border = androidx.compose.foundation.BorderStroke(2.dp, Color.White)
-                                    )
-                                )
-                            ) {
-                                Text("Clear All", color = Color.White, fontSize = 13.sp)
-                            }
-                        } else {
-                            Spacer(Modifier.width(1.dp))
-                        }
-
-                        androidx.tv.material3.Button(
-                            onClick = onDismiss,
-                            colors = androidx.tv.material3.ButtonDefaults.colors(
-                                containerColor = Color.Transparent,
-                                focusedContainerColor = Color(0xFF455A64)
-                            ),
-                            border = androidx.tv.material3.ButtonDefaults.border(
-                                focusedBorder = androidx.tv.material3.Border(
-                                    border = androidx.compose.foundation.BorderStroke(2.dp, Color.White)
-                                )
+                                onClearSlot = { viewModel.clearSlot(slotIndex) }
                             )
-                        ) {
-                            Text("Close", color = Color.White)
-                        }
-                    }
-                } else {
-                    // Still picking — just a cancel
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        androidx.tv.material3.Button(
-                            onClick = onDismiss,
-                            colors = androidx.tv.material3.ButtonDefaults.colors(
-                                containerColor = Color.Transparent,
-                                focusedContainerColor = Color(0x22FFFFFF)
-                            )
-                        ) {
-                            Text("Cancel", color = Color(0xFFCCCCCC))
                         }
                     }
                 }
             }
+
+            if (!hasAny && !isPickerMode) {
+                AppMessageState(
+                    title = stringResource(R.string.multiview_empty_slot),
+                    subtitle = stringResource(R.string.multiview_planner_empty)
+                )
+            }
+        },
+        footer = {
+            if (!isPickerMode || channelPlaced) {
+                PremiumDialogFooterButton(
+                    label = stringResource(R.string.multiview_planner_clear),
+                    onClick = {
+                        viewModel.clearAll()
+                        onDismiss()
+                    },
+                    destructive = true
+                )
+            }
+            PremiumDialogFooterButton(
+                label = if (isPickerMode && !channelPlaced) {
+                    stringResource(R.string.settings_cancel)
+                } else {
+                    stringResource(R.string.category_options_cancel)
+                },
+                onClick = onDismiss
+            )
+            if (!isPickerMode || channelPlaced) {
+                PremiumDialogFooterButton(
+                    label = if (hasAny) {
+                        stringResource(R.string.multiview_planner_launch)
+                    } else {
+                        stringResource(R.string.multiview_planner_launch_disabled)
+                    },
+                    onClick = onLaunch,
+                    enabled = hasAny,
+                    emphasized = true
+                )
+            }
         }
-    }
+    )
 }
 
 @Composable
-private fun SlotCell(
+private fun MultiViewSlotCard(
     slotIndex: Int,
     occupant: Channel?,
     isPickerMode: Boolean,
@@ -241,94 +175,110 @@ private fun SlotCell(
     onClearSlot: () -> Unit
 ) {
     val isEmpty = occupant == null
-    
-    val baseBorderColor = when {
-        isPickerMode && !isEmpty -> Color(0xFFFF9800)
-        isPickerMode && isEmpty  -> Color(0xFF4CAF50)
-        !isEmpty                 -> Color(0xFF2D4A6E)
-        else                     -> Color(0xFF333355)
+    val accent = when {
+        isPickerMode && !isEmpty -> AppColors.Warning
+        isPickerMode -> AppColors.Success
+        isEmpty -> AppColors.TextTertiary
+        else -> AppColors.Brand
     }
 
-    androidx.tv.material3.Surface(
+    Surface(
         onClick = { if (isPickerMode) onSlotClick() else onClearSlot() },
-        modifier = modifier
-            .aspectRatio(16f / 9f),
-        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
-        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-            containerColor = if (isEmpty) Color(0xFF1A1A30) else Color(0xFF1E2A3A),
-            focusedContainerColor = if (isEmpty) Color(0xFF3B3B60) else Color(0xFF3E5A7A),
-            pressedContainerColor = Color(0xFF4CAF50)
+        modifier = modifier.aspectRatio(16f / 9f),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(18.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = AppColors.SurfaceElevated,
+            focusedContainerColor = AppColors.SurfaceEmphasis,
+            pressedContainerColor = AppColors.SurfaceEmphasis
         ),
-        border = androidx.tv.material3.ClickableSurfaceDefaults.border(
-            border = androidx.tv.material3.Border(
-                border = androidx.compose.foundation.BorderStroke(1.dp, baseBorderColor.copy(alpha = 0.5f))
-            ),
-            focusedBorder = androidx.tv.material3.Border(
-                border = androidx.compose.foundation.BorderStroke(4.dp, Color.White)
-            )
+        border = ClickableSurfaceDefaults.border(
+            border = Border(border = BorderStroke(1.dp, accent.copy(alpha = 0.35f))),
+            focusedBorder = Border(border = BorderStroke(FocusSpec.BorderWidth, AppColors.Focus))
         ),
-        scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1.05f)
+        scale = ClickableSurfaceDefaults.scale(focusedScale = FocusSpec.FocusedScale)
     ) {
         Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            AppColors.SurfaceElevated,
+                            AppColors.Surface
+                        )
+                    )
+                )
+                .padding(16.dp)
         ) {
             if (isEmpty) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "＋",
-                        color = if (isPickerMode) Color(0xFF4CAF50) else Color(0xFF555577),
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    StatusPill(
+                        label = stringResource(R.string.multiview_empty_slot),
+                        containerColor = AppColors.SurfaceEmphasis
                     )
                     Text(
-                        text = if (isPickerMode) "Add here" else "Empty",
-                        color = if (isPickerMode) Color(0xFF81C784) else Color(0xFF555577),
-                        fontSize = 12.sp
+                        text = if (isPickerMode) {
+                            stringResource(R.string.multiview_add_to_split)
+                        } else {
+                            stringResource(R.string.multiview_empty_slot)
+                        },
+                        style = MaterialTheme.typography.titleSmall,
+                        color = AppColors.TextPrimary
+                    )
+                    Text(
+                        text = if (isPickerMode) {
+                            stringResource(R.string.multiview_planner_slot_hint)
+                        } else {
+                            stringResource(R.string.multiview_replace_empty)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppColors.TextSecondary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             } else {
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(10.dp),
+                    modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = occupant!!.name,
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Slot ${slotIndex + 1}",
-                            color = Color(0xFFAAAAAA),
-                            fontSize = 11.sp
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StatusPill(
+                            label = stringResource(R.string.multiview_slot_label, slotIndex + 1),
+                            containerColor = AppColors.BrandMuted
                         )
-                        if (isPickerMode) {
+                        Text(
+                            text = occupant.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = AppColors.TextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        occupant.categoryName?.takeIf { it.isNotBlank() }?.let { categoryName ->
                             Text(
-                                text = "Replace",
-                                color = Color(0xFFFF9800),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                        } else {
-                            Text(
-                                text = "✕ Clear",
-                                color = Color(0xFFFF5252),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
+                                text = categoryName,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppColors.TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
+                    Text(
+                        text = if (isPickerMode) {
+                            stringResource(R.string.multiview_replace_slot)
+                        } else {
+                            stringResource(R.string.multiview_remove_slot)
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = accent,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }

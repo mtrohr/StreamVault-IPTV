@@ -1,0 +1,375 @@
+package com.streamvault.app.ui.components.shell
+
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Border
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
+import coil3.compose.AsyncImage
+import com.streamvault.app.ui.design.AppColors
+import com.streamvault.app.ui.design.AppMotion
+import com.streamvault.app.ui.design.FocusSpec
+import com.streamvault.domain.model.Channel
+import com.streamvault.domain.model.Episode
+import com.streamvault.domain.model.Movie
+import com.streamvault.domain.model.Series
+
+@Composable
+fun LiveChannelRowCard(
+    channel: Channel,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(AppColors.SurfaceElevated)
+            .fillMaxWidth()
+            .height(92.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(64.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(AppColors.SurfaceEmphasis),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!channel.logoUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = channel.logoUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(10.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Text(
+                        text = channel.name.take(2).uppercase(),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = AppColors.TextSecondary
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    StatusPill(label = "LIVE", containerColor = AppColors.Live)
+                    if (channel.isFavorite) {
+                        StatusPill(label = "SAVED", containerColor = AppColors.Warning, contentColor = Color.Black)
+                    }
+                    if (channel.catchUpSupported) {
+                        StatusPill(label = "CATCH UP", containerColor = AppColors.Brand)
+                    }
+                }
+                Text(
+                    text = buildString {
+                        val numberLabel = channel.number.takeIf { it > 0 }?.toString()?.padStart(2, '0') ?: "--"
+                        append(numberLabel)
+                        append("  ")
+                        append(channel.name)
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    color = AppColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                val program = channel.currentProgram
+                if (program != null) {
+                    Text(
+                        text = program.title,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppColors.TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    val totalDuration = (program.endTime - program.startTime).coerceAtLeast(1L)
+                    val elapsed = (System.currentTimeMillis() - program.startTime).coerceAtLeast(0L)
+                    LinearProgressIndicator(
+                        progress = { (elapsed.toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(2.dp)
+                            .clip(RoundedCornerShape(999.dp)),
+                        color = AppColors.Info,
+                        trackColor = AppColors.SurfaceEmphasis
+                    )
+                } else {
+                    Text(
+                        text = "No schedule information",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppColors.TextTertiary
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LiveChannelRowSurface(
+    channel: Channel,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+    isLocked: Boolean = false,
+    isReorderMode: Boolean = false,
+    isDragging: Boolean = false
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isDragging) FocusSpec.FocusedScale else 1f,
+        animationSpec = AppMotion.FocusSpec,
+        label = "liveRowScale"
+    )
+
+    Surface(
+        onClick = onClick,
+        onLongClick = onLongClick,
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .onFocusChanged { isFocused = it.isFocused },
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = AppColors.SurfaceElevated,
+            focusedContainerColor = AppColors.SurfaceEmphasis
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(
+                    width = if (isDragging) 4.dp else FocusSpec.BorderWidth,
+                    color = if (isDragging) AppColors.Warning else AppColors.Focus
+                ),
+                shape = RoundedCornerShape(16.dp)
+            )
+        )
+    ) {
+        Box {
+            LiveChannelRowCard(channel = channel, modifier = Modifier.fillMaxWidth())
+            if (isLocked) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(AppColors.HeroBottom.copy(alpha = 0.82f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    StatusPill(
+                        label = "LOCKED",
+                        containerColor = AppColors.SurfaceEmphasis,
+                        contentColor = AppColors.TextPrimary
+                    )
+                }
+            }
+            if (isReorderMode && isDragging) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(12.dp)
+                ) {
+                    StatusPill(
+                        label = "MOVING",
+                        containerColor = AppColors.Warning,
+                        contentColor = Color.Black
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MoviePosterCard(movie: Movie, modifier: Modifier = Modifier) {
+    PosterCard(
+        imageUrl = movie.posterUrl,
+        title = movie.name,
+        subtitle = movie.year,
+        modifier = modifier
+    )
+}
+
+@Composable
+fun SeriesPosterCard(series: Series, modifier: Modifier = Modifier) {
+    PosterCard(
+        imageUrl = series.posterUrl,
+        title = series.name,
+        subtitle = series.releaseDate ?: series.genre,
+        modifier = modifier
+    )
+}
+
+@Composable
+fun EpisodeRowCard(episode: Episode, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(AppColors.SurfaceElevated)
+            .padding(16.dp)
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .width(164.dp)
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(AppColors.SurfaceEmphasis),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!episode.coverUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = episode.coverUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Text(
+                        text = "E${episode.episodeNumber}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = AppColors.TextSecondary
+                    )
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = episode.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = AppColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                ContentMetadataStrip(
+                    values = listOf("Episode ${episode.episodeNumber}", episode.duration ?: "")
+                )
+                episode.plot?.takeIf { it.isNotBlank() }?.let { plot ->
+                    Text(
+                        text = plot,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppColors.TextSecondary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PosterCard(
+    imageUrl: String?,
+    title: String,
+    subtitle: String?,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(AppColors.SurfaceElevated)
+    ) {
+        if (!imageUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = title,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(AppColors.SurfaceEmphasis),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = title.take(1).uppercase(),
+                    style = MaterialTheme.typography.displaySmall,
+                    color = AppColors.TextSecondary
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.52f)
+                .align(Alignment.BottomCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, AppColors.HeroBottom)
+                    )
+                )
+        )
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = AppColors.TextPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            subtitle?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AppColors.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}

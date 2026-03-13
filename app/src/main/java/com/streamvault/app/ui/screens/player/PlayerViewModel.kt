@@ -289,10 +289,6 @@ class PlayerViewModel @Inject constructor(
         _showEpgOverlay.value = false
         _showControls.value = false
         channelInfoHideJob?.cancel()
-        channelInfoHideJob = viewModelScope.launch {
-            delay(3000)
-            _showChannelInfoOverlay.value = false
-        }
     }
 
     fun closeChannelInfoOverlay() {
@@ -722,8 +718,11 @@ class PlayerViewModel @Inject constructor(
             }
             
             flows.collect { channels ->
-                channelList = channels
-                _currentChannelList.value = channels
+                val numberedChannels = channels.mapIndexed { index, channel ->
+                    channel.copy(number = index + 1)
+                }
+                channelList = numberedChannels
+                _currentChannelList.value = numberedChannels
                 // Recalculate index based on initial ID or URL
                 if (initialChannelId != -1L) {
                     currentChannelIndex = channelList.indexOfFirst { it.id == initialChannelId }
@@ -736,7 +735,7 @@ class PlayerViewModel @Inject constructor(
                     _currentChannel.value = channelList[currentChannelIndex]
                     refreshCurrentChannelRecording()
                     val ch = channelList[currentChannelIndex]
-                    _displayChannelNumber.value = if (ch.number > 0) ch.number else currentChannelIndex + 1
+                    _displayChannelNumber.value = resolveChannelNumber(ch, currentChannelIndex)
                 }
             }
         }
@@ -937,7 +936,7 @@ class PlayerViewModel @Inject constructor(
         updateStreamClass("Primary")
         _currentChannel.value = channel
         refreshCurrentChannelRecording()
-        _displayChannelNumber.value = if (channel.number > 0) channel.number else index + 1
+        _displayChannelNumber.value = resolveChannelNumber(channel, index)
         _recentChannels.update { channels -> channels.filterNot { it.id == channel.id } }
         
         // Prepare player
@@ -1178,7 +1177,7 @@ class PlayerViewModel @Inject constructor(
     private fun resolveChannelNumber(
         channel: com.streamvault.domain.model.Channel,
         index: Int
-    ): Int = if (channel.number > 0) channel.number else index + 1
+    ): Int = index + 1
 
     fun play() = playerEngine.play()
     fun pause() = playerEngine.pause()

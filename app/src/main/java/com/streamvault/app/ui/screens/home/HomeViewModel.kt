@@ -8,6 +8,7 @@ import com.streamvault.domain.model.Category
 import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.ContentType
 import com.streamvault.domain.model.PlaybackHistory
+import com.streamvault.domain.model.Program
 import com.streamvault.domain.model.Provider
 import com.streamvault.domain.model.VirtualCategoryIds
 import com.streamvault.domain.repository.CategoryRepository
@@ -20,6 +21,7 @@ import com.streamvault.domain.usecase.GetCustomCategories
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.streamvault.app.R
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -27,7 +29,7 @@ import javax.inject.Inject
 import android.app.Application
 
 @HiltViewModel
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class HomeViewModel @Inject constructor(
     application: Application,
     private val providerRepository: ProviderRepository,
@@ -47,6 +49,8 @@ class HomeViewModel @Inject constructor(
 
     private val _localChannels = MutableStateFlow<List<Channel>>(emptyList())
     private val _preferredInitialCategoryId = MutableStateFlow<Long?>(null)
+    private val _visibleChannelWindow = MutableStateFlow<Set<Long>>(emptySet())
+    private val _epgProgramMap = MutableStateFlow<Map<String, Program>>(emptyMap())
     private var epgJob: Job? = null
     private var loadChannelsJob: Job? = null
     private var categoriesJob: Job? = null
@@ -80,12 +84,43 @@ class HomeViewModel @Inject constructor(
                 else channels.filter { it.name.contains(query, ignoreCase = true) }
 
                 val markedChannels = filtered.map { channel ->
-                    if (favoriteIds.contains(channel.id)) channel.copy(isFavorite = true)
-                    else channel.copy(isFavorite = false)
+                    val program = channel.epgChannelId?.let { epgId -> _epgProgramMap.value[epgId] }
+                    if (favoriteIds.contains(channel.id)) {
+                        channel.copy(isFavorite = true, currentProgram = program)
+                    } else {
+                        channel.copy(isFavorite = false, currentProgram = program)
+                    }
                 }
 
                 _uiState.update { it.copy(filteredChannels = markedChannels, isLoading = false) }
-                fetchEpgForChannels(markedChannels)
+            }
+        }
+
+        viewModelScope.launch {
+            combine(
+                _uiState.map { it.provider?.id }.distinctUntilChanged(),
+                _uiState.map { it.filteredChannels }.distinctUntilChanged(),
+                _visibleChannelWindow.debounce(120)
+            ) { providerId, channels, visibleIds ->
+                Triple(providerId, channels, visibleIds)
+            }.collectLatest { (providerId, channels, visibleIds) ->
+                val resolvedProviderId = providerId ?: return@collectLatest
+                if (channels.isEmpty()) {
+                    epgJob?.cancel()
+                    _epgProgramMap.value = emptyMap()
+                    return@collectLatest
+                }
+
+                val candidateIds = if (visibleIds.isEmpty()) {
+                    channels.take(12).map { it.id }.toSet()
+                } else {
+                    visibleIds
+                }
+
+                fetchEpgForChannels(
+                    providerId = resolvedProviderId,
+                    channels = channels.filter { it.id in candidateIds }
+                )
             }
         }
 
@@ -247,8 +282,11 @@ class HomeViewModel @Inject constructor(
             }
 
             channelsFlow.collect { channels ->
-                _uiState.update { it.copy(hasChannels = channels.isNotEmpty(), isLoading = false) } // Force isLoading = false here
-                _localChannels.value = channels
+                val numberedChannels = channels.mapIndexed { index, channel ->
+                    channel.copy(number = index + 1)
+                }
+                _uiState.update { it.copy(hasChannels = numberedChannels.isNotEmpty(), isLoading = false) }
+                _localChannels.value = numberedChannels
             }
         }
     }
@@ -261,25 +299,54 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(channelSearchQuery = query) }
     }
 
-    private fun fetchEpgForChannels(channels: List<Channel>) {
+    private fun fetchEpgForChannels(providerId: Long, channels: List<Channel>) {
         epgJob?.cancel()
-        val providerId = _uiState.value.provider?.id ?: return
         val epgIds = channels.mapNotNull { it.epgChannelId }.distinct()
 
         epgJob = viewModelScope.launch {
-            val programMap = if (epgIds.isNotEmpty()) {
-                epgRepository.getNowPlayingForChannels(providerId, epgIds).firstOrNull() ?: emptyMap()
+            val freshProgramMap = if (epgIds.isNotEmpty()) {
+                epgRepository.getNowPlayingForChannels(providerId, epgIds)
+                    .firstOrNull()
+                    ?.mapValues { (_, programs) -> programs.firstOrNull() }
+                    ?.mapNotNull { (epgId, program) -> program?.let { epgId to it } }
+                    ?.toMap()
+                    ?: emptyMap()
             } else {
                 emptyMap()
             }
 
-            val enrichedChannels = channels.map { channel ->
-                val programList = channel.epgChannelId?.let { programMap[it] }
-                val program = programList?.firstOrNull()
-                if (program != null) channel.copy(currentProgram = program) else channel
+            val channelEpgIds = channels.mapNotNull { it.epgChannelId }.toSet()
+            _epgProgramMap.update { existing ->
+                buildMap {
+                    putAll(existing)
+                    channelEpgIds.forEach { epgId ->
+                        if (freshProgramMap.containsKey(epgId)) {
+                            put(epgId, freshProgramMap.getValue(epgId))
+                        } else {
+                            remove(epgId)
+                        }
+                    }
+                }
             }
 
-            _uiState.update { it.copy(filteredChannels = enrichedChannels) }
+            _uiState.update { state ->
+                state.copy(
+                    filteredChannels = state.filteredChannels.map { channel ->
+                        val program = channel.epgChannelId?.let { epgId -> _epgProgramMap.value[epgId] }
+                        channel.copy(currentProgram = program)
+                    }
+                )
+            }
+        }
+    }
+
+    fun updateVisibleChannelWindow(channelIds: List<Long>, focusedChannelId: Long? = null) {
+        val combinedIds = buildSet {
+            addAll(channelIds)
+            focusedChannelId?.let(::add)
+        }
+        if (_visibleChannelWindow.value != combinedIds) {
+            _visibleChannelWindow.value = combinedIds
         }
     }
 

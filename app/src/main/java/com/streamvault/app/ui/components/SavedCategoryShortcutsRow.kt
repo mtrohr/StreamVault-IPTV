@@ -50,7 +50,7 @@ fun SavedCategoryShortcutsRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 48.dp, end = 48.dp, top = 16.dp, bottom = 8.dp),
+                .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -81,7 +81,7 @@ fun SavedCategoryShortcutsRow(
                 onClick = { },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 48.dp),
+                    .padding(horizontal = 20.dp),
                 shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(14.dp)),
                 colors = ClickableSurfaceDefaults.colors(
                     containerColor = SurfaceElevated
@@ -89,23 +89,25 @@ fun SavedCategoryShortcutsRow(
             ) {
                 Text(
                     text = emptyHint,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = OnSurfaceDim,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp)
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
                 )
             }
             return
         }
 
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 48.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (primaryShortcutLabel != null && onPrimaryShortcutClick != null) {
                 item(key = "primary_shortcut") {
                     Surface(
                         onClick = onPrimaryShortcutClick,
-                        modifier = Modifier.width(220.dp),
+                        modifier = Modifier.width(192.dp),
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(14.dp)),
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = if (isPrimaryShortcutSelected) {
@@ -117,7 +119,7 @@ fun SavedCategoryShortcutsRow(
                         )
                     ) {
                         Column(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
@@ -144,7 +146,7 @@ fun SavedCategoryShortcutsRow(
                     onLongClick = onShortcutLongClick?.let { handler ->
                         { handler(shortcut.name) }
                     },
-                    modifier = Modifier.width(220.dp),
+                    modifier = Modifier.width(192.dp),
                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(14.dp)),
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = if (isSelected) Primary.copy(alpha = 0.18f) else SurfaceElevated,
@@ -152,7 +154,7 @@ fun SavedCategoryShortcutsRow(
                     )
                 ) {
                     Column(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(

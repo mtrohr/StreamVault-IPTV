@@ -1,10 +1,11 @@
 package com.streamvault.app.ui.components.dialogs
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -12,9 +13,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.SurfaceDefaults
+import androidx.tv.material3.Text
 import com.streamvault.app.R
+import com.streamvault.app.ui.theme.OnSurface
+import com.streamvault.app.ui.theme.OnSurfaceDim
+import com.streamvault.app.ui.theme.Primary
+import com.streamvault.app.ui.theme.SurfaceElevated
 import com.streamvault.domain.model.Category
 import kotlinx.coroutines.delay
 
@@ -34,85 +49,114 @@ fun CategoryOptionsDialog(
         canInteract = true
     }
 
-    val safeDismiss = {
-        if (canInteract) onDismissRequest()
-    }
+    val safeDismiss = { if (canInteract) onDismissRequest() }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = safeDismiss,
-        title = {
-            androidx.tv.material3.Text(
-                text = category.name,
-                style = androidx.tv.material3.MaterialTheme.typography.titleLarge
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.38f),
+            shape = RoundedCornerShape(24.dp),
+            colors = SurfaceDefaults.colors(containerColor = SurfaceElevated)
+        ) {
+            Column(
+                modifier = Modifier
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Primary.copy(alpha = 0.08f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+                    .padding(28.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = category.name,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = OnSurface
+                )
+                Text(
+                    text = stringResource(R.string.library_saved_manage_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OnSurfaceDim
+                )
+
                 if (onSetAsDefault != null) {
-                    androidx.tv.material3.Button(
-                        onClick = { if (canInteract) onSetAsDefault() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        androidx.tv.material3.Text(stringResource(R.string.category_options_set_default))
-                    }
+                    PremiumDialogAction(
+                        label = stringResource(R.string.category_options_set_default),
+                        onClick = { if (canInteract) onSetAsDefault() }
+                    )
                 }
 
                 if (onRename != null) {
-                    androidx.tv.material3.Button(
-                        onClick = { if (canInteract) onRename() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        androidx.tv.material3.Text(stringResource(R.string.category_options_rename))
-                    }
+                    PremiumDialogAction(
+                        label = stringResource(R.string.category_options_rename),
+                        onClick = { if (canInteract) onRename() }
+                    )
                 }
 
                 if (onReorderChannels != null) {
-                    androidx.tv.material3.Button(
+                    PremiumDialogAction(
+                        label = stringResource(R.string.category_options_reorder),
                         onClick = {
                             if (canInteract) {
                                 onReorderChannels()
                                 onDismissRequest()
                             }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        androidx.tv.material3.Text(stringResource(R.string.category_options_reorder))
-                    }
+                        }
+                    )
                 }
 
                 if (onToggleLock != null) {
-                    val lockText = if (category.isUserProtected) {
-                        stringResource(R.string.category_options_unlock)
-                    } else {
-                        stringResource(R.string.category_options_lock)
-                    }
-                    androidx.tv.material3.Button(
-                        onClick = { if (canInteract) onToggleLock() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        androidx.tv.material3.Text(lockText)
-                    }
+                    PremiumDialogAction(
+                        label = if (category.isUserProtected) {
+                            stringResource(R.string.category_options_unlock)
+                        } else {
+                            stringResource(R.string.category_options_lock)
+                        },
+                        onClick = { if (canInteract) onToggleLock() }
+                    )
                 }
 
                 if (onDelete != null) {
-                    androidx.tv.material3.Button(
+                    PremiumDialogAction(
+                        label = stringResource(R.string.category_options_delete),
                         onClick = { if (canInteract) onDelete() },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = androidx.tv.material3.ButtonDefaults.colors(
-                            containerColor = androidx.tv.material3.MaterialTheme.colorScheme.errorContainer,
-                            contentColor = androidx.tv.material3.MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    ) {
-                        androidx.tv.material3.Text(stringResource(R.string.category_options_delete))
-                    }
+                        destructive = true
+                    )
+                }
+
+                Button(
+                    onClick = safeDismiss,
+                    colors = ButtonDefaults.colors(
+                        containerColor = Color.White.copy(alpha = 0.08f),
+                        contentColor = OnSurface
+                    )
+                ) {
+                    Text(stringResource(R.string.category_options_cancel))
                 }
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = safeDismiss) {
-                androidx.tv.material3.Text(stringResource(R.string.category_options_cancel))
-            }
         }
-    )
+    }
+}
+
+@Composable
+private fun PremiumDialogAction(
+    label: String,
+    onClick: () -> Unit,
+    destructive: Boolean = false
+) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = ButtonDefaults.colors(
+            containerColor = if (destructive) MaterialTheme.colorScheme.errorContainer else Color.White.copy(alpha = 0.08f),
+            contentColor = if (destructive) MaterialTheme.colorScheme.onErrorContainer else OnSurface
+        )
+    ) {
+        Text(label)
+    }
 }

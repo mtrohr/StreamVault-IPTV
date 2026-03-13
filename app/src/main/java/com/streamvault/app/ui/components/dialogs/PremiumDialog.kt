@@ -1,0 +1,170 @@
+package com.streamvault.app.ui.components.dialogs
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.SurfaceDefaults
+import androidx.tv.material3.Text
+import com.streamvault.app.ui.design.AppColors
+import com.streamvault.app.ui.design.FocusSpec
+
+@Composable
+fun PremiumDialog(
+    title: String,
+    subtitle: String? = null,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    widthFraction: Float = 0.42f,
+    content: @Composable ColumnScope.() -> Unit,
+    footer: @Composable RowScope.() -> Unit = {}
+) {
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = modifier.fillMaxWidth(widthFraction),
+            shape = RoundedCornerShape(28.dp),
+            colors = SurfaceDefaults.colors(containerColor = AppColors.SurfaceElevated)
+        ) {
+            Column(
+                modifier = Modifier
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                AppColors.BrandMuted.copy(alpha = 0.18f),
+                                AppColors.SurfaceElevated,
+                                AppColors.Surface
+                            )
+                        )
+                    )
+                    .padding(28.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = AppColors.TextPrimary
+                    )
+                    if (!subtitle.isNullOrBlank()) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AppColors.TextSecondary
+                        )
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp, androidx.compose.ui.Alignment.End),
+                    content = footer
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PremiumDialogActionButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    destructive: Boolean = false,
+    emphasized: Boolean = false
+) {
+    val containerColor = when {
+        destructive -> AppColors.Live.copy(alpha = 0.22f)
+        emphasized -> AppColors.Brand
+        else -> Color.White.copy(alpha = 0.08f)
+    }
+    val contentColor = when {
+        destructive -> AppColors.TextPrimary
+        emphasized -> Color.Black
+        else -> AppColors.TextPrimary
+    }
+
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.fillMaxWidth(),
+        colors = ButtonDefaults.colors(
+            containerColor = containerColor,
+            contentColor = contentColor,
+            focusedContainerColor = if (destructive) AppColors.Live else AppColors.SurfaceEmphasis,
+            focusedContentColor = AppColors.Focus,
+            disabledContainerColor = AppColors.Surface.copy(alpha = 0.85f),
+            disabledContentColor = AppColors.TextDisabled
+        ),
+        border = ButtonDefaults.border(
+            focusedBorder = androidx.tv.material3.Border(
+                border = BorderStroke(FocusSpec.BorderWidth, AppColors.Focus)
+            )
+        ),
+        scale = ButtonDefaults.scale(focusedScale = FocusSpec.FocusedScale)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge
+        )
+    }
+}
+
+@Composable
+fun PremiumDialogFooterButton(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    destructive: Boolean = false,
+    emphasized: Boolean = false
+) {
+    val containerColor = when {
+        destructive -> AppColors.Live.copy(alpha = 0.18f)
+        emphasized -> AppColors.Brand
+        else -> Color.White.copy(alpha = 0.08f)
+    }
+    val contentColor = if (emphasized) Color.Black else AppColors.TextPrimary
+
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        colors = ButtonDefaults.colors(
+            containerColor = containerColor,
+            contentColor = contentColor,
+            focusedContainerColor = if (destructive) AppColors.Live else AppColors.SurfaceEmphasis,
+            focusedContentColor = AppColors.Focus,
+            disabledContainerColor = AppColors.Surface.copy(alpha = 0.85f),
+            disabledContentColor = AppColors.TextDisabled
+        ),
+        border = ButtonDefaults.border(
+            focusedBorder = androidx.tv.material3.Border(
+                border = BorderStroke(FocusSpec.BorderWidth, AppColors.Focus)
+            )
+        ),
+        scale = ButtonDefaults.scale(focusedScale = FocusSpec.FocusedScale)
+    ) {
+        Text(text = label, style = MaterialTheme.typography.labelLarge)
+    }
+}

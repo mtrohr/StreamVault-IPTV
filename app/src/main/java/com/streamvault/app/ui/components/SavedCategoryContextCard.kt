@@ -1,14 +1,18 @@
 package com.streamvault.app.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
@@ -42,9 +46,17 @@ fun SavedCategoryContextCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 18.dp),
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Primary.copy(alpha = 0.10f),
+                            Primary.copy(alpha = 0.02f)
+                        )
+                    )
+                )
+                .padding(horizontal = 18.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
             Column(
                 modifier = Modifier.weight(1f),
@@ -52,26 +64,32 @@ fun SavedCategoryContextCard(
             ) {
                 Text(
                     text = stringResource(R.string.library_saved_active_title),
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelSmall,
                     color = Primary
                 )
                 Text(
                     text = categoryName,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     color = OnSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = stringResource(R.string.library_saved_active_summary, itemCount),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = OnSurfaceDim,
                     maxLines = 1
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.library_saved_manage_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = OnSurfaceDim
                 )
             }
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Button(
@@ -85,7 +103,7 @@ fun SavedCategoryContextCard(
                 Button(
                     onClick = onBrowseAllClick,
                     colors = ButtonDefaults.colors(
-                        containerColor = SurfaceElevated,
+                        containerColor = SurfaceElevated.copy(alpha = 0.78f),
                         contentColor = OnSurface
                     )
                 ) {

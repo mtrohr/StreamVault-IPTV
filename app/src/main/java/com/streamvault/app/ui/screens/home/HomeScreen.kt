@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.items
@@ -37,17 +38,25 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TextButton
 import com.streamvault.app.ui.components.CategoryRow
 import com.streamvault.app.ui.components.ChannelCard
+import com.streamvault.app.ui.components.shell.ContentMetadataStrip
+import com.streamvault.app.ui.components.shell.LiveChannelRowSurface
+import com.streamvault.app.ui.components.shell.StatusPill
 import com.streamvault.app.ui.components.dialogs.CategoryOptionsDialog
 import com.streamvault.app.ui.components.dialogs.PinDialog
+import com.streamvault.app.ui.components.dialogs.PremiumDialog
+import com.streamvault.app.ui.components.dialogs.PremiumDialogFooterButton
 import com.streamvault.app.ui.components.dialogs.RenameGroupDialog
-import com.streamvault.app.ui.components.TopNavBar
+import com.streamvault.app.ui.components.ReorderTopBar
 import com.streamvault.app.ui.components.SkeletonCard
 import com.streamvault.app.ui.components.shimmerEffect
+import com.streamvault.app.ui.components.shell.AppNavigationChrome
+import com.streamvault.app.ui.components.shell.AppScreenScaffold
 import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.model.Category
 import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.Provider
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.res.stringResource
 import com.streamvault.app.R
 import com.streamvault.app.ui.screens.multiview.MultiViewViewModel
@@ -173,63 +182,22 @@ fun HomeScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().height(80.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (uiState.isChannelReorderMode) {
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = true,
-                        enter = androidx.compose.animation.slideInVertically(initialOffsetY = { -it }),
-                        exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { -it }),
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "Reordering '${uiState.reorderCategory?.name ?: uiState.selectedCategory?.name ?: "Channels"}'",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = Primary
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                androidx.tv.material3.Button(
-                                    onClick = { viewModel.exitChannelReorderMode() },
-                                    colors = androidx.tv.material3.ButtonDefaults.colors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                        contentColor = OnSurface
-                                    )
-                                ) { Text("Cancel", modifier = Modifier.padding(horizontal = 8.dp)) }
-                                
-                                androidx.tv.material3.Button(
-                                    onClick = { viewModel.saveChannelReorder() },
-                                    colors = androidx.tv.material3.ButtonDefaults.colors(
-                                        containerColor = Primary,
-                                        contentColor = Color.White
-                                    )
-                                ) { Text("Save Order", modifier = Modifier.padding(horizontal = 8.dp)) }
-                            }
-                        }
-                    }
-                } else {
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = true,
-                        enter = androidx.compose.animation.slideInVertically(initialOffsetY = { -it }),
-                        exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { -it })
-                    ) {
-                        TopNavBar(
-                            currentRoute = currentRoute,
-                            onNavigate = onNavigate,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-                
-                // Playlist Switcher - REMOVED (Moved to Settings)
+        AppScreenScaffold(
+            currentRoute = currentRoute,
+            onNavigate = onNavigate,
+            title = stringResource(R.string.nav_live_tv),
+            subtitle = uiState.provider?.name,
+            navigationChrome = AppNavigationChrome.TopBar,
+            compactHeader = true,
+            showScreenHeader = false
+        ) {
+            if (uiState.isChannelReorderMode) {
+                ReorderTopBar(
+                    categoryName = uiState.reorderCategory?.name ?: uiState.selectedCategory?.name ?: "Channels",
+                    onSave = { viewModel.saveChannelReorder() },
+                    onCancel = { viewModel.exitChannelReorderMode() },
+                    subtitle = stringResource(R.string.live_reorder_subtitle)
+                )
             }
 
             if (uiState.isLoading && uiState.categories.isEmpty()) {
@@ -349,25 +317,25 @@ fun HomeScreen(
                     
                     Column(
                         modifier = Modifier
-                            .width(280.dp)
+                            .width(272.dp)
                             .fillMaxHeight()
-                            .background(SurfaceElevated)
-                            .padding(top = 16.dp)
+                            .background(SurfaceElevated.copy(alpha = 0.88f), RoundedCornerShape(20.dp))
+                            .padding(top = 10.dp)
                     ) {
                         // Sticky Header Part
-                        Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp)) {
                             Text(
                                 text = stringResource(R.string.home_categories_title),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = OnSurface,
-                                modifier = Modifier.padding(bottom = 8.dp, start = 8.dp)
+                                modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
                             )
                             SearchInput(
                                 value = uiState.categorySearchQuery,
                                 onValueChange = { viewModel.updateCategorySearchQuery(it) },
                                 placeholder = stringResource(R.string.home_search_categories),
                                 focusRequester = categorySearchFocusRequester,
-                                modifier = Modifier.padding(bottom = 16.dp)
+                                modifier = Modifier.padding(bottom = 10.dp)
                             )
                         }
 
@@ -408,7 +376,7 @@ fun HomeScreen(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         Text(
-                                            text = "🔳",
+                                            text = "SPLIT",
                                             fontSize = 14.sp
                                         )
                                         Column(modifier = Modifier.weight(1f)) {
@@ -483,17 +451,25 @@ fun HomeScreen(
                             .fillMaxHeight()
                     ) {
                         // Category Title Header and Search
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(start = 24.dp, top = 24.dp, bottom = 16.dp, end = 24.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(start = 8.dp, top = 2.dp, bottom = 8.dp, end = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
                                 text = uiState.selectedCategory?.name ?: stringResource(R.string.home_all_channels),
-                                style = MaterialTheme.typography.headlineSmall,
+                                style = MaterialTheme.typography.titleLarge,
                                 color = OnBackground
+                            )
+                            ContentMetadataStrip(
+                                values = buildList {
+                                    add("${stringResource(R.string.live_shell_provider)}: ${uiState.provider?.name ?: stringResource(R.string.playlist_no_provider)}")
+                                    add(stringResource(R.string.live_channel_results, uiState.filteredChannels.size))
+                                    uiState.lastVisitedCategory?.name?.let {
+                                        add("${stringResource(R.string.live_shell_last_group)}: $it")
+                                    }
+                                }
                             )
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -505,8 +481,13 @@ fun HomeScreen(
                                     placeholder = stringResource(R.string.home_search_channels),
                                     onSearch = { focusManager.clearFocus() },
                                     focusRequester = channelSearchFocusRequester,
-                                    modifier = Modifier.width(300.dp)
+                                    modifier = Modifier.width(340.dp)
                                 )
+                                if (hasSplitChannels) {
+                                    StatusPill(
+                                        label = "${stringResource(R.string.live_shell_split)} ${splitSlots.count { it != null }}/4"
+                                    )
+                                }
                             }
                         }
                         
@@ -533,31 +514,32 @@ fun HomeScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = "📺",
-                                        style = MaterialTheme.typography.displayLarge
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
                                     Text(
                                         text = stringResource(R.string.home_no_channels_found),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = OnSurface
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = OnBackground
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.home_no_channels_found_subtitle),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = OnSurfaceDim
                                     )
                                     val selectedCategory = uiState.selectedCategory
                                     if (selectedCategory?.isVirtual == true && selectedCategory.id == VirtualCategoryIds.FAVORITES) {
                                         Text(
                                             text = stringResource(R.string.home_add_favorites_hint),
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = OnSurfaceDim,
-                                            modifier = Modifier.padding(top = 4.dp)
+                                            color = OnSurfaceDim
                                         )
                                     } else if (selectedCategory?.isVirtual == true && selectedCategory.id == VirtualCategoryIds.RECENT) {
                                         Text(
                                             text = stringResource(R.string.home_recent_channels_hint),
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = OnSurfaceDim,
-                                            modifier = Modifier.padding(top = 4.dp)
+                                            color = OnSurfaceDim
                                         )
                                     }
                                 }
@@ -565,6 +547,7 @@ fun HomeScreen(
                         } else {
                             // Shared lock state for all items
                             var ignoreNextClick by remember { mutableStateOf(false) }
+                            val channelListState = rememberLazyListState()
 
                             // Auto-reset lock if click never comes (e.g. user drags away)
                             LaunchedEffect(ignoreNextClick) {
@@ -584,8 +567,26 @@ fun HomeScreen(
                                 }
                             }
 
-                            LazyVerticalGrid(
-                                columns = GridCells.Adaptive(minSize = 180.dp),
+                            LaunchedEffect(channelListState, uiState.filteredChannels, lastFocusedChannelId) {
+                                snapshotFlow {
+                                    channelListState.layoutInfo.visibleItemsInfo.mapNotNull { item ->
+                                        uiState.filteredChannels.getOrNull(item.index)?.id
+                                    } to lastFocusedChannelId
+                                }
+                                    .distinctUntilChanged()
+                                    .collect { (visibleIds, focusedId) ->
+                                        viewModel.updateVisibleChannelWindow(visibleIds, focusedId)
+                                    }
+                            }
+
+                            DisposableEffect(Unit) {
+                                onDispose {
+                                    viewModel.updateVisibleChannelWindow(emptyList(), null)
+                                }
+                            }
+
+                            LazyColumn(
+                                state = channelListState,
                                 modifier = Modifier
                                     .fillMaxSize()
                                     // Handle BACK key to cancel reorder mode
@@ -603,12 +604,11 @@ fun HomeScreen(
                                         } else false
                                     },
                                 contentPadding = PaddingValues(
-                                    start = LocalSpacing.current.safeHoriz, 
-                                    end = LocalSpacing.current.safeHoriz, 
-                                    bottom = LocalSpacing.current.safeBottom
+                                    start = 10.dp,
+                                    end = 10.dp,
+                                    bottom = 16.dp
                                 ),
-                                verticalArrangement = Arrangement.spacedBy(LocalSpacing.current.sm),
-                                horizontalArrangement = Arrangement.spacedBy(LocalSpacing.current.sm)
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 items(
                                     items = uiState.filteredChannels,
@@ -618,7 +618,7 @@ fun HomeScreen(
                                     val isDraggingThis = draggingChannel == channel
                                     val channelFocusRequester = channelFocusRequesters.getOrPut(channel.id) { FocusRequester() }
                                     
-                                    ChannelCard(
+                                    LiveChannelRowSurface(
                                         channel = channel,
                                         isLocked = isLocked,
                                         isReorderMode = uiState.isChannelReorderMode,
@@ -646,7 +646,7 @@ fun HomeScreen(
                                             }
                                         },
                                         modifier = Modifier
-                                            .aspectRatio(16f/9f)
+                                            .fillMaxWidth()
                                             .focusRequester(channelFocusRequester)
                                             .onFocusChanged { focusState ->
                                                 if (focusState.isFocused) {
@@ -737,19 +737,22 @@ fun HomeScreen(
             if (canInteract) viewModel.cancelDeleteGroup()
         }
 
-        androidx.compose.material3.AlertDialog(
+        PremiumDialog(
+            title = stringResource(R.string.home_delete_group_title),
+            subtitle = stringResource(R.string.home_delete_group_body, group.name),
             onDismissRequest = safeDismiss,
-            title = { Text(stringResource(R.string.home_delete_group_title)) },
-            text = { Text(stringResource(R.string.home_delete_group_body, group.name)) },
-            confirmButton = {
-                TextButton(onClick = { if (canInteract) viewModel.confirmDeleteGroup() }) {
-                    Text(stringResource(R.string.home_delete_group_confirm), color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = safeDismiss) {
-                    Text(stringResource(R.string.home_delete_group_cancel))
-                }
+            widthFraction = 0.36f,
+            content = {},
+            footer = {
+                PremiumDialogFooterButton(
+                    label = stringResource(R.string.home_delete_group_cancel),
+                    onClick = safeDismiss
+                )
+                PremiumDialogFooterButton(
+                    label = stringResource(R.string.home_delete_group_confirm),
+                    onClick = { if (canInteract) viewModel.confirmDeleteGroup() },
+                    destructive = true
+                )
             }
         )
     }
@@ -774,7 +777,7 @@ private fun CategoryItem(
         onLongClick = onLongClick,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 2.dp)
             .focusRequester(focusRequester)
             .onFocusChanged {
                 isFocused = it.isFocused
@@ -795,7 +798,7 @@ private fun CategoryItem(
                     }
                 } else false
             },
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (isSelected) Primary.copy(alpha = 0.15f) else Color.Transparent,
             focusedContainerColor = SurfaceHighlight,
@@ -803,28 +806,37 @@ private fun CategoryItem(
         ),
         border = ClickableSurfaceDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(3.dp, Color.White), // More pronounced border
-                shape = RoundedCornerShape(8.dp)
+                border = BorderStroke(2.dp, Color.White),
+                shape = RoundedCornerShape(10.dp)
             )
         )
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "${category.name} (${category.count})",
-                style = if (isSelected) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
+                text = category.name,
+                style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 color = if (isFocused) OnBackground else if (isSelected) Primary else OnSurface,
                 modifier = Modifier.weight(1f)
             )
-            
+
+            Text(
+                text = category.count.toString(),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isFocused) OnBackground else OnSurfaceDim,
+                modifier = Modifier.padding(start = 10.dp)
+            )
+
             if (isLocked) {
                 Text(
-                    text = "🔒",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = stringResource(R.string.home_locked_short),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isFocused) OnBackground else OnSurfaceDim,
                     modifier = Modifier.padding(start = 8.dp)
                 )
             }
@@ -952,7 +964,7 @@ fun ReorderSidePanel(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (isDraggingThis) {
-                                Text("↕", color = Color.White, modifier = Modifier.padding(end = 8.dp))
+                                Text("MOVE", color = Color.White, modifier = Modifier.padding(end = 8.dp))
                             }
                             Text(
                                 "${index + 1}. ${channel.name}", 

@@ -2,29 +2,46 @@ package com.streamvault.app.ui.components.dialogs
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.streamvault.app.R
 import com.streamvault.domain.model.Program
 import java.text.SimpleDateFormat
-import java.util.*
-import androidx.compose.ui.res.stringResource
-import com.streamvault.app.R
+import java.util.Locale
 
 @Composable
 fun ProgramHistoryDialog(
@@ -51,7 +68,9 @@ fun ProgramHistoryDialog(
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -61,16 +80,24 @@ fun ProgramHistoryDialog(
                         fontWeight = FontWeight.Bold
                     )
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = stringResource(R.string.add_group_close_cd)
+                        )
                     }
                 }
 
                 if (programs.isEmpty()) {
                     Box(
-                        modifier = Modifier.fillMaxWidth().height(200.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(stringResource(R.string.player_no_archive), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            text = stringResource(R.string.player_no_archive),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 } else {
                     LazyColumn(
@@ -79,16 +106,22 @@ fun ProgramHistoryDialog(
                     ) {
                         items(programs) { program ->
                             var isFocused by remember { mutableStateOf(false) }
-                            
+
                             Surface(
                                 onClick = { onProgramSelect(program) },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .onFocusChanged { isFocused = it.isFocused }
-                                    .focusRequester(if (program == programs.first()) focusRequester else FocusRequester())
+                                    .focusRequester(
+                                        if (program == programs.first()) focusRequester else FocusRequester()
+                                    )
                                     .border(
                                         width = if (isFocused) 2.dp else 1.dp,
-                                        color = if (isFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                        color = if (isFocused) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.outlineVariant
+                                        },
                                         shape = RoundedCornerShape(8.dp)
                                     ),
                                 shape = RoundedCornerShape(8.dp),
@@ -113,7 +146,12 @@ fun ProgramHistoryDialog(
                                         )
                                     }
                                     if (program.hasArchive) {
-                                        Text("📼", modifier = Modifier.padding(start = 8.dp))
+                                        Text(
+                                            text = stringResource(R.string.player_archive_badge),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(start = 8.dp)
+                                        )
                                     }
                                 }
                             }

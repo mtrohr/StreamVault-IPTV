@@ -275,16 +275,12 @@ class FavoritesViewModel @Inject constructor(
                                         providerId = entry.providerId
                                     )
                                 },
-                                recentLive = recentLiveHistory.mapNotNull { entry ->
-                                    val channel = liveById[entry.contentId] ?: return@mapNotNull null
+                                recentLive = recentLiveHistory.mapIndexedNotNull { index, entry ->
+                                    val channel = liveById[entry.contentId] ?: return@mapIndexedNotNull null
                                     SavedHistoryUiModel(
                                         history = entry,
                                         title = channel.name,
-                                        subtitle = if (channel.number > 0) {
-                                            "Channel ${channel.number}"
-                                        } else {
-                                            "Recent live channel"
-                                        },
+                                        subtitle = "Channel ${index + 1}",
                                         providerId = channel.providerId,
                                         categoryId = channel.categoryId,
                                         epgChannelId = channel.epgChannelId,
@@ -613,13 +609,13 @@ class FavoritesViewModel @Inject constructor(
                 val moviesById = movies.associateBy { it.id }
                 val seriesById = series.associateBy { it.id }
 
-                orderedFavorites.mapNotNull { favorite ->
+                orderedFavorites.mapIndexedNotNull { index, favorite ->
                     when (favorite.contentType) {
                         ContentType.LIVE -> channelsById[favorite.contentId]?.let { channel ->
                             FavoriteUiModel(
                                 favorite = favorite,
                                 title = channel.name,
-                                subtitle = if (channel.number > 0) "Channel ${channel.number}" else "Live channel",
+                                subtitle = "Channel ${index + 1}",
                                 lastWatchedAt = historyMap[Triple(favorite.contentType, favorite.contentId, channel.providerId)]?.lastWatchedAt ?: 0L,
                                 streamUrl = channel.streamUrl,
                                 providerId = channel.providerId,

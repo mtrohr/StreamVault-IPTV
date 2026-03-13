@@ -1,0 +1,661 @@
+package com.streamvault.app.ui.components.shell
+
+import androidx.annotation.StringRes
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Border
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Icon
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.SurfaceDefaults
+import androidx.tv.material3.Text
+import com.streamvault.app.R
+import com.streamvault.app.navigation.Routes
+import com.streamvault.app.ui.design.AppColors
+import com.streamvault.app.ui.design.AppMotion
+import com.streamvault.app.ui.design.FocusSpec
+import com.streamvault.app.ui.design.LocalAppSpacing
+
+enum class AppNavigationChrome {
+    Rail,
+    TopBar
+}
+
+@Composable
+fun AppScreenScaffold(
+    currentRoute: String,
+    onNavigate: (String) -> Unit,
+    title: String,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier,
+    navigationChrome: AppNavigationChrome = AppNavigationChrome.Rail,
+    compactHeader: Boolean = false,
+    showScreenHeader: Boolean = true,
+    header: (@Composable ColumnScope.() -> Unit)? = null,
+    contentPadding: PaddingValues = PaddingValues(),
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val spacing = LocalAppSpacing.current
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(
+                        AppColors.Canvas,
+                        AppColors.CanvasElevated,
+                        AppColors.Surface
+                    )
+                )
+            )
+    ) {
+        if (navigationChrome == AppNavigationChrome.Rail) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                DestinationRail(
+                    currentRoute = currentRoute,
+                    onNavigate = onNavigate,
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(spacing.railWidth)
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            start = spacing.lg,
+                            end = spacing.screenGutter,
+                            top = spacing.safeTop,
+                            bottom = spacing.safeBottom
+                        )
+                ) {
+                    if (showScreenHeader) {
+                        AppScreenHeader(
+                            title = title,
+                            subtitle = subtitle,
+                            modifier = Modifier.fillMaxWidth(),
+                            compact = compactHeader
+                        )
+                        if (header != null) {
+                            Spacer(modifier = Modifier.height(spacing.lg))
+                            header()
+                        }
+                        Spacer(modifier = Modifier.height(spacing.lg))
+                    } else if (header != null) {
+                        header()
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(contentPadding)
+                    ) {
+                        content()
+                    }
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        horizontal = 14.dp,
+                        vertical = 10.dp
+                    )
+            ) {
+                TopNavigationBar(
+                    currentRoute = currentRoute,
+                    onNavigate = onNavigate,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                if (showScreenHeader) {
+                    AppScreenHeader(
+                        title = title,
+                        subtitle = subtitle,
+                        modifier = Modifier.fillMaxWidth(),
+                        compact = true
+                    )
+                    if (header != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        header()
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                } else if (header != null) {
+                    header()
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(contentPadding)
+                ) {
+                    content()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AppScreenHeader(
+    title: String,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier,
+    eyebrow: String? = null,
+    compact: Boolean = false
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        if (!eyebrow.isNullOrBlank()) {
+            Text(
+                text = eyebrow,
+                style = MaterialTheme.typography.labelMedium,
+                color = AppColors.Brand
+            )
+        }
+        Text(
+            text = title,
+            style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.displaySmall,
+            color = AppColors.TextPrimary,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        if (!subtitle.isNullOrBlank()) {
+            Text(
+                text = subtitle,
+                style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyLarge,
+                color = AppColors.TextSecondary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopNavigationBar(
+    currentRoute: String,
+    onNavigate: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val items = buildDestinationItems()
+    val scrollState = rememberScrollState()
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        colors = SurfaceDefaults.colors(containerColor = AppColors.Surface.copy(alpha = 0.9f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.app_name),
+                style = MaterialTheme.typography.titleSmall,
+                color = AppColors.TextPrimary,
+                modifier = Modifier
+                    .width(190.dp)
+                    .wrapContentWidth(Alignment.Start)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(scrollState),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items.forEach { item ->
+                    TopNavigationButton(
+                        label = stringResource(item.labelRes),
+                        icon = item.icon,
+                        selected = currentRoute == item.route,
+                        onClick = {
+                            if (currentRoute != item.route) {
+                                onNavigate(item.route)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopNavigationButton(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isFocused) FocusSpec.FocusedScale else 1f,
+        animationSpec = AppMotion.FocusSpec,
+        label = "topNavScale"
+    )
+
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .onFocusChanged { isFocused = it.isFocused },
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(14.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (selected) AppColors.BrandMuted else Color.Transparent,
+            focusedContainerColor = AppColors.SurfaceEmphasis
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(FocusSpec.BorderWidth, AppColors.Focus),
+                shape = RoundedCornerShape(14.dp)
+            )
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (selected) AppColors.Brand else AppColors.TextSecondary,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (selected) AppColors.TextPrimary else AppColors.TextSecondary
+            )
+        }
+    }
+}
+
+@Composable
+fun AppHeroHeader(
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    eyebrow: String? = null,
+    actions: (@Composable RowScope.() -> Unit)? = null,
+    footer: (@Composable ColumnScope.() -> Unit)? = null
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(28.dp),
+        colors = SurfaceDefaults.colors(containerColor = AppColors.SurfaceElevated)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(28.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            Color(0xFF081624),
+                            Color(0xFF10223A),
+                            Color(0xFF18314E)
+                        )
+                    )
+                )
+                .padding(32.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                AppScreenHeader(
+                    title = title,
+                    subtitle = subtitle,
+                    eyebrow = eyebrow
+                )
+                if (actions != null) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        content = actions
+                    )
+                }
+                if (footer != null) {
+                    footer()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AppSectionHeader(
+    title: String,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = AppColors.TextPrimary
+        )
+        if (!subtitle.isNullOrBlank()) {
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppColors.TextTertiary
+            )
+        }
+    }
+}
+
+@Composable
+fun StatusPill(
+    label: String,
+    modifier: Modifier = Modifier,
+    containerColor: Color = AppColors.SurfaceEmphasis,
+    contentColor: Color = AppColors.TextPrimary
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(containerColor)
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = contentColor
+        )
+    }
+}
+
+@Composable
+fun AppMessageState(
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    action: (@Composable () -> Unit)? = null
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(24.dp),
+        colors = SurfaceDefaults.colors(containerColor = AppColors.SurfaceElevated)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                color = AppColors.TextPrimary
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppColors.TextSecondary
+            )
+            if (action != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                action()
+            }
+        }
+    }
+}
+
+@Composable
+fun LoadMoreCard(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(18.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = AppColors.SurfaceElevated,
+            focusedContainerColor = AppColors.SurfaceEmphasis
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(FocusSpec.BorderWidth, AppColors.Focus),
+                shape = RoundedCornerShape(18.dp)
+            )
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                tint = AppColors.Brand,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                color = AppColors.TextPrimary
+            )
+        }
+    }
+}
+
+@Composable
+fun ContentMetadataStrip(
+    values: List<String>,
+    modifier: Modifier = Modifier
+) {
+    val filteredValues = values.filter { it.isNotBlank() }
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        filteredValues.forEachIndexed { index, value ->
+            Text(
+                text = value,
+                style = MaterialTheme.typography.labelMedium,
+                color = AppColors.TextSecondary
+            )
+            if (index < filteredValues.lastIndex) {
+                Box(
+                    modifier = Modifier
+                        .size(4.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(AppColors.TextTertiary)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DestinationRail(
+    currentRoute: String,
+    onNavigate: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val spacing = LocalAppSpacing.current
+    val items = buildDestinationItems()
+
+    Box(
+        modifier = modifier
+            .padding(start = spacing.lg, top = spacing.safeTop, bottom = spacing.safeBottom)
+            .clip(RoundedCornerShape(28.dp))
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        AppColors.SurfaceElevated,
+                        AppColors.Surface
+                    )
+                )
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.app_name),
+                style = MaterialTheme.typography.titleMedium,
+                color = AppColors.TextPrimary
+            )
+            Text(
+                text = "TV",
+                style = MaterialTheme.typography.labelSmall,
+                color = AppColors.TextTertiary
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            items.forEach { item ->
+                RailButton(
+                    label = stringResource(item.labelRes),
+                    icon = item.icon,
+                    selected = currentRoute == item.route,
+                    onClick = {
+                        if (currentRoute != item.route) {
+                            onNavigate(item.route)
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RailButton(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isFocused) FocusSpec.FocusedScale else 1f,
+        animationSpec = AppMotion.FocusSpec,
+        label = "railButtonScale"
+    )
+
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .onFocusChanged { isFocused = it.isFocused },
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(18.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (selected) AppColors.BrandMuted else Color.Transparent,
+            focusedContainerColor = AppColors.SurfaceEmphasis
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(FocusSpec.BorderWidth, AppColors.Focus),
+                shape = RoundedCornerShape(18.dp)
+            )
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (selected) AppColors.Brand else AppColors.TextSecondary,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleSmall,
+                color = if (selected) AppColors.TextPrimary else AppColors.TextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+private data class DestinationItem(
+    val route: String,
+    @StringRes val labelRes: Int,
+    val icon: ImageVector
+)
+
+@Composable
+private fun buildDestinationItems(): List<DestinationItem> = listOf(
+    DestinationItem(Routes.HOME, R.string.nav_home, Icons.Default.Home),
+    DestinationItem(Routes.LIVE_TV, R.string.nav_live_tv, Icons.Default.PlayArrow),
+    DestinationItem(Routes.MOVIES, R.string.nav_movies, Icons.Default.Star),
+    DestinationItem(Routes.SERIES, R.string.nav_series, Icons.Default.Menu),
+    DestinationItem(Routes.FAVORITES, R.string.favorites_title, Icons.Default.Favorite),
+    DestinationItem(Routes.EPG, R.string.nav_epg, Icons.Default.Info),
+    DestinationItem(Routes.SEARCH, R.string.search_title, Icons.Default.Search),
+    DestinationItem(Routes.SETTINGS, R.string.nav_settings, Icons.Default.Settings)
+)

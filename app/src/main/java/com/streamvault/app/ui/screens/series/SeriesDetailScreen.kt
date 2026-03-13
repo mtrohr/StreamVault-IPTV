@@ -1,12 +1,26 @@
 package com.streamvault.app.ui.screens.series
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -14,19 +28,28 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.material3.*
+import androidx.tv.material3.Border
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.SurfaceDefaults
+import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
-import com.streamvault.app.ui.theme.*
+import com.streamvault.app.R
+import com.streamvault.app.ui.components.shell.ContentMetadataStrip
+import com.streamvault.app.ui.components.shell.EpisodeRowCard
+import com.streamvault.app.ui.components.shell.StatusPill
+import com.streamvault.app.ui.design.AppColors
 import com.streamvault.domain.model.Episode
 import com.streamvault.domain.model.Season
 import com.streamvault.domain.model.Series
-import androidx.compose.ui.res.stringResource
-import com.streamvault.app.R
 
 @Composable
 fun SeriesDetailScreen(
@@ -36,17 +59,27 @@ fun SeriesDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val series = uiState.series
-    
+
     if (uiState.isLoading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(stringResource(R.string.series_loading_details), color = OnSurface)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(AppColors.Canvas),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(stringResource(R.string.series_loading_details), color = AppColors.TextSecondary)
         }
         return
     }
 
     if (series == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(stringResource(R.string.series_not_found), color = ErrorColor)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(AppColors.Canvas),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(stringResource(R.string.series_not_found), color = AppColors.Live)
         }
         return
     }
@@ -55,7 +88,8 @@ fun SeriesDetailScreen(
         series = series,
         selectedSeason = uiState.selectedSeason,
         onSeasonSelected = viewModel::selectSeason,
-        onEpisodeClick = onEpisodeClick
+        onEpisodeClick = onEpisodeClick,
+        onBack = onBack
     )
 }
 
@@ -64,10 +98,14 @@ private fun SeriesDetailContent(
     series: Series,
     selectedSeason: Season?,
     onSeasonSelected: (Season) -> Unit,
-    onEpisodeClick: (Episode) -> Unit
+    onEpisodeClick: (Episode) -> Unit,
+    onBack: () -> Unit
 ) {
-    Box(modifier = Modifier.fillMaxSize().background(Background)) {
-        // Backdrop
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppColors.Canvas)
+    ) {
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
                 .data(series.backdropUrl ?: series.posterUrl)
@@ -75,22 +113,21 @@ private fun SeriesDetailContent(
             contentDescription = null,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(400.dp)
+                .height(420.dp)
                 .align(Alignment.TopCenter),
-            contentScale = ContentScale.Crop,
-            alpha = 0.5f
+            contentScale = ContentScale.Crop
         )
-        
-        // Gradient overlay
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(400.dp)
+                .height(420.dp)
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
                             Color.Transparent,
-                            Background
+                            AppColors.HeroTop,
+                            AppColors.HeroBottom
                         )
                     )
                 )
@@ -98,73 +135,120 @@ private fun SeriesDetailContent(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp)
+            contentPadding = PaddingValues(horizontal = 56.dp, vertical = 36.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // Header Info
             item {
-                Column(modifier = Modifier.padding(top = 200.dp, bottom = 24.dp)) {
-                    Text(
-                        text = series.name,
-                        style = MaterialTheme.typography.displayMedium,
-                        color = OnSurface,
-                        fontWeight = FontWeight.Bold
+                Button(
+                    onClick = onBack,
+                    colors = ButtonDefaults.colors(
+                        containerColor = AppColors.Surface.copy(alpha = 0.72f),
+                        contentColor = AppColors.TextPrimary
+                    ),
+                    border = ButtonDefaults.border(
+                        border = Border(border = androidx.compose.foundation.BorderStroke(1.dp, AppColors.Outline))
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (series.rating > 0) {
-                            Text("⭐ ${series.rating}", color = Secondary, style = MaterialTheme.typography.labelLarge)
-                            Spacer(modifier = Modifier.width(16.dp))
-                        }
-                        series.releaseDate?.let { date ->
-                            Text(date, color = OnSurfaceVariant, style = MaterialTheme.typography.labelLarge)
-                            Spacer(modifier = Modifier.width(16.dp))
-                        }
-                        series.genre?.let { genre ->
-                             Text(genre, color = OnSurfaceVariant, style = MaterialTheme.typography.labelLarge)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = series.plot ?: "No plot available",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = OnSurface.copy(alpha = 0.8f),
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                ) {
+                    Text(stringResource(R.string.series_detail_back))
                 }
             }
 
-            // Seasons
+            item {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(220.dp)
+                            .aspectRatio(2f / 3f)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(AppColors.SurfaceElevated)
+                    ) {
+                        AsyncImage(
+                            model = series.posterUrl ?: series.backdropUrl,
+                            contentDescription = series.name,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(18.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StatusPill(label = stringResource(R.string.nav_series), containerColor = AppColors.BrandMuted)
+                            series.rating.takeIf { it > 0f }?.let {
+                                StatusPill(label = "RTG ${String.format("%.1f", it)}", containerColor = AppColors.Warning, contentColor = Color.Black)
+                            }
+                        }
+                        Text(
+                            text = series.name,
+                            style = MaterialTheme.typography.displayMedium,
+                            color = AppColors.TextPrimary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        ContentMetadataStrip(
+                            values = listOf(
+                                series.releaseDate.orEmpty(),
+                                series.genre.orEmpty(),
+                                selectedSeason?.name.orEmpty()
+                            )
+                        )
+                        Text(
+                            text = series.plot ?: stringResource(R.string.series_plot_fallback),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = AppColors.TextSecondary,
+                            maxLines = 5,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
             if (series.seasons.isNotEmpty()) {
                 item {
-                    Text(stringResource(R.string.series_seasons), style = MaterialTheme.typography.titleMedium, color = OnSurface)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
-                    ) {
-                        items(series.seasons) { season ->
-                            SeasonChip(
-                                season = season,
-                                isSelected = season == selectedSeason,
-                                onClick = { onSeasonSelected(season) }
-                            )
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = stringResource(R.string.series_seasons),
+                            style = MaterialTheme.typography.titleLarge,
+                            color = AppColors.TextPrimary
+                        )
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(vertical = 2.dp)
+                        ) {
+                            items(series.seasons) { season ->
+                                SeasonChip(
+                                    season = season,
+                                    isSelected = season == selectedSeason,
+                                    onClick = { onSeasonSelected(season) }
+                                )
+                            }
                         }
                     }
-                    Spacer(modifier = Modifier.height(24.dp))
                 }
             }
 
-            // Episodes
             selectedSeason?.let { season ->
                 item {
-                    Text(stringResource(R.string.series_episodes, season.episodes.size), style = MaterialTheme.typography.titleMedium, color = OnSurface)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = stringResource(R.string.series_episodes, season.episodes.size),
+                            style = MaterialTheme.typography.titleLarge,
+                            color = AppColors.TextPrimary
+                        )
+                        Text(
+                            text = season.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AppColors.TextTertiary
+                        )
+                    }
                 }
-
                 items(season.episodes) { episode ->
-                   EpisodeItem(episode = episode, onClick = { onEpisodeClick(episode) })
-                   Spacer(modifier = Modifier.height(8.dp))
+                    EpisodeItem(episode = episode, onClick = { onEpisodeClick(episode) })
                 }
             }
         }
@@ -179,23 +263,28 @@ fun SeasonChip(
 ) {
     Surface(
         onClick = onClick,
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(50)),
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (isSelected) Primary else Surface,
-            contentColor = if (isSelected) OnPrimary else OnSurface,
-            focusedContainerColor = Primary,
-            focusedContentColor = OnPrimary
+            containerColor = if (isSelected) AppColors.BrandMuted else AppColors.SurfaceElevated,
+            contentColor = AppColors.TextPrimary,
+            focusedContainerColor = AppColors.SurfaceEmphasis,
+            focusedContentColor = AppColors.TextPrimary
         ),
         border = ClickableSurfaceDefaults.border(
             border = Border(
-                border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) Primary else OnSurfaceVariant.copy(alpha = 0.5f))
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) AppColors.Brand else AppColors.Outline),
+                shape = RoundedCornerShape(999.dp)
+            ),
+            focusedBorder = Border(
+                border = androidx.compose.foundation.BorderStroke(2.dp, AppColors.Focus),
+                shape = RoundedCornerShape(999.dp)
             )
         )
     ) {
         Text(
             text = season.name,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.labelMedium
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+            style = MaterialTheme.typography.labelLarge
         )
     }
 }
@@ -207,68 +296,16 @@ fun EpisodeItem(
 ) {
     Surface(
         onClick = onClick,
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(18.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = Surface,
-            focusedContainerColor = SurfaceVariant
+            containerColor = AppColors.SurfaceElevated,
+            focusedContainerColor = AppColors.SurfaceEmphasis
         ),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Episode Number
-            Text(
-                text = "${episode.episodeNumber}",
-                style = MaterialTheme.typography.titleMedium,
-                color = OnSurfaceVariant,
-                modifier = Modifier.width(40.dp)
-            )
-            
-            // Thumbnail (Optional)
-            episode.coverUrl?.takeIf { it.isNotEmpty() }?.let { url ->
-                AsyncImage(
-                    model = url,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .width(120.dp)
-                        .aspectRatio(16f/9f)
-                        .clip(RoundedCornerShape(4.dp)),
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(modifier = Modifier.width(16.dp))
-            }
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = episode.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = OnSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                episode.plot?.let { plot ->
-                    if (plot.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = plot,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = OnSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-            
-            Text(
-                text = "▶", 
-                color = Primary,
-                modifier = Modifier.padding(start = 8.dp)
-            )
-        }
+        EpisodeRowCard(
+            episode = episode,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }

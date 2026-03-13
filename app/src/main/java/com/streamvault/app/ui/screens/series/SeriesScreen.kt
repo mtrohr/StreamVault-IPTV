@@ -1,5 +1,6 @@
 package com.streamvault.app.ui.screens.series
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -43,7 +44,6 @@ import com.streamvault.app.ui.components.SelectionChip
 import com.streamvault.app.ui.components.SelectionChipRow
 import com.streamvault.app.ui.components.SeriesCard
 import com.streamvault.app.ui.components.SkeletonRow
-import com.streamvault.app.ui.components.TopNavBar
 import com.streamvault.app.ui.theme.*
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
@@ -55,6 +55,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import com.streamvault.app.ui.components.ReorderTopBar
 import com.streamvault.app.ui.components.dialogs.DeleteGroupDialog
 import com.streamvault.app.ui.components.dialogs.RenameGroupDialog
+import com.streamvault.app.ui.components.shell.BrowseHeroPanel
+import com.streamvault.app.ui.components.shell.BrowseSearchLaunchCard
+import com.streamvault.app.ui.components.shell.LoadMoreCard
+import com.streamvault.app.ui.components.shell.AppNavigationChrome
+import com.streamvault.app.ui.components.shell.AppMessageState
+import com.streamvault.app.ui.components.shell.AppScreenScaffold
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -82,6 +88,10 @@ fun SeriesScreen(
         }
     }
 
+    BackHandler(enabled = uiState.selectedCategory != null && !uiState.isReorderMode) {
+        viewModel.selectCategory(null)
+    }
+
     if (showPinDialog) {
         com.streamvault.app.ui.components.dialogs.PinDialog(
             onDismissRequest = {
@@ -106,15 +116,22 @@ fun SeriesScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        AppScreenScaffold(
+            currentRoute = currentRoute,
+            onNavigate = onNavigate,
+            title = stringResource(R.string.nav_series),
+            subtitle = null,
+            navigationChrome = AppNavigationChrome.TopBar,
+            compactHeader = true,
+            showScreenHeader = false
+        ) {
         if (uiState.isReorderMode && uiState.reorderCategory != null) {
             ReorderTopBar(
                 categoryName = uiState.reorderCategory!!.name,
                 onSave = { viewModel.saveReorder() },
-                onCancel = { viewModel.exitCategoryReorderMode() }
+                onCancel = { viewModel.exitCategoryReorderMode() },
+                subtitle = stringResource(R.string.series_reorder_subtitle)
             )
-        } else {
-            TopNavBar(currentRoute = currentRoute, onNavigate = onNavigate)
         }
 
         if (uiState.isLoading) {
@@ -130,11 +147,10 @@ fun SeriesScreen(
             }
         } else if (uiState.seriesByCategory.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("📺", style = MaterialTheme.typography.displayLarge)
-                    Spacer(Modifier.height(8.dp))
-                    Text(stringResource(R.string.series_no_found), style = MaterialTheme.typography.bodyLarge, color = OnSurface)
-                }
+                AppMessageState(
+                    title = stringResource(R.string.series_no_found),
+                    subtitle = stringResource(R.string.series_no_found_subtitle)
+                )
             }
         } else {
             Row(modifier = Modifier.fillMaxSize()) {
@@ -180,16 +196,16 @@ fun SeriesScreen(
 
                 Column(
                     modifier = Modifier
-                        .width(220.dp)
+                        .width(188.dp)
                         .fillMaxHeight()
-                        .background(SurfaceElevated.copy(alpha = 0.5f))
+                        .background(SurfaceElevated.copy(alpha = 0.72f), RoundedCornerShape(20.dp))
                         .padding(top = 8.dp)
                 ) {
                     // Sticky Header
-                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
                         Text(
                             text = stringResource(R.string.series_categories_title),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleSmall,
                             color = Primary,
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
@@ -363,26 +379,12 @@ fun SeriesScreen(
                         )
                     ) {
                         item {
-                            Surface(
+                            BrowseSearchLaunchCard(
+                                title = stringResource(R.string.series_search_launch_title),
+                                subtitle = stringResource(R.string.series_search_launch_subtitle),
                                 onClick = { onNavigate(Routes.SEARCH) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = LocalSpacing.current.md),
-                                shape = ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)),
-                                colors = ClickableSurfaceDefaults.colors(
-                                    containerColor = SurfaceElevated,
-                                    focusedContainerColor = Primary.copy(alpha = 0.2f)
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("🔍", style = MaterialTheme.typography.titleMedium)
-                                    Spacer(Modifier.width(16.dp))
-                                    Text(stringResource(R.string.search_hint), color = OnSurfaceDim, style = MaterialTheme.typography.bodyLarge)
-                                }
-                            }
+                                modifier = Modifier.padding(vertical = LocalSpacing.current.md)
+                            )
                         }
 
                         if (heroSeries != null) {
@@ -631,7 +633,7 @@ fun SeriesScreen(
                         }
 
                         LazyVerticalGrid(
-                            columns = GridCells.Adaptive(minSize = 160.dp),
+                            columns = GridCells.Adaptive(minSize = 138.dp),
                             modifier = Modifier
                                 .fillMaxSize()
                                 .onPreviewKeyEvent { event ->
@@ -647,9 +649,9 @@ fun SeriesScreen(
                                         } else false
                                     } else false
                                 },
-                            contentPadding = PaddingValues(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                            contentPadding = PaddingValues(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
                                 Column(modifier = Modifier.padding(bottom = 16.dp)) {
@@ -658,7 +660,7 @@ fun SeriesScreen(
                                             uiState.fullLibraryCategoryName -> stringResource(R.string.library_full_browse_title_series)
                                             else -> uiState.selectedCategory ?: ""
                                         },
-                                        style = MaterialTheme.typography.headlineSmall,
+                                        style = MaterialTheme.typography.titleLarge,
                                         color = Primary,
                                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                                     )
@@ -737,26 +739,15 @@ fun SeriesScreen(
 
                             if (!uiState.isReorderMode && uiState.canLoadMoreSelectedCategory) {
                                 item(span = { GridItemSpan(maxLineSpan) }) {
-                                    Surface(
-                                        onClick = viewModel::loadMoreSelectedCategory,
-                                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
-                                        colors = ClickableSurfaceDefaults.colors(
-                                            containerColor = Color.White.copy(alpha = 0.06f),
-                                            focusedContainerColor = Primary
+                                    LoadMoreCard(
+                                        label = stringResource(
+                                            R.string.library_load_more,
+                                            uiState.selectedCategoryLoadedCount,
+                                            uiState.selectedCategoryTotalCount
                                         ),
+                                        onClick = viewModel::loadMoreSelectedCategory,
                                         modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
-                                    ) {
-                                        Text(
-                                            text = stringResource(
-                                                R.string.library_load_more,
-                                                uiState.selectedCategoryLoadedCount,
-                                                uiState.selectedCategoryTotalCount
-                                            ),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)
-                                        )
-                                    }
+                                    )
                                 }
                             }
                         }
@@ -830,83 +821,18 @@ fun SeriesHeroBanner(
     series: com.streamvault.domain.model.Series,
     onClick: () -> Unit
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-
-    Surface(
+    BrowseHeroPanel(
+        title = series.name,
+        subtitle = series.plot ?: stringResource(R.string.series_library_lens_subtitle),
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(400.dp)
-            .padding(horizontal = 32.dp, vertical = 16.dp)
-            .onFocusChanged { isFocused = it.isFocused },
-        shape = ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
-        border = ClickableSurfaceDefaults.border(
-            focusedBorder = androidx.tv.material3.Border(
-                border = BorderStroke(3.dp, Color.White),
-                shape = RoundedCornerShape(8.dp)
-            )
-        )
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            AsyncImage(
-                model = series.posterUrl ?: series.backdropUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // Gradient
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f)),
-                            startY = 200f
-                        )
-                    )
-            )
-
-            // Content
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(32.dp)
-            ) {
-                Text(
-                    text = series.name,
-                    style = MaterialTheme.typography.displayMedium,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(8.dp))
-                if (!series.plot.isNullOrEmpty()) {
-                    Text(
-                        text = series.plot!!,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth(0.6f)
-                    )
-                    Spacer(Modifier.height(16.dp))
-                }
-                
-                // Play Button
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .background(if (isFocused) Primary else Color.White, androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
-                        .padding(horizontal = 24.dp, vertical = 8.dp)
-                ) {
-                    Text("▶", color = if (isFocused) Color.White else Color.Black)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.player_resume).substringBefore(" "), color = if (isFocused) Color.White else Color.Black, style = MaterialTheme.typography.titleMedium) // "Play" fallback
-                }
-            }
-        }
-    }
+        eyebrow = series.genre ?: series.categoryName,
+        imageUrl = series.backdropUrl ?: series.posterUrl,
+        metadata = listOfNotNull(
+            series.releaseDate,
+            series.rating.takeIf { it > 0f }?.let { "RTG ${String.format("%.1f", it)}" }
+        ),
+        actionLabel = stringResource(R.string.player_resume).substringBefore(" ")
+    )
 }
 
 private enum class SeriesLibraryFacet {
@@ -981,3 +907,4 @@ private fun seriesFreshnessScore(series: com.streamvault.domain.model.Series): L
             ?.toLongOrNull()
         ?: 0L
 }
+

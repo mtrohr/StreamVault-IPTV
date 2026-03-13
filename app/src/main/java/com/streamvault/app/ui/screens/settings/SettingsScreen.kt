@@ -1,4 +1,4 @@
-package com.streamvault.app.ui.screens.settings
+﻿package com.streamvault.app.ui.screens.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,7 +21,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.Switch
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
@@ -30,8 +29,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 
 import com.streamvault.app.ui.components.dialogs.PinDialog
+import com.streamvault.app.ui.components.dialogs.PremiumDialog
+import com.streamvault.app.ui.components.dialogs.PremiumDialogFooterButton
 import com.streamvault.app.ui.components.TvEmptyState
-import com.streamvault.app.ui.components.TopNavBar
+import com.streamvault.app.ui.components.shell.AppNavigationChrome
+import com.streamvault.app.ui.components.shell.AppScreenScaffold
 import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.manager.BackupConflictStrategy
 import com.streamvault.domain.model.Provider
@@ -62,15 +64,8 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
-    val activeProvider = uiState.providers.firstOrNull { it.id == uiState.activeProviderId }
     val appLanguageLabel = remember(uiState.appLanguage, context) {
-        when (uiState.appLanguage) {
-            "ar" -> "العربية"
-            "he" -> "עברית"
-            "ru" -> "Русский"
-            "en" -> "English"
-            else -> context.getString(R.string.settings_system_default)
-        }
+        displayLanguageLabel(uiState.appLanguage, context.getString(R.string.settings_system_default))
     }
     val protectionSummary = remember(uiState.parentalControlLevel, context) {
         when (uiState.parentalControlLevel) {
@@ -110,38 +105,21 @@ fun SettingsScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier.fillMaxSize()
+        AppScreenScaffold(
+            currentRoute = currentRoute,
+            onNavigate = { if (!uiState.isSyncing) onNavigate(it) },
+            title = stringResource(R.string.settings_title),
+            subtitle = stringResource(R.string.settings_providers_subtitle),
+            navigationChrome = AppNavigationChrome.TopBar,
+            compactHeader = true,
+            showScreenHeader = false
         ) {
-            TopNavBar(
-                currentRoute = currentRoute,
-                onNavigate = { if (!uiState.isSyncing) onNavigate(it) } // Block nav
-            )
-
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(32.dp),
+                contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                userScrollEnabled = !uiState.isSyncing // Block scroll
+                userScrollEnabled = !uiState.isSyncing
             ) {
-            item {
-                Text(
-                    text = stringResource(R.string.settings_title),
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = Primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-            }
-
-            item {
-                SettingsOverviewCard(
-                    activeProviderName = activeProvider?.name ?: stringResource(R.string.settings_overview_no_provider),
-                    providerCount = uiState.providers.size,
-                    protectionSummary = protectionSummary,
-                    languageLabel = appLanguageLabel
-                )
-            }
-
             // Providers section
             item {
                 SettingsSectionHeader(
@@ -192,6 +170,7 @@ fun SettingsScreen(
                         containerColor = Primary.copy(alpha = 0.15f),
                         focusedContainerColor = Primary.copy(alpha = 0.3f)
                     ),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -202,7 +181,7 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "➕  " + stringResource(R.string.settings_add_provider),
+                            text = stringResource(R.string.settings_add_provider),
                             style = MaterialTheme.typography.bodyLarge,
                             color = Primary
                         )
@@ -219,6 +198,7 @@ fun SettingsScreen(
                 )
                 ParentalControlCard(
                     level = uiState.parentalControlLevel,
+                    hasActiveProvider = uiState.activeProviderId != null,
                     onChangeLevel = { 
                         pendingAction = ParentalAction.ChangeLevel
                         showPinDialog = true
@@ -226,6 +206,9 @@ fun SettingsScreen(
                     onChangePin = {
                         pendingAction = ParentalAction.ChangePin
                         showPinDialog = true
+                    },
+                    onManageProtectedGroups = {
+                        uiState.activeProviderId?.let(onNavigateToParentalControl)
                     }
                 )
             }
@@ -245,6 +228,7 @@ fun SettingsScreen(
                         containerColor = SurfaceElevated,
                         focusedContainerColor = Primary.copy(alpha = 0.2f)
                     ),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -259,15 +243,8 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodyLarge,
                             color = OnBackground
                         )
-                        val languageName = when (uiState.appLanguage) {
-                            "ar" -> "العربية"
-                            "he" -> "עברית"
-                            "ru" -> "Русский"
-                            "en" -> "English"
-                            else -> stringResource(R.string.settings_system_default)
-                        }
                         Text(
-                            text = languageName,
+                            text = appLanguageLabel,
                             style = MaterialTheme.typography.bodyMedium,
                             color = Primary
                         )
@@ -291,10 +268,11 @@ fun SettingsScreen(
                             containerColor = SurfaceElevated,
                             focusedContainerColor = Primary.copy(alpha = 0.2f)
                         ),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(
-                            text = "💾 " + stringResource(R.string.settings_backup_data),
+                            text = stringResource(R.string.settings_backup_data),
                             style = MaterialTheme.typography.bodyLarge,
                             color = OnBackground,
                             modifier = Modifier.padding(16.dp),
@@ -309,10 +287,11 @@ fun SettingsScreen(
                             containerColor = SurfaceElevated,
                             focusedContainerColor = Primary.copy(alpha = 0.2f)
                         ),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(
-                            text = "📂 " + stringResource(R.string.settings_restore_data),
+                            text = stringResource(R.string.settings_restore_data),
                             style = MaterialTheme.typography.bodyLarge,
                             color = OnBackground,
                             modifier = Modifier.padding(16.dp),
@@ -380,8 +359,7 @@ fun SettingsScreen(
                 SettingsRow(label = stringResource(R.string.settings_developed_by), value = stringResource(R.string.settings_developer_name))
             }
         }
-    }
-
+        }
 
     SnackbarHost(
         hostState = snackbarHostState,
@@ -412,9 +390,14 @@ fun SettingsScreen(
                 ) {
                     CircularProgressIndicator(color = Primary)
                     Text(
-                        text = stringResource(R.string.settings_syncing),
-                        style = MaterialTheme.typography.bodyLarge,
+                        text = stringResource(R.string.settings_syncing_title),
+                        style = MaterialTheme.typography.titleMedium,
                         color = OnSurface
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_syncing_subtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = OnSurfaceDim
                     )
                 }
             }
@@ -627,8 +610,10 @@ private fun LevelOption(level: Int, text: String, currentLevel: Int, onSelect: (
 @Composable
 private fun ParentalControlCard(
     level: Int,
+    hasActiveProvider: Boolean,
     onChangeLevel: () -> Unit,
-    onChangePin: () -> Unit
+    onChangePin: () -> Unit,
+    onManageProtectedGroups: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -784,10 +769,21 @@ private fun ProviderSettingsCard(
         )
 
         diagnostics?.let { model ->
-            ProviderDiagnosticsPanel(
-                provider = provider,
-                diagnostics = model
+            Text(
+                text = listOf(model.sourceLabel, model.connectionSummary, model.expirySummary)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" • "),
+                style = MaterialTheme.typography.bodySmall,
+                color = OnSurface
             )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ProviderCompactStat(title = stringResource(R.string.settings_diagnostic_live), count = model.liveCount)
+                ProviderCompactStat(title = stringResource(R.string.settings_diagnostic_movies), count = model.movieCount)
+                if (provider.type == ProviderType.XTREAM_CODES) {
+                    ProviderCompactStat(title = stringResource(R.string.settings_diagnostic_series), count = model.seriesCount)
+                }
+                ProviderCompactStat(title = stringResource(R.string.settings_diagnostic_epg), count = model.epgCount)
+            }
         }
 
         if (syncWarnings.isNotEmpty()) {
@@ -860,7 +856,7 @@ private fun ProviderSettingsCard(
         }
 
         // Action buttons - each independently focusable for d-pad
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (!isActive) {
                 Surface(
                     onClick = onConnect,
@@ -869,10 +865,11 @@ private fun ProviderSettingsCard(
                         containerColor = Primary,
                         focusedContainerColor = Primary.copy(alpha = 0.8f),
                         contentColor = Color.White
-                    )
+                    ),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1f)
                 ) {
                     Text(
-                        text = "⚡ " + stringResource(R.string.settings_connect),
+                        text = stringResource(R.string.settings_connect),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color.White,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
@@ -885,10 +882,11 @@ private fun ProviderSettingsCard(
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Primary.copy(alpha = 0.2f),
                         focusedContainerColor = Primary.copy(alpha = 0.5f)
-                    )
+                    ),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1f)
                 ) {
                     Text(
-                        text = if (isSyncing) "⟳ " + stringResource(R.string.settings_syncing_btn) else "⟳ " + stringResource(R.string.settings_sync_btn),
+                        text = if (isSyncing) stringResource(R.string.settings_syncing_btn) else stringResource(R.string.settings_sync_btn),
                         style = MaterialTheme.typography.labelMedium,
                         color = Primary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
@@ -902,10 +900,11 @@ private fun ProviderSettingsCard(
                 colors = ClickableSurfaceDefaults.colors(
                     containerColor = Secondary.copy(alpha = 0.2f),
                     focusedContainerColor = Secondary.copy(alpha = 0.5f)
-                )
+                ),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f)
             ) {
                 Text(
-                    text = "✎ " + stringResource(R.string.settings_edit),
+                    text = stringResource(R.string.settings_edit),
                     style = MaterialTheme.typography.labelMedium,
                     color = Secondary,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
@@ -918,10 +917,11 @@ private fun ProviderSettingsCard(
                 colors = ClickableSurfaceDefaults.colors(
                     containerColor = ErrorColor.copy(alpha = 0.2f),
                     focusedContainerColor = ErrorColor.copy(alpha = 0.5f)
-                )
+                ),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f)
             ) {
                 Text(
-                    text = "🗑 " + stringResource(R.string.settings_delete),
+                    text = stringResource(R.string.settings_delete),
                     style = MaterialTheme.typography.labelMedium,
                     color = ErrorColor,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
@@ -935,16 +935,45 @@ private fun ProviderSettingsCard(
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Primary.copy(alpha = 0.15f),
                         focusedContainerColor = Primary.copy(alpha = 0.3f)
-                    )
+                    ),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1f)
                 ) {
                     Text(
-                        text = "🛡️ " + stringResource(R.string.settings_pc_btn),
+                        text = stringResource(R.string.settings_parental_groups_action),
                         style = MaterialTheme.typography.labelMedium,
                         color = Primary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                     )
                 }
             }
+        }
+
+    }
+}
+
+@Composable
+private fun ProviderCompactStat(
+    title: String,
+    count: Int
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        colors = SurfaceDefaults.colors(containerColor = Color.White.copy(alpha = 0.06f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                color = OnSurfaceDim
+            )
+            Text(
+                text = count.toString(),
+                style = MaterialTheme.typography.labelMedium,
+                color = OnBackground
+            )
         }
     }
 }
@@ -1044,7 +1073,7 @@ private fun ProviderDiagnosticsPanel(
             color = OnSurfaceDim
         )
         Text(
-            text = "${diagnostics.sourceLabel} • ${diagnostics.connectionSummary}",
+            text = "${diagnostics.sourceLabel} | ${diagnostics.connectionSummary}",
             style = MaterialTheme.typography.bodySmall,
             color = OnSurface
         )
@@ -1206,52 +1235,56 @@ private fun BackupImportPreviewDialog(
     onImportMultiViewChanged: (Boolean) -> Unit,
     onConfirm: () -> Unit
 ) {
-    AlertDialog(
+    PremiumDialog(
+        title = stringResource(R.string.settings_backup_preview_title),
+        subtitle = stringResource(R.string.settings_backup_preview_subtitle, preview.version),
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings_backup_preview_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = stringResource(R.string.settings_backup_preview_subtitle, preview.version),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = OnSurfaceDim
+        widthFraction = 0.58f,
+        content = {
+            BackupPreviewRow(stringResource(R.string.settings_backup_section_preferences), preview.preferenceCount, 0)
+            BackupPreviewRow(stringResource(R.string.settings_backup_section_providers), preview.providerCount, preview.providerConflicts)
+            BackupPreviewRow(stringResource(R.string.settings_backup_section_saved), preview.favoriteCount + preview.groupCount, preview.favoriteConflicts + preview.groupConflicts)
+            BackupPreviewRow(stringResource(R.string.settings_backup_section_history), preview.playbackHistoryCount, preview.historyConflicts)
+            BackupPreviewRow(stringResource(R.string.settings_backup_section_multiview), preview.multiViewPresetCount, 0)
+            Text(
+                text = stringResource(R.string.settings_backup_conflict_strategy),
+                style = MaterialTheme.typography.titleSmall,
+                color = Primary
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                BackupStrategyChip(
+                    title = stringResource(R.string.settings_backup_keep_existing),
+                    selected = plan.conflictStrategy == BackupConflictStrategy.KEEP_EXISTING,
+                    onClick = { onStrategySelected(BackupConflictStrategy.KEEP_EXISTING) }
                 )
-                BackupPreviewRow(stringResource(R.string.settings_backup_section_preferences), preview.preferenceCount, 0)
-                BackupPreviewRow(stringResource(R.string.settings_backup_section_providers), preview.providerCount, preview.providerConflicts)
-                BackupPreviewRow(stringResource(R.string.settings_backup_section_saved), preview.favoriteCount + preview.groupCount, preview.favoriteConflicts + preview.groupConflicts)
-                BackupPreviewRow(stringResource(R.string.settings_backup_section_history), preview.playbackHistoryCount, preview.historyConflicts)
-                BackupPreviewRow(stringResource(R.string.settings_backup_section_multiview), preview.multiViewPresetCount, 0)
-                Text(
-                    text = stringResource(R.string.settings_backup_conflict_strategy),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = Primary
+                BackupStrategyChip(
+                    title = stringResource(R.string.settings_backup_replace_existing),
+                    selected = plan.conflictStrategy == BackupConflictStrategy.REPLACE_EXISTING,
+                    onClick = { onStrategySelected(BackupConflictStrategy.REPLACE_EXISTING) }
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    BackupStrategyChip(
-                        title = stringResource(R.string.settings_backup_keep_existing),
-                        selected = plan.conflictStrategy == BackupConflictStrategy.KEEP_EXISTING,
-                        onClick = { onStrategySelected(BackupConflictStrategy.KEEP_EXISTING) }
-                    )
-                    BackupStrategyChip(
-                        title = stringResource(R.string.settings_backup_replace_existing),
-                        selected = plan.conflictStrategy == BackupConflictStrategy.REPLACE_EXISTING,
-                        onClick = { onStrategySelected(BackupConflictStrategy.REPLACE_EXISTING) }
-                    )
-                }
-                Text(
-                    text = stringResource(R.string.settings_backup_import_sections),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = Primary
-                )
-                BackupToggleRow(stringResource(R.string.settings_backup_section_preferences), plan.importPreferences, onImportPreferencesChanged)
-                BackupToggleRow(stringResource(R.string.settings_backup_section_providers), plan.importProviders, onImportProvidersChanged)
-                BackupToggleRow(stringResource(R.string.settings_backup_section_saved), plan.importSavedLibrary, onImportSavedLibraryChanged)
-                BackupToggleRow(stringResource(R.string.settings_backup_section_history), plan.importPlaybackHistory, onImportPlaybackHistoryChanged)
-                BackupToggleRow(stringResource(R.string.settings_backup_section_multiview), plan.importMultiViewPresets, onImportMultiViewChanged)
             }
+            Text(
+                text = stringResource(R.string.settings_backup_import_sections),
+                style = MaterialTheme.typography.titleSmall,
+                color = Primary
+            )
+            BackupToggleRow(stringResource(R.string.settings_backup_section_preferences), plan.importPreferences, onImportPreferencesChanged)
+            BackupToggleRow(stringResource(R.string.settings_backup_section_providers), plan.importProviders, onImportProvidersChanged)
+            BackupToggleRow(stringResource(R.string.settings_backup_section_saved), plan.importSavedLibrary, onImportSavedLibraryChanged)
+            BackupToggleRow(stringResource(R.string.settings_backup_section_history), plan.importPlaybackHistory, onImportPlaybackHistoryChanged)
+            BackupToggleRow(stringResource(R.string.settings_backup_section_multiview), plan.importMultiViewPresets, onImportMultiViewChanged)
         },
-        confirmButton = { Button(onClick = onConfirm) { Text(stringResource(R.string.settings_backup_import_confirm)) } },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.settings_cancel)) } }
+        footer = {
+            PremiumDialogFooterButton(
+                label = stringResource(R.string.settings_cancel),
+                onClick = onDismiss
+            )
+            PremiumDialogFooterButton(
+                label = stringResource(R.string.settings_backup_import_confirm),
+                onClick = onConfirm,
+                emphasized = true
+            )
+        }
     )
 }
 
@@ -1487,3 +1520,18 @@ private fun formatTimestamp(timestampMs: Long): String {
     if (timestampMs <= 0L) return "--:--"
     return java.text.SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(java.util.Date(timestampMs))
 }
+
+private fun displayLanguageLabel(languageTag: String, defaultLabel: String): String {
+    if (languageTag.isBlank()) return defaultLabel
+    val locale = Locale.forLanguageTag(languageTag)
+    if (locale.language.isBlank()) return defaultLabel
+    return locale.getDisplayLanguage(Locale.getDefault())
+        .replaceFirstChar { character ->
+            if (character.isLowerCase()) {
+                character.titlecase(Locale.getDefault())
+            } else {
+                character.toString()
+            }
+        }
+}
+

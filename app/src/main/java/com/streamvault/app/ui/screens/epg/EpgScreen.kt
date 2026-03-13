@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,7 +55,8 @@ import com.streamvault.app.R
 import com.streamvault.app.navigation.Routes
 import com.streamvault.app.ui.components.SelectionChip
 import com.streamvault.app.ui.components.SelectionChipRow
-import com.streamvault.app.ui.components.TopNavBar
+import com.streamvault.app.ui.components.shell.AppNavigationChrome
+import com.streamvault.app.ui.components.shell.AppScreenScaffold
 import com.streamvault.app.ui.theme.FocusBorder
 import com.streamvault.app.ui.theme.OnBackground
 import com.streamvault.app.ui.theme.OnSurface
@@ -89,6 +91,7 @@ fun FullEpgScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var selectedProgram by remember { mutableStateOf<Pair<Channel, Program>?>(null) }
+    var showAdvancedOptions by rememberSaveable { mutableStateOf(false) }
     val now = rememberGuideNow()
     val returnRoute = remember(uiState.selectedCategoryId, uiState.guideAnchorTime, uiState.showFavoritesOnly) {
         Routes.epg(
@@ -106,127 +109,136 @@ fun FullEpgScreen(
         )
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+    AppScreenScaffold(
+        currentRoute = currentRoute,
+        onNavigate = onNavigate,
+        title = stringResource(R.string.nav_epg),
+        subtitle = stringResource(R.string.guide_shell_subtitle),
+        navigationChrome = AppNavigationChrome.TopBar,
+        compactHeader = true,
+        showScreenHeader = false
     ) {
-        TopNavBar(
-            currentRoute = currentRoute,
-            onNavigate = onNavigate,
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 12.dp)
-        )
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            if (uiState.error == null) {
+                GuideFilterRow(
+                    categories = uiState.categories,
+                    selectedCategoryId = uiState.selectedCategoryId,
+                    onCategorySelected = viewModel::selectCategory
+                )
 
-        if (uiState.error == null) {
-            GuideFilterRow(
-                categories = uiState.categories,
-                selectedCategoryId = uiState.selectedCategoryId,
-                onCategorySelected = viewModel::selectCategory
-            )
+                GuideTimeControlsRow(
+                    onJumpToPreviousDay = viewModel::jumpToPreviousDay,
+                    onPageBackward = viewModel::pageBackward,
+                    onJumpBackwardHalfHour = viewModel::jumpBackwardHalfHour,
+                    onJumpBackward = viewModel::jumpBackward,
+                    onJumpToNow = viewModel::jumpToNow,
+                    onJumpForwardHalfHour = viewModel::jumpForwardHalfHour,
+                    onJumpForward = viewModel::jumpForward,
+                    onPageForward = viewModel::pageForward,
+                    onJumpToPrimeTime = viewModel::jumpToPrimeTime,
+                    onJumpToTomorrow = viewModel::jumpToTomorrow,
+                    onJumpToNextDay = viewModel::jumpToNextDay
+                )
 
-            GuideTimeControlsRow(
-                onJumpToPreviousDay = viewModel::jumpToPreviousDay,
-                onPageBackward = viewModel::pageBackward,
-                onJumpBackwardHalfHour = viewModel::jumpBackwardHalfHour,
-                onJumpBackward = viewModel::jumpBackward,
-                onJumpToNow = viewModel::jumpToNow,
-                onJumpForwardHalfHour = viewModel::jumpForwardHalfHour,
-                onJumpForward = viewModel::jumpForward,
-                onPageForward = viewModel::pageForward,
-                onJumpToPrimeTime = viewModel::jumpToPrimeTime,
-                onJumpToTomorrow = viewModel::jumpToTomorrow,
-                onJumpToNextDay = viewModel::jumpToNextDay
-            )
+                GuideDayRow(
+                    selectedDayStart = startOfDay(uiState.guideWindowStart + EpgViewModel.LOOKBACK_MS),
+                    onDaySelected = viewModel::jumpToDay
+                )
 
-            GuideDayRow(
-                selectedDayStart = startOfDay(uiState.guideWindowStart + EpgViewModel.LOOKBACK_MS),
-                onDaySelected = viewModel::jumpToDay
-            )
+                GuideOptionsToggleRow(
+                    expanded = showAdvancedOptions,
+                    onToggle = { showAdvancedOptions = !showAdvancedOptions }
+                )
 
-            GuideModeRow(
-                selectedMode = uiState.selectedChannelMode,
-                onModeSelected = viewModel::selectChannelMode
-            )
+                if (showAdvancedOptions) {
+                    GuideModeRow(
+                        selectedMode = uiState.selectedChannelMode,
+                        onModeSelected = viewModel::selectChannelMode
+                    )
 
-            GuideDensityRow(
-                selectedDensity = uiState.selectedDensity,
-                onDensitySelected = viewModel::selectDensity
-            )
+                    GuideDensityRow(
+                        selectedDensity = uiState.selectedDensity,
+                        onDensitySelected = viewModel::selectDensity
+                    )
 
-            GuideViewOptionsRow(
-                showScheduledOnly = uiState.showScheduledOnly,
-                onToggleScheduledOnly = viewModel::toggleScheduledOnly
-            )
+                    GuideViewOptionsRow(
+                        showScheduledOnly = uiState.showScheduledOnly,
+                        onToggleScheduledOnly = viewModel::toggleScheduledOnly
+                    )
 
-            GuideFavoritesRow(
-                showFavoritesOnly = uiState.showFavoritesOnly,
-                onToggleFavoritesOnly = viewModel::toggleFavoritesOnly
-            )
-
-            GuideSummaryCard(uiState = uiState)
-        }
-
-        when {
-            uiState.isLoading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(R.string.epg_loading), color = OnBackground)
+                    GuideFavoritesRow(
+                        showFavoritesOnly = uiState.showFavoritesOnly,
+                        onToggleFavoritesOnly = viewModel::toggleFavoritesOnly
+                    )
                 }
+
+                GuideSummaryCard(uiState = uiState)
             }
 
-            uiState.error != null -> {
-                GuideMessageState(
-                    title = when (uiState.error) {
-                        EpgViewModel.NO_ACTIVE_PROVIDER -> stringResource(R.string.epg_no_provider)
-                        else -> stringResource(R.string.epg_error)
-                    },
-                    subtitle = when (uiState.error) {
-                        EpgViewModel.NO_ACTIVE_PROVIDER -> null
-                        else -> stringResource(R.string.epg_retry_hint)
-                    },
-                    actionLabel = if (uiState.error == EpgViewModel.NO_ACTIVE_PROVIDER) null else stringResource(R.string.epg_retry),
-                    onAction = if (uiState.error == EpgViewModel.NO_ACTIVE_PROVIDER) null else viewModel::refresh
-                )
-            }
+            when {
+                uiState.isLoading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(stringResource(R.string.epg_loading), color = OnBackground)
+                    }
+                }
 
-            uiState.channels.isEmpty() -> {
-                GuideMessageState(
-                    title = if (uiState.selectedCategoryId == ChannelRepository.ALL_CHANNELS_ID) {
-                        if (uiState.showScheduledOnly) {
-                            stringResource(R.string.epg_no_scheduled_channels)
+                uiState.error != null -> {
+                    GuideMessageState(
+                        title = when (uiState.error) {
+                            EpgViewModel.NO_ACTIVE_PROVIDER -> stringResource(R.string.epg_no_provider)
+                            else -> stringResource(R.string.epg_error)
+                        },
+                        subtitle = when (uiState.error) {
+                            EpgViewModel.NO_ACTIVE_PROVIDER -> null
+                            else -> stringResource(R.string.epg_retry_hint)
+                        },
+                        actionLabel = if (uiState.error == EpgViewModel.NO_ACTIVE_PROVIDER) null else stringResource(R.string.epg_retry),
+                        onAction = if (uiState.error == EpgViewModel.NO_ACTIVE_PROVIDER) null else viewModel::refresh
+                    )
+                }
+
+                uiState.channels.isEmpty() -> {
+                    GuideMessageState(
+                        title = if (uiState.selectedCategoryId == ChannelRepository.ALL_CHANNELS_ID) {
+                            if (uiState.showScheduledOnly) {
+                                stringResource(R.string.epg_no_scheduled_channels)
+                            } else {
+                                stringResource(R.string.epg_no_data)
+                            }
                         } else {
-                            stringResource(R.string.epg_no_data)
-                        }
-                    } else {
-                        if (uiState.showScheduledOnly) {
-                            stringResource(R.string.epg_no_scheduled_channels)
+                            if (uiState.showScheduledOnly) {
+                                stringResource(R.string.epg_no_scheduled_channels)
+                            } else {
+                                stringResource(R.string.epg_no_channels_in_category)
+                            }
+                        },
+                        subtitle = if (uiState.showScheduledOnly) {
+                            stringResource(R.string.epg_scheduled_only_hint)
                         } else {
-                            stringResource(R.string.epg_no_channels_in_category)
-                        }
-                    },
-                    subtitle = if (uiState.showScheduledOnly) {
-                        stringResource(R.string.epg_scheduled_only_hint)
-                    } else {
-                        stringResource(R.string.epg_filter_hint)
-                    },
-                    actionLabel = stringResource(R.string.epg_retry),
-                    onAction = viewModel::refresh
-                )
-            }
+                            stringResource(R.string.epg_filter_hint)
+                        },
+                        actionLabel = stringResource(R.string.epg_retry),
+                        onAction = viewModel::refresh
+                    )
+                }
 
-            else -> {
-                EpgGrid(
-                    channels = uiState.channels,
-                    favoriteChannelIds = uiState.favoriteChannelIds,
-                    programsByChannel = uiState.programsByChannel,
-                    guideWindowStart = uiState.guideWindowStart,
-                    guideWindowEnd = uiState.guideWindowEnd,
-                    density = uiState.selectedDensity,
-                    now = now,
-                    onChannelClick = { channel -> onPlayChannel(channel, returnRoute) },
-                    onProgramClick = { channel, program -> selectedProgram = channel to program }
-                )
+                else -> {
+                    EpgGrid(
+                        channels = uiState.channels,
+                        favoriteChannelIds = uiState.favoriteChannelIds,
+                        programsByChannel = uiState.programsByChannel,
+                        guideWindowStart = uiState.guideWindowStart,
+                        guideWindowEnd = uiState.guideWindowEnd,
+                        density = uiState.selectedDensity,
+                        now = now,
+                        onChannelClick = { channel -> onPlayChannel(channel, returnRoute) },
+                        onProgramClick = { channel, program -> selectedProgram = channel to program }
+                    )
+                }
             }
         }
     }
@@ -959,6 +971,41 @@ private fun GuideShortcutChip(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
             style = MaterialTheme.typography.labelLarge
         )
+    }
+}
+
+@Composable
+private fun GuideOptionsToggleRow(
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 4.dp)
+    ) {
+        Surface(
+            onClick = onToggle,
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = SurfaceElevated,
+                focusedContainerColor = SurfaceHighlight,
+                contentColor = OnSurface,
+                focusedContentColor = OnSurface
+            ),
+            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(999.dp)),
+            border = ClickableSurfaceDefaults.border(
+                focusedBorder = Border(
+                    border = BorderStroke(2.dp, FocusBorder),
+                    shape = RoundedCornerShape(999.dp)
+                )
+            )
+        ) {
+            Text(
+                text = stringResource(if (expanded) R.string.epg_hide_options else R.string.epg_show_options),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                style = MaterialTheme.typography.labelLarge
+            )
+        }
     }
 }
 

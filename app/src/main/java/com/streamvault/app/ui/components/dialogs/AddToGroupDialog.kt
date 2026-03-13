@@ -2,6 +2,7 @@ package com.streamvault.app.ui.components.dialogs
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +24,7 @@ import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.Category
 import androidx.compose.ui.res.stringResource
 import com.streamvault.app.R
+import com.streamvault.app.ui.design.AppColors
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.shape.CircleShape
@@ -95,7 +97,7 @@ fun AddToGroupDialog(
         ) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
+                color = AppColors.SurfaceElevated,
                 modifier = Modifier
                     .width(400.dp)
                     .padding(16.dp)
@@ -110,6 +112,7 @@ fun AddToGroupDialog(
                         Text(
                             text = stringResource(R.string.add_group_manage_title, contentTitle),
                             style = MaterialTheme.typography.titleLarge,
+                            color = AppColors.TextPrimary,
                             modifier = Modifier.weight(1f)
                         )
                         IconButton(
@@ -132,25 +135,34 @@ fun AddToGroupDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .onFocusChanged { isFocused = it.isFocused }
+                                    .background(
+                                        color = if (isFocused) AppColors.Focus else Color.Transparent,
+                                        shape = CircleShape
+                                    )
                                     .border(
-                                        if (isFocused) 2.dp else 0.dp,
-                                        if (isFocused) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                                        if (isFocused) 3.dp else 0.dp,
+                                        if (isFocused) AppColors.Focus else Color.Transparent,
                                         CircleShape
                                     ),
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isFavorite) Color.Yellow else MaterialTheme.colorScheme.primary
+                                    containerColor = when {
+                                        isFocused -> AppColors.Focus
+                                        isFavorite -> AppColors.Warning
+                                        else -> AppColors.Brand
+                                    },
+                                    contentColor = Color.Black
                                 )
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Star,
                                     contentDescription = null,
-                                    tint = if (isFavorite) Color.Black else Color.White
+                                    tint = Color.Black
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = if (isFavorite) stringResource(R.string.add_group_remove_favorites)
                                     else stringResource(R.string.add_group_add_favorites),
-                                    color = if (isFavorite) Color.Black else Color.White
+                                    color = Color.Black
                                 )
                             }
                         }
@@ -164,20 +176,33 @@ fun AddToGroupDialog(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .onFocusChanged { isFocused = it.isFocused }
+                                        .background(
+                                            color = if (isFocused) AppColors.Focus else Color.Transparent,
+                                            shape = CircleShape
+                                        )
                                         .border(
-                                            if (isFocused) 2.dp else 0.dp,
-                                            if (isFocused) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                                            if (isFocused) 3.dp else 0.dp,
+                                            if (isFocused) AppColors.Focus else Color.Transparent,
                                             CircleShape
                                         ),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (isQueued) Color(0xFF1B5E20) else Color(0xFF2E7D32)
+                                    containerColor = when {
+                                        isFocused -> AppColors.Focus
+                                        isQueued -> AppColors.Success.copy(alpha = 0.8f)
+                                        else -> AppColors.Success
+                                    }
+                                )
+                            ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        tint = if (isFocused) Color.Black else Color.White
                                     )
-                                ) {
-                                    Text("🔳  ", color = Color.White)
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = if (isQueued) stringResource(R.string.multiview_queued)
                                         else stringResource(R.string.multiview_add_to_split),
-                                        color = Color.White
+                                        color = if (isFocused) Color.Black else Color.White
                                     )
                                 }
                             }
@@ -189,6 +214,7 @@ fun AddToGroupDialog(
                             Text(
                                 text = stringResource(R.string.add_group_custom_groups_title),
                                 style = MaterialTheme.typography.titleMedium,
+                                color = AppColors.TextPrimary,
                                 modifier = Modifier.padding(bottom = 8.dp)
                             )
                         }
@@ -206,6 +232,7 @@ fun AddToGroupDialog(
                                 Text(
                                     text = group.name,
                                     style = MaterialTheme.typography.bodyMedium,
+                                    color = AppColors.TextPrimary,
                                     modifier = Modifier.weight(1f)
                                 )
                                 Button(
@@ -213,17 +240,23 @@ fun AddToGroupDialog(
                                         if (isMember) onRemoveFromGroup(group) else onAddToGroup(group)
                                     },
                                     modifier = Modifier
+                                        .background(
+                                            color = if (isFocused) AppColors.Focus else Color.Transparent,
+                                            shape = CircleShape
+                                        )
                                         .onFocusChanged { isFocused = it.isFocused }
                                         .border(
-                                            if (isFocused) 2.dp else 0.dp,
-                                            if (isFocused) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                                            if (isFocused) 3.dp else 0.dp,
+                                            if (isFocused) AppColors.Focus else Color.Transparent,
                                             CircleShape
                                         ),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (isMember) MaterialTheme.colorScheme.errorContainer
-                                        else MaterialTheme.colorScheme.primaryContainer,
-                                        contentColor = if (isMember) MaterialTheme.colorScheme.onErrorContainer
-                                        else MaterialTheme.colorScheme.onPrimaryContainer
+                                        containerColor = when {
+                                            isFocused -> AppColors.Focus
+                                            isMember -> AppColors.Live.copy(alpha = 0.2f)
+                                            else -> AppColors.BrandMuted.copy(alpha = 0.4f)
+                                        },
+                                        contentColor = if (isFocused) Color.Black else AppColors.TextPrimary
                                     )
                                 ) {
                                     Text(
@@ -235,10 +268,26 @@ fun AddToGroupDialog(
                         }
 
                     item {
+                        var isFocused by remember { mutableStateOf(false) }
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedButton(
                             onClick = { showCreateGroup = true },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onFocusChanged { isFocused = it.isFocused }
+                                .background(
+                                    color = if (isFocused) AppColors.Focus else Color.Transparent,
+                                    shape = CircleShape
+                                )
+                                .border(
+                                    if (isFocused) 3.dp else 1.dp,
+                                    if (isFocused) AppColors.Focus else AppColors.BrandMuted.copy(alpha = 0.55f),
+                                    CircleShape
+                                ),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (isFocused) AppColors.Focus else Color.Transparent,
+                                contentColor = if (isFocused) Color.Black else AppColors.TextPrimary
+                            )
                         ) {
                             Icon(Icons.Default.Add, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))

@@ -20,11 +20,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,6 +33,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.tv.material3.*
+import com.streamvault.app.ui.components.shell.AppSectionHeader
+import com.streamvault.app.ui.components.shell.StatusPill
+import com.streamvault.app.ui.components.dialogs.PremiumDialog
+import com.streamvault.app.ui.design.AppColors
 import com.streamvault.app.ui.theme.*
 import androidx.compose.ui.res.stringResource
 import com.streamvault.app.R
@@ -145,6 +149,11 @@ fun ProviderSetupScreen(
     var serverUrl by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    val providerNameFocusRequester = remember { FocusRequester() }
+    val m3uUrlTabFocusRequester = remember { FocusRequester() }
+    val m3uFileTabFocusRequester = remember { FocusRequester() }
+    val m3uValueFocusRequester = remember { FocusRequester() }
+    val m3uSubmitFocusRequester = remember { FocusRequester() }
 
     // Initialize state from ViewModel if editing
     LaunchedEffect(editProviderId) {
@@ -176,155 +185,261 @@ fun ProviderSetupScreen(
                 Brush.verticalGradient(
                     colors = listOf(BackgroundDeep, Background, Surface)
                 )
-            ),
-        contentAlignment = Alignment.Center
+            )
     ) {
-        Box(
+        Row(
             modifier = Modifier
-                .width(620.dp)
-                .padding(horizontal = 32.dp, vertical = 24.dp)
-                .background(SurfaceElevated.copy(alpha = 0.94f), RoundedCornerShape(20.dp))
-                .border(1.dp, SurfaceHighlight, RoundedCornerShape(20.dp))
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.Top
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(28.dp)
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.Start,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            Surface(
+                modifier = Modifier.width(240.dp),
+                shape = RoundedCornerShape(22.dp),
+                colors = SurfaceDefaults.colors(containerColor = Surface.copy(alpha = 0.92f))
             ) {
-                Text(
-                    text = if (uiState.isEditing) stringResource(R.string.setup_edit_provider) else stringResource(R.string.setup_title_streamvault),
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = TextPrimary
-                )
-                Text(
-                    text = if (uiState.isEditing) stringResource(R.string.setup_update_desc) else stringResource(R.string.setup_add_desc),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = OnSurface
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (!uiState.isEditing || uiState.selectedTab == 0) {
-                        TabButton(stringResource(R.string.setup_xtream), selectedTab == 0) {
-                            if (!uiState.isEditing) selectedTab = 0
-                        }
-                    }
-                    if (!uiState.isEditing || uiState.selectedTab == 1) {
-                        TabButton(stringResource(R.string.setup_m3u), selectedTab == 1) {
-                            if (!uiState.isEditing) selectedTab = 1
-                        }
-                    }
-                }
-
-                TvTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = stringResource(R.string.setup_name_hint)
-                )
-
-                when (selectedTab) {
-                    0 -> {
-                        TvTextField(
-                            value = serverUrl,
-                            onValueChange = { serverUrl = it },
-                            label = stringResource(R.string.setup_server_hint)
-                        )
-                        TvTextField(
-                            value = username,
-                            onValueChange = { username = it },
-                            label = stringResource(R.string.setup_user_hint)
-                        )
-                        TvTextField(
-                            value = password,
-                            onValueChange = { password = it },
-                            label = stringResource(R.string.setup_pass_hint),
-                            isPassword = true
-                        )
-
-                        ActionButton(
-                            text = if (uiState.isLoading) {
-                                stringResource(R.string.setup_connecting)
-                            } else if (uiState.isEditing) {
-                                stringResource(R.string.setup_save)
-                            } else {
-                                stringResource(R.string.setup_login)
-                            },
-                            enabled = !uiState.isLoading,
-                            onClick = {
-                                viewModel.loginXtream(serverUrl, username, password, name)
-                            }
-                        )
-                    }
-                    1 -> {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        ) {
-                            TabButton(
-                                text = stringResource(R.string.setup_tab_url),
-                                isSelected = uiState.m3uTab == 0,
-                                onClick = { viewModel.updateM3uTab(0) }
-                            )
-                            TabButton(
-                                text = stringResource(R.string.setup_tab_file),
-                                isSelected = uiState.m3uTab == 1,
-                                onClick = { viewModel.updateM3uTab(1) }
-                            )
-                        }
-
-                        if (uiState.m3uTab == 0) {
-                            TvTextField(
-                                value = m3uUrl,
-                                onValueChange = { m3uUrl = it },
-                                label = stringResource(R.string.setup_m3u_hint)
-                            )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = if (uiState.isEditing) {
+                            stringResource(R.string.setup_edit_provider)
                         } else {
-                            FileSelectorCard(
-                                fileName = if (m3uUrl.startsWith("file://")) m3uUrl.substringAfterLast("/") else null,
-                                fileSelectedHint = stringResource(R.string.setup_file_replace_hint),
-                                emptySelectionTitle = stringResource(R.string.setup_file_select_title),
-                                emptySelectionHint = stringResource(R.string.setup_file_browse_hint),
-                                onClick = { filePickerLauncher.launch(arrayOf("*/*")) }
+                            stringResource(R.string.setup_provider_title)
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimary
+                    )
+
+                    Text(
+                        text = stringResource(R.string.setup_shell_subtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = OnSurfaceDim
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StatusPill(
+                            label = stringResource(R.string.setup_xtream),
+                            containerColor = AppColors.BrandMuted
+                        )
+                        StatusPill(
+                            label = stringResource(R.string.setup_m3u),
+                            containerColor = AppColors.SurfaceEmphasis
+                        )
+                    }
+
+                    SetupInfoLine(
+                        title = stringResource(R.string.setup_info_xtream_title),
+                        body = stringResource(R.string.setup_info_xtream_body)
+                    )
+                    SetupInfoLine(
+                        title = stringResource(R.string.setup_info_m3u_title),
+                        body = stringResource(R.string.setup_info_m3u_body)
+                    )
+                    SetupInfoLine(
+                        title = stringResource(R.string.setup_info_manage_title),
+                        body = stringResource(R.string.setup_info_manage_body)
+                    )
+                }
+            }
+
+            Surface(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(22.dp),
+                border = Border(
+                    border = BorderStroke(1.dp, SurfaceHighlight),
+                    shape = RoundedCornerShape(22.dp)
+                ),
+                colors = SurfaceDefaults.colors(containerColor = SurfaceElevated.copy(alpha = 0.95f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp)
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.Start,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AppSectionHeader(
+                        title = if (uiState.isEditing) {
+                            stringResource(R.string.setup_edit_provider)
+                        } else {
+                            stringResource(R.string.setup_add_desc)
+                        },
+                        subtitle = if (uiState.isEditing) {
+                            stringResource(R.string.setup_update_desc)
+                        } else {
+                            stringResource(R.string.setup_form_subtitle)
+                        }
+                    )
+
+                    Text(
+                        text = stringResource(R.string.setup_source_type_label),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = AppColors.TextTertiary
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (!uiState.isEditing || uiState.selectedTab == 0) {
+                            TabButton(
+                                text = stringResource(R.string.setup_xtream),
+                                isSelected = selectedTab == 0,
+                                onClick = { if (!uiState.isEditing) selectedTab = 0 }
                             )
-                            fileImportError?.let { importError ->
-                                Text(
-                                    text = importError,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = ErrorColor
+                        }
+                        if (!uiState.isEditing || uiState.selectedTab == 1) {
+                            TabButton(
+                                text = stringResource(R.string.setup_m3u),
+                                isSelected = selectedTab == 1,
+                                onClick = { if (!uiState.isEditing) selectedTab = 1 }
+                            )
+                        }
+                    }
+
+                    TvTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = stringResource(R.string.setup_name_hint),
+                        focusRequester = providerNameFocusRequester,
+                        onMoveDown = {
+                            if (selectedTab == 1) {
+                                if (uiState.m3uTab == 0) {
+                                    m3uUrlTabFocusRequester.requestFocus()
+                                } else {
+                                    m3uFileTabFocusRequester.requestFocus()
+                                }
+                            }
+                        }
+                    )
+
+                    when (selectedTab) {
+                        0 -> {
+                            TvTextField(
+                                value = serverUrl,
+                                onValueChange = { serverUrl = it },
+                                label = stringResource(R.string.setup_server_hint)
+                            )
+                            TvTextField(
+                                value = username,
+                                onValueChange = { username = it },
+                                label = stringResource(R.string.setup_user_hint)
+                            )
+                            TvTextField(
+                                value = password,
+                                onValueChange = { password = it },
+                                label = stringResource(R.string.setup_pass_hint),
+                                isPassword = true
+                            )
+
+                            ActionButton(
+                                text = if (uiState.isLoading) {
+                                    stringResource(R.string.setup_connecting)
+                                } else if (uiState.isEditing) {
+                                    stringResource(R.string.setup_save)
+                                } else {
+                                    stringResource(R.string.setup_login)
+                                },
+                                enabled = !uiState.isLoading,
+                                onClick = {
+                                    viewModel.loginXtream(serverUrl, username, password, name)
+                                }
+                            )
+                        }
+
+                        1 -> {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                TabButton(
+                                    text = stringResource(R.string.setup_tab_url),
+                                    isSelected = uiState.m3uTab == 0,
+                                    onClick = { viewModel.updateM3uTab(0) },
+                                    onFocused = { viewModel.updateM3uTab(0) },
+                                    focusRequester = m3uUrlTabFocusRequester,
+                                    onMoveUp = { providerNameFocusRequester.requestFocus() },
+                                    onMoveDown = { m3uValueFocusRequester.requestFocus() }
+                                )
+                                TabButton(
+                                    text = stringResource(R.string.setup_tab_file),
+                                    isSelected = uiState.m3uTab == 1,
+                                    onClick = { viewModel.updateM3uTab(1) },
+                                    onFocused = { viewModel.updateM3uTab(1) },
+                                    focusRequester = m3uFileTabFocusRequester,
+                                    onMoveUp = { providerNameFocusRequester.requestFocus() },
+                                    onMoveDown = { m3uValueFocusRequester.requestFocus() }
                                 )
                             }
-                        }
 
-                        ActionButton(
-                            text = if (uiState.isLoading) {
-                                stringResource(R.string.setup_validating)
-                            } else if (uiState.isEditing) {
-                                stringResource(R.string.setup_save)
+                            if (uiState.m3uTab == 0) {
+                                TvTextField(
+                                    value = m3uUrl,
+                                    onValueChange = { m3uUrl = it },
+                                    label = stringResource(R.string.setup_m3u_hint),
+                                    focusRequester = m3uValueFocusRequester,
+                                    onMoveUp = { m3uUrlTabFocusRequester.requestFocus() },
+                                    onMoveDown = { m3uSubmitFocusRequester.requestFocus() }
+                                )
                             } else {
-                                stringResource(R.string.setup_add)
-                            },
-                            enabled = !uiState.isLoading,
-                            onClick = { viewModel.addM3u(m3uUrl, name) }
+                                FileSelectorCard(
+                                    fileName = if (m3uUrl.startsWith("file://")) {
+                                        m3uUrl.substringAfterLast("/")
+                                    } else {
+                                        null
+                                    },
+                                    fileSelectedHint = stringResource(R.string.setup_file_replace_hint),
+                                    emptySelectionTitle = stringResource(R.string.setup_file_select_title),
+                                    emptySelectionHint = stringResource(R.string.setup_file_browse_hint),
+                                    onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
+                                    focusRequester = m3uValueFocusRequester,
+                                    onMoveUp = { m3uFileTabFocusRequester.requestFocus() },
+                                    onMoveDown = { m3uSubmitFocusRequester.requestFocus() }
+                                )
+
+                                fileImportError?.let { importError ->
+                                    Text(
+                                        text = importError,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = ErrorColor
+                                    )
+                                }
+                            }
+
+                            ActionButton(
+                                text = if (uiState.isLoading) {
+                                    stringResource(R.string.setup_validating)
+                                } else if (uiState.isEditing) {
+                                    stringResource(R.string.setup_save)
+                                } else {
+                                    stringResource(R.string.setup_add)
+                                },
+                                enabled = !uiState.isLoading,
+                                onClick = { viewModel.addM3u(m3uUrl, name) },
+                                focusRequester = m3uSubmitFocusRequester,
+                                onMoveUp = { m3uValueFocusRequester.requestFocus() }
+                            )
+                        }
+                    }
+
+                    uiState.validationError?.let { error ->
+                        Text(
+                            text = error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ErrorColor
                         )
                     }
-                }
 
-                uiState.validationError?.let { error ->
-                    Text(
-                        text = error,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ErrorColor
-                    )
-                }
-
-                uiState.error?.let { error ->
-                    Text(
-                        text = error,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ErrorColor
-                    )
+                    uiState.error?.let { error ->
+                        Text(
+                            text = error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ErrorColor
+                        )
+                    }
                 }
             }
         }
@@ -336,28 +451,51 @@ fun ProviderSetupScreen(
 }
 
 @Composable
+private fun SetupInfoLine(
+    title: String,
+    body: String
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = TextPrimary
+        )
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodySmall,
+            color = OnSurfaceDim
+        )
+    }
+}
+
+@Composable
 fun SyncProgressDialog(message: String) {
-    Dialog(onDismissRequest = {}) {
-        androidx.compose.material3.Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.width(300.dp).padding(16.dp)
-        ) {
+    PremiumDialog(
+        title = stringResource(R.string.settings_syncing_title),
+        subtitle = stringResource(R.string.settings_syncing_subtitle),
+        onDismissRequest = {},
+        widthFraction = 0.32f,
+        content = {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                CircularProgressIndicator(color = AppColors.Brand)
+                StatusPill(
+                    label = stringResource(R.string.settings_syncing_btn),
+                    containerColor = AppColors.BrandMuted
+                )
                 Text(
                     text = message,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OnBackground,
                     textAlign = TextAlign.Center
                 )
             }
         }
-    }
+    )
 }
 
 @Composable
@@ -366,10 +504,13 @@ private fun TvTextField(
     onValueChange: (String) -> Unit,
     label: String,
     isPassword: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    val internalFocusRequester = focusRequester ?: remember { FocusRequester() }
 
     val borderColor = if (isFocused) Primary else SurfaceHighlight
     val bgColor = if (isFocused) Surface else SurfaceElevated
@@ -382,7 +523,7 @@ private fun TvTextField(
             .height(52.dp)
             .background(bgColor, RoundedCornerShape(8.dp))
             .border(borderWidth, borderColor, RoundedCornerShape(8.dp))
-            .clickable { focusRequester.requestFocus() }
+            .clickable { internalFocusRequester.requestFocus() }
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -390,7 +531,7 @@ private fun TvTextField(
         if (value.isEmpty() && !isFocused) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = OnSurfaceDim
             )
         }
@@ -400,11 +541,24 @@ private fun TvTextField(
             onValueChange = onValueChange,
             modifier = Modifier
                 .fillMaxWidth()
-                .focusRequester(focusRequester)
-                .onFocusChanged { isFocused = it.isFocused },
-            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                color = OnBackground
-            ),
+                .focusRequester(internalFocusRequester)
+                .onFocusChanged { isFocused = it.isFocused }
+                .onPreviewKeyEvent { event ->
+                    if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN) {
+                        when (event.nativeKeyEvent.keyCode) {
+                            android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                                onMoveUp?.invoke()
+                                onMoveUp != null
+                            }
+                            android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                                onMoveDown?.invoke()
+                                onMoveDown != null
+                            }
+                            else -> false
+                        }
+                    } else false
+                },
+            textStyle = MaterialTheme.typography.bodySmall.copy(color = OnBackground),
             singleLine = true,
             visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
             cursorBrush = androidx.compose.ui.graphics.SolidColor(Primary)
@@ -416,9 +570,12 @@ private fun TvTextField(
 private fun ActionButton(
     text: String,
     enabled: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+    onMoveUp: (() -> Unit)? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val internalFocusRequester = focusRequester ?: remember { FocusRequester() }
 
     val scale by animateFloatAsState(
         targetValue = if (isFocused) 1.05f else 1f,
@@ -432,7 +589,17 @@ private fun ActionButton(
             .fillMaxWidth()
             .height(52.dp)
             .scale(scale)
-            .onFocusChanged { isFocused = it.isFocused },
+            .focusRequester(internalFocusRequester)
+            .onFocusChanged { isFocused = it.isFocused }
+            .onPreviewKeyEvent { event ->
+                if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN &&
+                    event.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_UP &&
+                    onMoveUp != null
+                ) {
+                    onMoveUp()
+                    true
+                } else false
+            },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (enabled) Primary else SurfaceHighlight,
@@ -446,7 +613,7 @@ private fun ActionButton(
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Text(
                 text = text,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = if (enabled) Color.White else OnSurfaceDim
             )
         }
@@ -459,9 +626,13 @@ private fun FileSelectorCard(
     fileSelectedHint: String,
     emptySelectionTitle: String,
     emptySelectionHint: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val internalFocusRequester = focusRequester ?: remember { FocusRequester() }
 
     val borderColor = if (isFocused) Primary else SurfaceHighlight
     val bgColor = if (isFocused) Surface else SurfaceElevated
@@ -472,7 +643,23 @@ private fun FileSelectorCard(
         modifier = Modifier
             .fillMaxWidth()
             .height(80.dp)
-            .onFocusChanged { isFocused = it.isFocused },
+            .focusRequester(internalFocusRequester)
+            .onFocusChanged { isFocused = it.isFocused }
+            .onPreviewKeyEvent { event ->
+                if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN) {
+                    when (event.nativeKeyEvent.keyCode) {
+                        android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                            onMoveUp?.invoke()
+                            onMoveUp != null
+                        }
+                        android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                            onMoveDown?.invoke()
+                            onMoveDown != null
+                        }
+                        else -> false
+                    }
+                } else false
+            },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
         border = ClickableSurfaceDefaults.border(
             border = Border(BorderStroke(borderWidth, borderColor)),
@@ -520,13 +707,38 @@ private fun FileSelectorCard(
 private fun TabButton(
     text: String,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onFocused: (() -> Unit)? = null,
+    focusRequester: FocusRequester? = null,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val internalFocusRequester = focusRequester ?: remember { FocusRequester() }
 
     Surface(
         onClick = onClick,
-        modifier = Modifier.onFocusChanged { isFocused = it.isFocused },
+        modifier = Modifier
+            .focusRequester(internalFocusRequester)
+            .onFocusChanged {
+                isFocused = it.isFocused
+                if (it.isFocused) onFocused?.invoke()
+            }
+            .onPreviewKeyEvent { event ->
+                if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN) {
+                    when (event.nativeKeyEvent.keyCode) {
+                        android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                            onMoveUp?.invoke()
+                            onMoveUp != null
+                        }
+                        android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                            onMoveDown?.invoke()
+                            onMoveDown != null
+                        }
+                        else -> false
+                    }
+                } else false
+            },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (isSelected) Primary.copy(alpha = 0.2f) else Surface,
@@ -539,7 +751,7 @@ private fun TabButton(
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodySmall,
             color = if (isSelected) Primary else if (isFocused) TextPrimary else OnSurface,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp)
         )

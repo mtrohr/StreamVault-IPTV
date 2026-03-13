@@ -1,4 +1,4 @@
-package com.streamvault.app.ui.screens.dashboard
+﻿package com.streamvault.app.ui.screens.dashboard
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -45,7 +45,11 @@ import com.streamvault.app.ui.components.ChannelCard
 import com.streamvault.app.ui.components.ContinueWatchingRow
 import com.streamvault.app.ui.components.MovieCard
 import com.streamvault.app.ui.components.SeriesCard
-import com.streamvault.app.ui.components.TopNavBar
+import com.streamvault.app.ui.components.shell.AppNavigationChrome
+import com.streamvault.app.ui.components.shell.AppHeroHeader
+import com.streamvault.app.ui.components.shell.AppScreenScaffold
+import com.streamvault.app.ui.components.shell.StatusPill
+import com.streamvault.app.ui.design.AppColors
 import com.streamvault.app.ui.theme.FocusBorder
 import com.streamvault.app.ui.theme.OnBackground
 import com.streamvault.app.ui.theme.OnSurfaceDim
@@ -76,65 +80,30 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val provider = uiState.provider
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopNavBar(
-            currentRoute = currentRoute,
-            onNavigate = onNavigate,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        val provider = uiState.provider
+    AppScreenScaffold(
+        currentRoute = currentRoute,
+        onNavigate = onNavigate,
+        title = stringResource(R.string.nav_home),
+        subtitle = provider?.name,
+        navigationChrome = AppNavigationChrome.TopBar,
+        compactHeader = true,
+        showScreenHeader = false
+    ) {
         if (provider == null) {
             EmptyDashboard(
                 onAddProvider = onAddProvider,
                 onOpenSettings = { onNavigate(Routes.SETTINGS) }
             )
-            return@Column
+            return@AppScreenScaffold
         }
         val orderedSections = rememberDashboardSections(uiState)
 
         androidx.compose.foundation.lazy.LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 40.dp)
+            contentPadding = PaddingValues(bottom = 28.dp)
         ) {
-            item {
-                DashboardHero(
-                    providerName = provider.name,
-                    feature = uiState.feature,
-                    stats = uiState.stats,
-                    onOpenLiveTv = { onNavigate(Routes.LIVE_TV) },
-                    onOpenGuide = { onNavigate(Routes.EPG) },
-                    onOpenSearch = { onNavigate(Routes.SEARCH) },
-                    onOpenSavedLibrary = { onNavigate(Routes.FAVORITES) },
-                    onFeatureAction = {
-                        when (uiState.feature.actionType) {
-                            DashboardFeatureAction.LIVE -> onNavigate(Routes.LIVE_TV)
-                            DashboardFeatureAction.CONTINUE_WATCHING -> uiState.continueWatching.firstOrNull()?.let(onPlaybackHistoryClick)
-                            DashboardFeatureAction.MOVIES -> onNavigate(Routes.MOVIES)
-                            DashboardFeatureAction.SERIES -> onNavigate(Routes.SERIES)
-                        }
-                    }
-                )
-            }
-
-            item {
-                DashboardProviderHealthCard(
-                    providerName = provider.name,
-                    health = uiState.providerHealth,
-                    onOpenDiagnostics = { onNavigate(Routes.SETTINGS) }
-                )
-            }
-
-            if (uiState.providerWarnings.isNotEmpty()) {
-                item {
-                    DashboardProviderWarningCard(
-                        warnings = uiState.providerWarnings,
-                        onOpenSettings = { onNavigate(Routes.SETTINGS) }
-                    )
-                }
-            }
-
             items(orderedSections, key = { it.name }) { section ->
                 when (section) {
                     DashboardHomeSection.LIVE_SHORTCUTS -> DashboardShortcutRow(
@@ -148,16 +117,12 @@ fun DashboardScreen(
                         }
                     )
 
-                    DashboardHomeSection.FAVORITE_CHANNELS -> CategoryRow(
+                    DashboardHomeSection.FAVORITE_CHANNELS -> FavoriteChannelsRow(
                         title = stringResource(R.string.dashboard_favorite_channels),
-                        items = uiState.favoriteChannels,
-                        onSeeAll = { onNavigate(Routes.liveTv(com.streamvault.domain.model.VirtualCategoryIds.FAVORITES)) }
-                    ) { channel ->
-                        ChannelCard(
-                            channel = channel,
-                            onClick = { onChannelClick(channel) }
-                        )
-                    }
+                        channels = uiState.favoriteChannels,
+                        onSeeAll = { onNavigate(Routes.liveTv(com.streamvault.domain.model.VirtualCategoryIds.FAVORITES)) },
+                        onChannelClick = onChannelClick
+                    )
 
                     DashboardHomeSection.RECENT_CHANNELS -> CategoryRow(
                         title = stringResource(R.string.dashboard_recent_channels),
@@ -199,6 +164,7 @@ fun DashboardScreen(
                     }
                 }
             }
+
         }
     }
 }
@@ -214,121 +180,68 @@ private fun DashboardHero(
     onOpenSavedLibrary: () -> Unit,
     onFeatureAction: () -> Unit
 ) {
-    Surface(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 48.dp, vertical = 24.dp),
-        shape = RoundedCornerShape(28.dp),
-        colors = SurfaceDefaults.colors(
-            containerColor = SurfaceElevated
-        )
+            .padding(horizontal = 24.dp, vertical = 8.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(380.dp)
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color(0xFF07111F),
-                            Color(0xFF0B2240),
-                            Color(0xFF111827)
+        if (!feature.artworkUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = feature.artworkUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .clip(RoundedCornerShape(28.dp))
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.88f),
+                                Color.Black.copy(alpha = 0.72f),
+                                Color.Black.copy(alpha = 0.34f)
+                            )
                         )
                     )
-                )
-        ) {
-            if (!feature.artworkUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = feature.artworkUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(28.dp))
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color.Black.copy(alpha = 0.84f),
-                                    Color.Black.copy(alpha = 0.68f),
-                                    Color.Black.copy(alpha = 0.28f)
-                                )
-                            )
-                        )
-                )
-            }
+            )
+        }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 32.dp, vertical = 28.dp),
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = stringResource(R.string.dashboard_title),
-                            style = MaterialTheme.typography.displaySmall,
-                            color = TextPrimary
-                        )
-                        Text(
-                            text = stringResource(R.string.dashboard_subtitle, providerName),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = OnSurfaceDim
-                        )
+        AppHeroHeader(
+            eyebrow = providerName,
+            title = feature.title.ifBlank { stringResource(R.string.dashboard_title) },
+            subtitle = feature.summary.ifBlank { stringResource(R.string.dashboard_subtitle, providerName) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp),
+            footer = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StatusPill(label = stringResource(R.string.nav_live_tv), containerColor = AppColors.BrandMuted)
+                        StatusPill(label = stringResource(R.string.nav_epg), containerColor = AppColors.SurfaceEmphasis)
+                        StatusPill(label = stringResource(R.string.favorites_title), containerColor = AppColors.Warning, contentColor = Color.Black)
                     }
-
                     DashboardStatRow(stats = stats)
                 }
-
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = feature.title,
-                            style = MaterialTheme.typography.headlineLarge,
-                            color = TextPrimary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = feature.summary,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = TextTertiary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        DashboardActionButton(
-                            label = stringResource(R.string.nav_live_tv),
-                            onClick = onOpenLiveTv
-                        )
-                        DashboardActionButton(
-                            label = stringResource(R.string.nav_epg),
-                            onClick = onOpenGuide
-                        )
-                        DashboardActionButton(
-                            label = stringResource(R.string.dashboard_search_library),
-                            onClick = onOpenSearch
-                        )
-                        DashboardActionButton(
-                            label = stringResource(R.string.favorites_title),
-                            onClick = onOpenSavedLibrary
-                        )
-                        if (feature.actionLabel.isNotBlank()) {
-                            DashboardActionButton(
-                                label = feature.actionLabel,
-                                onClick = onFeatureAction
-                            )
-                        }
-                    }
+            },
+            actions = {
+                DashboardActionButton(label = stringResource(R.string.nav_live_tv), onClick = onOpenLiveTv)
+                DashboardActionButton(label = stringResource(R.string.nav_epg), onClick = onOpenGuide)
+                DashboardActionButton(label = stringResource(R.string.dashboard_search_library), onClick = onOpenSearch)
+                DashboardActionButton(label = stringResource(R.string.favorites_title), onClick = onOpenSavedLibrary)
+                if (feature.actionLabel.isNotBlank()) {
+                    DashboardActionButton(
+                        label = feature.actionLabel,
+                        onClick = onFeatureAction
+                    )
                 }
             }
-        }
+        )
     }
 }
 
@@ -350,7 +263,7 @@ private fun DashboardStatRow(
             Surface(
                 shape = RoundedCornerShape(999.dp),
                 colors = SurfaceDefaults.colors(
-                    containerColor = Color.White.copy(alpha = 0.08f)
+                    containerColor = AppColors.Surface.copy(alpha = 0.64f)
                 )
             ) {
                 Text(
@@ -374,27 +287,27 @@ private fun DashboardShortcutRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp)
+            .padding(top = 4.dp)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 48.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 color = TextPrimary
             )
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = OnSurfaceDim
             )
         }
 
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 48.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+            contentPadding = PaddingValues(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(shortcuts, key = { "${it.type}:${it.categoryId}:${it.label}" }) { shortcut ->
                 DashboardShortcutCard(
@@ -421,9 +334,9 @@ private fun DashboardShortcutCard(
     Surface(
         onClick = onClick,
         modifier = Modifier
-            .width(220.dp)
-            .height(108.dp),
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(18.dp)),
+            .width(170.dp)
+            .height(76.dp),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = SurfaceElevated,
             focusedContainerColor = SurfaceHighlight
@@ -431,18 +344,18 @@ private fun DashboardShortcutCard(
         border = ClickableSurfaceDefaults.border(
             border = Border(
                 border = BorderStroke(1.dp, accentColor.copy(alpha = 0.28f)),
-                shape = RoundedCornerShape(18.dp)
+                shape = RoundedCornerShape(16.dp)
             ),
             focusedBorder = Border(
                 border = BorderStroke(2.dp, FocusBorder),
-                shape = RoundedCornerShape(18.dp)
+                shape = RoundedCornerShape(16.dp)
             )
         )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
@@ -457,7 +370,7 @@ private fun DashboardShortcutCard(
                 )
                 Text(
                     text = shortcut.label,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -465,7 +378,7 @@ private fun DashboardShortcutCard(
             }
             Text(
                 text = shortcut.detail,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = OnSurfaceDim,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -497,19 +410,20 @@ private fun DashboardProviderHealthCard(
     health: DashboardProviderHealth,
     onOpenDiagnostics: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val syncLabel = remember(health.lastSyncedAt) {
         if (health.lastSyncedAt <= 0L) {
-            "No recent sync"
+            context.getString(R.string.dashboard_provider_no_sync)
         } else {
             val format = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
-            "Synced ${format.format(Date(health.lastSyncedAt))}"
+            context.getString(R.string.dashboard_provider_synced_at, format.format(Date(health.lastSyncedAt)))
         }
     }
     val expiryLabel = remember(health.expirationDate) {
         health.expirationDate?.let {
             val format = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
-            "Expires ${format.format(Date(it))}"
-        } ?: "No expiry reported"
+            context.getString(R.string.dashboard_provider_expires_at, format.format(Date(it)))
+        } ?: context.getString(R.string.dashboard_provider_no_expiry)
     }
     val statusLabel = when (health.status) {
         com.streamvault.domain.model.ProviderStatus.ACTIVE -> stringResource(R.string.settings_status_active)
@@ -553,7 +467,7 @@ private fun DashboardProviderHealthCard(
                     color = OnSurfaceDim
                 )
                 Text(
-                    text = "$syncLabel • $expiryLabel",
+                    text = "$syncLabel | $expiryLabel",
                     style = MaterialTheme.typography.bodySmall,
                     color = OnSurfaceDim
                 )
@@ -722,40 +636,14 @@ private fun rememberDashboardSections(
         uiState.recentMovies,
         uiState.recentSeries
     ) {
-        val preferred = when (uiState.feature.actionType) {
-            DashboardFeatureAction.CONTINUE_WATCHING -> listOf(
-                DashboardHomeSection.CONTINUE_WATCHING,
-                DashboardHomeSection.RECENT_CHANNELS,
-                DashboardHomeSection.FAVORITE_CHANNELS,
-                DashboardHomeSection.RECENT_MOVIES,
-                DashboardHomeSection.RECENT_SERIES,
-                DashboardHomeSection.LIVE_SHORTCUTS
-            )
-            DashboardFeatureAction.MOVIES -> listOf(
-                DashboardHomeSection.RECENT_MOVIES,
-                DashboardHomeSection.CONTINUE_WATCHING,
-                DashboardHomeSection.RECENT_SERIES,
-                DashboardHomeSection.RECENT_CHANNELS,
-                DashboardHomeSection.FAVORITE_CHANNELS,
-                DashboardHomeSection.LIVE_SHORTCUTS
-            )
-            DashboardFeatureAction.SERIES -> listOf(
-                DashboardHomeSection.RECENT_SERIES,
-                DashboardHomeSection.CONTINUE_WATCHING,
-                DashboardHomeSection.RECENT_MOVIES,
-                DashboardHomeSection.RECENT_CHANNELS,
-                DashboardHomeSection.FAVORITE_CHANNELS,
-                DashboardHomeSection.LIVE_SHORTCUTS
-            )
-            DashboardFeatureAction.LIVE -> listOf(
-                DashboardHomeSection.RECENT_CHANNELS,
-                DashboardHomeSection.FAVORITE_CHANNELS,
-                DashboardHomeSection.LIVE_SHORTCUTS,
-                DashboardHomeSection.CONTINUE_WATCHING,
-                DashboardHomeSection.RECENT_MOVIES,
-                DashboardHomeSection.RECENT_SERIES
-            )
-        }
+        val preferred = listOf(
+            DashboardHomeSection.FAVORITE_CHANNELS,
+            DashboardHomeSection.CONTINUE_WATCHING,
+            DashboardHomeSection.RECENT_MOVIES,
+            DashboardHomeSection.RECENT_SERIES,
+            DashboardHomeSection.LIVE_SHORTCUTS,
+            DashboardHomeSection.RECENT_CHANNELS
+        )
 
         preferred.filter { section ->
             when (section) {
@@ -778,3 +666,118 @@ private enum class DashboardHomeSection {
     RECENT_MOVIES,
     RECENT_SERIES
 }
+
+@Composable
+private fun FavoriteChannelsRow(
+    title: String,
+    channels: List<Channel>,
+    onSeeAll: () -> Unit,
+    onChannelClick: (Channel) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary
+            )
+            Surface(
+                onClick = onSeeAll,
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(999.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Primary.copy(alpha = 0.12f),
+                    focusedContainerColor = Primary.copy(alpha = 0.22f),
+                    contentColor = TextTertiary
+                )
+            ) {
+                Text(
+                    text = stringResource(R.string.category_see_all),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
+        }
+
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(channels, key = { it.id }) { channel ->
+                FavoriteChannelLogoCard(
+                    channel = channel,
+                    onClick = { onChannelClick(channel) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FavoriteChannelLogoCard(
+    channel: Channel,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.width(86.dp),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(18.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = SurfaceElevated,
+            focusedContainerColor = SurfaceHighlight
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, FocusBorder),
+                shape = RoundedCornerShape(18.dp)
+            )
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(AppColors.SurfaceEmphasis),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!channel.logoUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = channel.logoUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(8.dp)
+                    )
+                } else {
+                    Text(
+                        text = channel.name.take(2).uppercase(),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TextPrimary
+                    )
+                }
+            }
+
+            Text(
+                text = channel.name,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+

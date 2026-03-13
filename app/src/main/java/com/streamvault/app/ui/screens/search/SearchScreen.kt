@@ -6,24 +6,22 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -35,6 +33,9 @@ import com.streamvault.app.ui.components.ChannelCard
 import com.streamvault.app.ui.components.MovieCard
 import com.streamvault.app.ui.components.SeriesCard
 import com.streamvault.app.ui.components.TvEmptyState
+import com.streamvault.app.ui.components.shell.AppNavigationChrome
+import com.streamvault.app.ui.components.shell.AppScreenScaffold
+import com.streamvault.app.ui.design.AppColors
 import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.Movie
@@ -195,6 +196,8 @@ fun SearchScreen(
     onChannelClick: (Channel) -> Unit,
     onMovieClick: (Movie) -> Unit,
     onSeriesClick: (Series) -> Unit,
+    onNavigate: (String) -> Unit,
+    currentRoute: String,
     viewModel: SearchViewModel = hiltViewModel()
 ) {
     val query by viewModel.query.collectAsState()
@@ -250,18 +253,38 @@ fun SearchScreen(
         )
     }
 
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        horizontalArrangement = Arrangement.spacedBy(32.dp)
+    AppScreenScaffold(
+        currentRoute = currentRoute,
+        onNavigate = onNavigate,
+        title = stringResource(R.string.search_title),
+        subtitle = stringResource(R.string.search_screen_subtitle),
+        navigationChrome = AppNavigationChrome.TopBar,
+        compactHeader = true,
+        showScreenHeader = false
     ) {
-        // Left Side: Keyboard & Filters
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(bottom = 24.dp)
         ) {
-            // Real Search Input triggering system keyboard
+            item {
+                Text(
+                    text = stringResource(R.string.search_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = AppColors.TextPrimary
+                )
+            }
+
+            item {
+                Text(
+                    text = stringResource(R.string.search_command_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppColors.TextSecondary,
+                    modifier = Modifier.widthIn(max = 640.dp)
+                )
+            }
+
+            item {
             SearchInput(
                 value = query,
                 onValueChange = { viewModel.onQueryChange(it) },
@@ -271,175 +294,179 @@ fun SearchScreen(
                     viewModel.onSearchSubmitted()
                     focusManager.clearFocus()
                 },
-                modifier = Modifier.padding(bottom = 0.dp)
+                modifier = Modifier.widthIn(max = 620.dp)
             )
-
-            androidx.compose.foundation.lazy.LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(SearchTab.values().toList()) { tab ->
-                    FilterChip(
-                        selected = tab == selectedTab,
-                        onClick = { viewModel.onTabSelected(tab) },
-                        colors = FilterChipDefaults.colors(
-                            selectedContainerColor = Primary,
-                            selectedContentColor = Color.White
-                        )
-                    ) {
-                        Text(stringResource(tab.titleRes))
-                    }
-                }
             }
 
-            if (recentQueries.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.search_recent_title),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = OnSurface
-                    )
-                    TextButton(onClick = { viewModel.clearRecentQueries() }) {
-                        Text(stringResource(R.string.search_clear_history))
-                    }
-                }
-
+            item {
                 androidx.compose.foundation.lazy.LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(recentQueries) { recentQuery ->
+                    items(SearchTab.values().toList()) { tab ->
                         FilterChip(
-                            selected = recentQuery.equals(query, ignoreCase = true),
-                            onClick = {
-                                viewModel.onRecentQuerySelected(recentQuery)
-                                focusManager.clearFocus()
-                            },
+                            selected = tab == selectedTab,
+                            onClick = { viewModel.onTabSelected(tab) },
                             colors = FilterChipDefaults.colors(
                                 selectedContainerColor = Primary,
                                 selectedContentColor = Color.White
                             )
                         ) {
-                            Text(recentQuery)
+                            Text(stringResource(tab.titleRes))
                         }
                     }
                 }
             }
-        }
 
-        // Right Side: Results
-        Box(modifier = Modifier.weight(2.5f).fillMaxHeight()) {
-            when {
-                !uiState.hasActiveProvider -> {
-                    SearchMessageState(
-                        title = stringResource(R.string.search_no_provider_title),
-                        subtitle = stringResource(R.string.search_no_provider_subtitle)
-                    )
-                }
-
-                uiState.queryLength < 2 -> {
-                    SearchMessageState(
-                        title = stringResource(R.string.search_ready_title),
-                        subtitle = stringResource(R.string.search_type_to_search)
-                    )
-                }
-
-                uiState.isEmpty -> {
-                    SearchMessageState(
-                        title = stringResource(R.string.search_no_results_title),
-                        subtitle = stringResource(R.string.search_no_results, query)
-                    )
-                }
-
-                else -> {
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(140.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        contentPadding = PaddingValues(bottom = 24.dp)
+            if (recentQueries.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                            SearchResultsSummaryRow(
-                                uiState = uiState,
-                                selectedTab = selectedTab,
-                                onTabSelected = viewModel::onTabSelected
-                            )
+                        Text(
+                            text = stringResource(R.string.search_recent_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = OnSurface
+                        )
+                        TextButton(onClick = { viewModel.clearRecentQueries() }) {
+                            Text(stringResource(R.string.search_clear_history))
                         }
+                    }
+                }
 
-                        // Channels
-                        if (uiState.channels.isNotEmpty()) {
-                            if (selectedTab == SearchTab.ALL) {
-                                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                                    SectionHeader(stringResource(R.string.search_live_tv))
-                                }
-                            }
-                            items(uiState.channels) { channel ->
-                                val isLocked = (channel.isAdult || channel.isUserProtected) && uiState.parentalControlLevel == 1
-                                ChannelCard(
-                                    channel = channel,
-                                    isLocked = isLocked,
-                                    onClick = {
-                                        if (isLocked) {
-                                            pendingChannel = channel
-                                            showPinDialog = true
-                                        } else {
-                                            onChannelClick(channel)
-                                        }
-                                    },
-                                    modifier = Modifier.aspectRatio(16f/9f)
+                item {
+                    androidx.compose.foundation.lazy.LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(recentQueries) { recentQuery ->
+                            FilterChip(
+                                selected = recentQuery.equals(query, ignoreCase = true),
+                                onClick = {
+                                    viewModel.onRecentQuerySelected(recentQuery)
+                                    focusManager.clearFocus()
+                                },
+                                colors = FilterChipDefaults.colors(
+                                    selectedContainerColor = Primary,
+                                    selectedContentColor = Color.White
                                 )
+                            ) {
+                                Text(recentQuery)
                             }
                         }
+                    }
+                }
+            }
 
-                        // Movies
-                        if (uiState.movies.isNotEmpty()) {
-                            if (selectedTab == SearchTab.ALL) {
-                                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                                    SectionHeader(stringResource(R.string.search_movies))
-                                }
-                            }
-                            items(uiState.movies) { movie ->
-                                val isLocked = (movie.isAdult || movie.isUserProtected) && uiState.parentalControlLevel == 1
-                                MovieCard(
-                                    movie = movie,
-                                    isLocked = isLocked,
-                                    onClick = {
-                                        if (isLocked) {
-                                            pendingMovie = movie
-                                            showPinDialog = true
-                                        } else {
-                                            onMovieClick(movie)
-                                        }
-                                    },
-                                    modifier = Modifier.aspectRatio(2f/3f)
+            item {
+                when {
+                    !uiState.hasActiveProvider -> {
+                        SearchMessageState(
+                            title = stringResource(R.string.search_no_provider_title),
+                            subtitle = stringResource(R.string.search_no_provider_subtitle)
+                        )
+                    }
+
+                    uiState.queryLength < 2 -> {
+                        SearchMessageState(
+                            title = stringResource(R.string.search_ready_title),
+                            subtitle = stringResource(R.string.search_type_to_search)
+                        )
+                    }
+
+                    uiState.isEmpty -> {
+                        SearchMessageState(
+                            title = stringResource(R.string.search_no_results_title),
+                            subtitle = stringResource(R.string.search_no_results, query)
+                        )
+                    }
+
+                    else -> {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(132.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 280.dp, max = 1600.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            userScrollEnabled = false
+                        ) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                SearchResultsSummaryRow(
+                                    uiState = uiState,
+                                    selectedTab = selectedTab,
+                                    onTabSelected = viewModel::onTabSelected
                                 )
                             }
-                        }
 
-                        // Series
-                        if (uiState.series.isNotEmpty()) {
-                            if (selectedTab == SearchTab.ALL) {
-                                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                                    SectionHeader(stringResource(R.string.search_series))
+                            if (uiState.channels.isNotEmpty()) {
+                                if (selectedTab == SearchTab.ALL) {
+                                    item(span = { GridItemSpan(maxLineSpan) }) {
+                                        SectionHeader(stringResource(R.string.search_live_tv))
+                                    }
+                                }
+                                items(uiState.channels) { channel ->
+                                    val isLocked = (channel.isAdult || channel.isUserProtected) && uiState.parentalControlLevel == 1
+                                    ChannelCard(
+                                        channel = channel,
+                                        isLocked = isLocked,
+                                        onClick = {
+                                            if (isLocked) {
+                                                pendingChannel = channel
+                                                showPinDialog = true
+                                            } else {
+                                                onChannelClick(channel)
+                                            }
+                                        },
+                                        modifier = Modifier.aspectRatio(16f / 9f)
+                                    )
                                 }
                             }
-                            items(uiState.series) { series ->
-                                val isLocked = (series.isAdult || series.isUserProtected) && uiState.parentalControlLevel == 1
-                                SeriesCard(
-                                    series = series,
-                                    isLocked = isLocked,
-                                    onClick = {
-                                        if (isLocked) {
-                                            pendingSeries = series
-                                            showPinDialog = true
-                                        } else {
-                                            onSeriesClick(series)
-                                        }
-                                    },
-                                    modifier = Modifier.aspectRatio(2f/3f)
-                                )
+
+                            if (uiState.movies.isNotEmpty()) {
+                                if (selectedTab == SearchTab.ALL) {
+                                    item(span = { GridItemSpan(maxLineSpan) }) {
+                                        SectionHeader(stringResource(R.string.search_movies))
+                                    }
+                                }
+                                items(uiState.movies) { movie ->
+                                    val isLocked = (movie.isAdult || movie.isUserProtected) && uiState.parentalControlLevel == 1
+                                    MovieCard(
+                                        movie = movie,
+                                        isLocked = isLocked,
+                                        onClick = {
+                                            if (isLocked) {
+                                                pendingMovie = movie
+                                                showPinDialog = true
+                                            } else {
+                                                onMovieClick(movie)
+                                            }
+                                        },
+                                        modifier = Modifier.aspectRatio(2f / 3f)
+                                    )
+                                }
+                            }
+
+                            if (uiState.series.isNotEmpty()) {
+                                if (selectedTab == SearchTab.ALL) {
+                                    item(span = { GridItemSpan(maxLineSpan) }) {
+                                        SectionHeader(stringResource(R.string.search_series))
+                                    }
+                                }
+                                items(uiState.series) { series ->
+                                    val isLocked = (series.isAdult || series.isUserProtected) && uiState.parentalControlLevel == 1
+                                    SeriesCard(
+                                        series = series,
+                                        isLocked = isLocked,
+                                        onClick = {
+                                            if (isLocked) {
+                                                pendingSeries = series
+                                                showPinDialog = true
+                                            } else {
+                                                onSeriesClick(series)
+                                            }
+                                        },
+                                        modifier = Modifier.aspectRatio(2f / 3f)
+                                    )
+                                }
                             }
                         }
                     }
@@ -455,7 +482,7 @@ fun SectionHeader(title: String) {
     Text(
         text = title,
         style = MaterialTheme.typography.titleMedium,
-        color = Primary,
+        color = AppColors.Brand,
         modifier = Modifier.padding(vertical = 8.dp)
     )
 }

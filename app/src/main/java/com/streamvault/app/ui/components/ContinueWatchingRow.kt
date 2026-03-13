@@ -1,10 +1,20 @@
 package com.streamvault.app.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -12,28 +22,22 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
-import com.streamvault.app.ui.theme.*
+import com.streamvault.app.R
+import com.streamvault.app.ui.theme.AccentCyan
+import com.streamvault.app.ui.theme.GradientOverlayBottom
+import com.streamvault.app.ui.theme.SurfaceElevated
+import com.streamvault.app.ui.theme.TextPrimary
+import com.streamvault.app.ui.theme.TextSecondary
+import com.streamvault.app.ui.theme.TextTertiary
 import com.streamvault.domain.model.ContentType
 import com.streamvault.domain.model.PlaybackHistory
-import androidx.compose.ui.res.stringResource
-import com.streamvault.app.R
 
-/**
- * Netflix-style "Continue Watching" row backed by PlaybackHistoryRepository.
- *
- * Shows landscape tiles (280×157dp) with:
- *  - Poster/backdrop image
- *  - Bottom gradient overlay with title + episode info
- *  - AccentCyan resume progress bar at bottom edge
- *
- * Hidden automatically when [items] is empty.
- */
 @Composable
 fun ContinueWatchingRow(
     items: List<PlaybackHistory>,
@@ -43,11 +47,10 @@ fun ContinueWatchingRow(
     if (items.isEmpty()) return
 
     Column(modifier = modifier.fillMaxWidth()) {
-        // Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 48.dp, end = 48.dp, top = 24.dp, bottom = 8.dp),
+                .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -59,8 +62,8 @@ fun ContinueWatchingRow(
         }
 
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 48.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(items = items, key = { it.id }) { history ->
                 ContinueWatchingTile(history = history, onClick = { onItemClick(history) })
@@ -76,14 +79,15 @@ private fun ContinueWatchingTile(
 ) {
     val progress = if (history.totalDurationMs > 0) {
         (history.resumePositionMs.toFloat() / history.totalDurationMs).coerceIn(0f, 1f)
-    } else 0f
+    } else {
+        0f
+    }
 
     FocusableCard(
         onClick = onClick,
-        width = 280.dp,
-        height = 157.dp
-    ) { isFocused ->
-        // Artwork
+        width = 208.dp,
+        height = 117.dp
+    ) {
         if (!history.posterUrl.isNullOrBlank()) {
             AsyncImage(
                 model = history.posterUrl,
@@ -95,21 +99,23 @@ private fun ContinueWatchingTile(
             )
         } else {
             Box(
-                modifier = Modifier.fillMaxSize().background(SurfaceElevated),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(SurfaceElevated),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = when (history.contentType) {
-                        ContentType.LIVE -> "📡"
-                        ContentType.MOVIE -> "🎬"
-                        ContentType.SERIES, ContentType.SERIES_EPISODE -> "📺"
+                        ContentType.LIVE -> "LIVE"
+                        ContentType.MOVIE -> "MOVIE"
+                        ContentType.SERIES, ContentType.SERIES_EPISODE -> "SERIES"
                     },
-                    style = MaterialTheme.typography.headlineLarge
+                    style = MaterialTheme.typography.titleLarge,
+                    color = TextSecondary
                 )
             }
         }
 
-        // Bottom gradient
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -118,7 +124,6 @@ private fun ContinueWatchingTile(
                 .background(Brush.verticalGradient(listOf(Color.Transparent, GradientOverlayBottom)))
         )
 
-        // Title + subtitle
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -133,11 +138,17 @@ private fun ContinueWatchingTile(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            if (history.contentType == ContentType.SERIES_EPISODE &&
-                history.seasonNumber != null && history.episodeNumber != null
+            if (
+                history.contentType == ContentType.SERIES_EPISODE &&
+                history.seasonNumber != null &&
+                history.episodeNumber != null
             ) {
                 Text(
-                    text = stringResource(R.string.continue_watching_season_episode, history.seasonNumber!!, history.episodeNumber!!),
+                    text = stringResource(
+                        R.string.continue_watching_season_episode,
+                        history.seasonNumber!!,
+                        history.episodeNumber!!
+                    ),
                     style = MaterialTheme.typography.labelMedium,
                     color = TextTertiary,
                     maxLines = 1
@@ -145,7 +156,6 @@ private fun ContinueWatchingTile(
             }
         }
 
-        // Resume progress bar at very bottom
         if (progress > 0f) {
             LinearProgressIndicator(
                 progress = { progress },

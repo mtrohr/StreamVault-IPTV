@@ -1,6 +1,5 @@
 package com.streamvault.app.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -36,6 +35,8 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.streamvault.app.R
 import com.streamvault.app.navigation.Routes
+import com.streamvault.app.ui.design.AppColors
+import com.streamvault.app.ui.design.FocusSpec
 import com.streamvault.app.ui.theme.FocusBorder
 import com.streamvault.app.ui.theme.LocalSpacing
 import com.streamvault.app.ui.theme.Primary
@@ -83,15 +84,15 @@ fun TopNavBar(
     ) {
         Column {
             Text(
-                text = stringResource(id = R.string.app_name),
-                style = MaterialTheme.typography.titleLarge,
-                color = TextPrimary
-            )
+            text = stringResource(id = R.string.app_name),
+            style = MaterialTheme.typography.titleLarge,
+            color = AppColors.TextPrimary
+        )
             Text(
-                text = subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = TextTertiary
-            )
+            text = subtitle,
+            style = MaterialTheme.typography.labelSmall,
+            color = AppColors.TextTertiary
+        )
         }
 
         Spacer(modifier = Modifier.width(LocalSpacing.current.md))
@@ -124,15 +125,15 @@ private fun NavTabButton(
     var isFocused by remember { mutableStateOf(false) }
 
     val scale by animateFloatAsState(
-        targetValue = if (isFocused) 1.02f else 1f,
-        animationSpec = tween(durationMillis = 180),
+        targetValue = if (isFocused) FocusSpec.FocusedScale else 1f,
+        animationSpec = tween(durationMillis = 160),
         label = "tabScale"
     )
 
     val textColor = when {
-        isSelected -> Primary
-        isFocused -> TextPrimary
-        else -> TextSecondary
+        isSelected -> AppColors.Brand
+        isFocused -> AppColors.TextPrimary
+        else -> AppColors.TextSecondary
     }
 
     Surface(
@@ -145,12 +146,12 @@ private fun NavTabButton(
             .onFocusChanged { isFocused = it.isFocused },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (isSelected) Primary.copy(alpha = 0.16f) else SurfaceElevated,
-            focusedContainerColor = SurfaceElevated
+            containerColor = if (isSelected) AppColors.BrandMuted else SurfaceElevated,
+            focusedContainerColor = AppColors.SurfaceEmphasis
         ),
         border = ClickableSurfaceDefaults.border(
             border = Border(
-                border = BorderStroke(1.dp, SurfaceElevated),
+                border = BorderStroke(1.dp, AppColors.Outline),
                 shape = RoundedCornerShape(12.dp)
             ),
             focusedBorder = Border(
@@ -169,23 +170,15 @@ private fun NavTabButton(
                 style = MaterialTheme.typography.titleSmall,
                 color = textColor
             )
-            AnimatedVisibility(visible = isSelected || isFocused) {
-                Box(
-                    modifier = Modifier
-                        .width(28.dp)
-                        .height(3.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(3.dp)
-                            .background(
-                                color = if (isSelected) Primary else FocusBorder,
-                                shape = RoundedCornerShape(999.dp)
-                            )
+            Box(
+                modifier = Modifier
+                    .width(28.dp)
+                    .height(3.dp)
+                    .background(
+                        color = if (isSelected) Primary else if (isFocused) FocusBorder else AppColors.Outline,
+                        shape = RoundedCornerShape(999.dp)
                     )
-                }
-            }
+            )
         }
     }
 }

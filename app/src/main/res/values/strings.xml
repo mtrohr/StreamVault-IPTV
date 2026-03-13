@@ -7,7 +7,7 @@
     <string name="nav_live_tv">Live TV</string>
     <string name="nav_movies">Movies</string>
     <string name="nav_series">Series</string>
-    <string name="nav_epg">TV Guide</string>
+    <string name="nav_epg">Guide</string>
     <string name="nav_settings">Settings</string>
 
     <!-- Welcome -->
@@ -15,6 +15,14 @@
     <string name="welcome_manage_providers">Manage Providers</string>
     <string name="welcome_setup_provider">Setup Provider</string>
     <string name="welcome_version">v1.0.0</string>
+    <string name="welcome_loading_title">Preparing your library</string>
+    <string name="welcome_loading_subtitle">Opening the right screen for this device.</string>
+    <string name="welcome_tagline">Premium IPTV for the living room</string>
+    <string name="welcome_subtitle">Lean back into live channels, catch-up viewing, movies, and series with a first-party Android TV experience.</string>
+    <string name="welcome_feature_live">Fast live browsing with remote-first focus</string>
+    <string name="welcome_feature_library">Large-library movies and series without the clutter</string>
+    <string name="welcome_feature_player">Unified player overlays, guide access, and saved content</string>
+    <string name="welcome_manage_hint">Swap providers, refresh metadata, or add a new source.</string>
 
     <!-- Home -->
     <string name="home_incorrect_pin">Incorrect PIN</string>
@@ -30,8 +38,21 @@
     <string name="home_search_channels">Search channels...</string>
     <string name="home_loading">Loading...</string>
     <string name="home_no_channels_found">No channels found in this category</string>
+    <string name="home_no_channels_found_subtitle">Try another category or search term.</string>
     <string name="home_add_favorites_hint">Add channels to favorites to see them here</string>
     <string name="home_recent_channels_hint">Watch a few live channels to build a recent list here</string>
+    <string name="home_locked_short">LOCKED</string>
+    <string name="live_shell_subtitle">Scan live categories quickly, keep navigation deterministic, and surface only the schedule data that matters on screen.</string>
+    <string name="live_shell_context">%1$d categories • %2$d channels</string>
+    <string name="live_shell_provider">Provider</string>
+    <string name="live_shell_last_group">Last group</string>
+    <string name="live_shell_split">Multiview</string>
+    <string name="live_manage_groups">Manage multiview slots</string>
+    <string name="live_channel_results">%1$d channels in view</string>
+    <string name="live_reorder_title">Reordering %1$s</string>
+    <string name="live_reorder_subtitle">D-pad moves the selected channel. Save the order when you are done.</string>
+    <string name="live_empty_hint_favorites">Add channels to Favorites or a saved group to populate this rail.</string>
+    <string name="live_empty_hint_recent">Start playback on a few channels and they will appear here.</string>
     <string name="home_saved_subtitle">Favorites and custom live groups</string>
     <string name="home_saved_empty_hint">Favorite a channel or add it to a custom live group to pin it here.</string>
     <string name="home_delete_group_title">Delete Group?</string>
@@ -54,7 +75,7 @@
     <string name="dashboard_recent_series">Recently Updated Series</string>
     <string name="dashboard_search_library">Search Library</string>
     <string name="dashboard_live_shortcuts">Live Shortcuts</string>
-    <string name="dashboard_live_shortcuts_subtitle">Return to saved groups, recent channels, and your last live context.</string>
+    <string name="dashboard_live_shortcuts_subtitle">Favorites, recent channels, and last group.</string>
     <string name="dashboard_provider_health_title">Provider Health</string>
     <string name="dashboard_provider_status">Status</string>
     <string name="dashboard_provider_source">Source</string>
@@ -119,9 +140,13 @@
     <string name="movies_incorrect_pin">Incorrect PIN</string>
     <string name="movies_loading">Loading movies...</string>
     <string name="movies_no_found">No movies found</string>
+    <string name="movies_no_found_subtitle">Try a different category or return to the full library shelves to surface more titles.</string>
     <string name="movies_categories_title">Categories</string>
+    <string name="movies_shell_subtitle">Curated shelves, saved groups, and full-library browsing without leaving the current provider context.</string>
     <string name="movies_all_categories">All Categories</string>
     <string name="movies_search_placeholder">Search movies...</string>
+    <string name="movies_search_launch_title">Search the movie library</string>
+    <string name="movies_search_launch_subtitle">Jump into the dedicated search surface without losing your current browse state.</string>
     <string name="movies_group_created">Created group %1$s</string>
     <string name="movies_group_renamed">Renamed group to %1$s</string>
     <string name="movies_group_deleted">Deleted group %1$s</string>
@@ -131,6 +156,8 @@
     <string name="movies_saved_empty_hint">Favorite a movie or add it to a custom group to see it here.</string>
     <string name="movies_filter_subtitle">Refine the selected movie category without rebuilding the whole library.</string>
     <string name="movies_library_lens_subtitle">Surface favorites, in-progress, top-rated, and fresh movies across the whole library.</string>
+    <string name="movies_reorder_title">Reordering %1$s</string>
+    <string name="movies_reorder_subtitle">Use the remote to move posters, then save the shelf order for this group.</string>
     <string name="library_full_browse_title_movies">Browse Full Movie Library</string>
     <string name="library_full_browse_subtitle">%1$d titles available in the current provider</string>
 
@@ -138,9 +165,13 @@
     <string name="series_incorrect_pin">Incorrect PIN</string>
     <string name="series_loading">Loading series...</string>
     <string name="series_no_found">No series found</string>
+    <string name="series_no_found_subtitle">Try another category or return to the full library to surface more series shelves.</string>
     <string name="series_categories_title">Categories</string>
+    <string name="series_shell_subtitle">Editorial shelves, saved groups, and paged series browsing tuned for large provider libraries.</string>
     <string name="series_all_categories">All Categories</string>
     <string name="series_search_placeholder">Search series...</string>
+    <string name="series_search_launch_title">Search the series library</string>
+    <string name="series_search_launch_subtitle">Open the command search view to find titles, episodes, or saved groups faster.</string>
     <string name="series_group_created">Created group %1$s</string>
     <string name="series_group_renamed">Renamed group to %1$s</string>
     <string name="series_group_deleted">Deleted group %1$s</string>
@@ -150,6 +181,8 @@
     <string name="series_saved_empty_hint">Favorite a series or add it to a custom group to see it here.</string>
     <string name="series_filter_subtitle">Pivot between saved, in-progress, updated, and highly rated series.</string>
     <string name="series_library_lens_subtitle">Surface favorites, in-progress, top-rated, and fresh series across the whole library.</string>
+    <string name="series_reorder_title">Reordering %1$s</string>
+    <string name="series_reorder_subtitle">Use the remote to move posters, then save the shelf order for this group.</string>
     <string name="library_full_browse_title_series">Browse Full Series Library</string>
 
     <string name="library_saved_title">Saved</string>
@@ -187,6 +220,9 @@
     <string name="settings_providers_subtitle">Switch, sync, edit, and troubleshoot your IPTV sources.</string>
     <string name="settings_parental_control">Parental Control</string>
     <string name="settings_parental_subtitle">Protect adult or sensitive content with TV-friendly controls.</string>
+    <string name="settings_parental_groups_title">Protected Groups</string>
+    <string name="settings_parental_groups_hint">Lock or unlock categories for the active provider.</string>
+    <string name="settings_parental_groups_action">Manage</string>
     <string name="settings_playback">Playback</string>
     <string name="settings_playback_subtitle">Tune decoder and buffering behavior for smoother playback.</string>
     <string name="settings_decoder_mode">Decoder Mode</string>
@@ -201,6 +237,8 @@
     <string name="settings_developed_by">Developed by</string>
     <string name="settings_developer_name">David Nashash</string>
     <string name="settings_syncing">Syncing data, please wait...</string>
+    <string name="settings_syncing_title">Syncing data...</string>
+    <string name="settings_syncing_subtitle">Please wait while your playlist is imported.</string>
     <string name="settings_enter_new_pin">Enter New PIN</string>
     <string name="settings_enter_pin">Enter PIN</string>
     <string name="settings_select_level">Select Protection Level</string>
@@ -298,7 +336,7 @@
     <string name="settings_recording_cancel">Cancel</string>
 
     <!-- Favorites -->
-    <string name="favorites_title">Saved Library</string>
+    <string name="favorites_title">Saved</string>
     <string name="favorites_loading">Loading saved library...</string>
     <string name="favorites_no_favorites">Saved library is empty</string>
     <string name="favorites_empty_hint">Long-press on any channel, movie, or series to build your saved library</string>
@@ -349,6 +387,8 @@
     <string name="favorites_sort_title_hint">Alphabetical browsing across sections</string>
     <string name="favorites_jump_title">Jump to a section</string>
     <string name="favorites_jump_subtitle">Shortcut directly to the saved group or system section you need.</string>
+    <string name="saved_shell_subtitle">Pinned favorites, custom groups, and recent progress in one premium hub.</string>
+    <string name="guide_shell_subtitle">Guide filters, schedule density, and focused program detail in one remote-first surface.</string>
     <string name="favorites_reordering">Reordering</string>
     <string name="favorites_reorder_mode">Reorder mode</string>
     <string name="favorites_move_up">Up or Left: move earlier</string>
@@ -358,6 +398,10 @@
 
     <!-- Search -->
     <string name="search_title">Search</string>
+    <string name="parental_group_shell_subtitle">Review protected live, movie, and series groups without leaving the premium settings shell.</string>
+    <string name="search_screen_subtitle">Find channels, movies, and series without leaving the TV flow.</string>
+    <string name="search_command_title">Command Search</string>
+    <string name="search_command_subtitle">Start with a title, keyword, channel name, or series. Results stay grouped for fast remote navigation.</string>
     <string name="search_incorrect_pin">Incorrect PIN</string>
     <string name="search_type_to_search">Type to search...</string>
     <string name="search_no_results">No results found for \'%1$s\'</string>
@@ -377,9 +421,20 @@
 
     <!-- Provider Setup -->
     <string name="setup_title_streamvault">StreamVault</string>
+    <string name="setup_provider_title">Add a provider</string>
     <string name="setup_edit_provider">Edit Provider</string>
     <string name="setup_update_desc">Update your IPTV provider details</string>
     <string name="setup_add_desc">Add your IPTV provider</string>
+    <string name="setup_shell_eyebrow">Provider Onboarding</string>
+    <string name="setup_shell_subtitle">Use Xtream or M3U. You can change it later.</string>
+    <string name="setup_form_subtitle">Choose a source, enter the details, and continue. You can manage it later from Settings.</string>
+    <string name="setup_source_type_label">Source Type</string>
+    <string name="setup_info_xtream_title">Use Xtream when credentials are available</string>
+    <string name="setup_info_xtream_body">Best when you have server, user, and password.</string>
+    <string name="setup_info_m3u_title">Use M3U for URL or file-based playlists</string>
+    <string name="setup_info_m3u_body">Use a playlist link or import a local file.</string>
+    <string name="setup_info_manage_title">You can manage providers later</string>
+    <string name="setup_info_manage_body">Refresh, edit, or replace it later from Settings.</string>
     <string name="setup_xtream">Xtream Codes</string>
     <string name="setup_m3u">M3U Playlist</string>
     <string name="setup_name_hint">Playlist Name (Optional)</string>
@@ -392,6 +447,7 @@
     <string name="setup_m3u_hint">M3U URL</string>
     <string name="setup_tab_url">URL</string>
     <string name="setup_tab_file">File</string>
+    <string name="setup_choose_file">Choose M3U File</string>
     <string name="setup_file_replace_hint">Press to replace file</string>
     <string name="setup_file_select_title">Select M3U File</string>
     <string name="setup_file_browse_hint">Browse local storage or USB</string>
@@ -420,6 +476,12 @@
     <string name="player_close">Close</string>
     <string name="player_play">Play</string>
     <string name="player_pause">Pause</string>
+    <string name="player_playback_label">Playback</string>
+    <string name="player_more_controls">More controls</string>
+    <string name="player_live_now">Now Playing</string>
+    <string name="player_live_channel">Channel %1$d</string>
+    <string name="player_rewind">Rewind</string>
+    <string name="player_forward">Fast forward</string>
     <string name="player_next">NEXT</string>
     <string name="player_restart">Restart</string>
     <string name="player_archive">Archive</string>
@@ -441,19 +503,46 @@
     <string name="player_track_off">Off</string>
     <string name="player_video_quality">Video Quality</string>
     <string name="player_aspect_ratio_label">Aspect %1$s</string>
+    <string name="player_channel_not_found">Channel not found</string>
+    <string name="player_type_channel_number">Type channel number</string>
     <string name="player_selected">Selected</string>
     <string name="player_channel_list_title">Channels (%1$d)</string>
     <string name="player_channel_selected">Now</string>
     <string name="player_recent_channels">Recent</string>
     <string name="player_last_group_label">Last: %1$s</string>
     <string name="player_last_group_hint">Jump back to the last live group you were browsing.</string>
-    <string name="player_archive_badge">ARCHIVE</string>
-    <string name="player_catchup_badge">CATCH-UP</string>
+    <string name="player_archive_badge">Archive</string>
+    <string name="player_catchup_badge">Catch-up</string>
     <string name="player_time_range_minutes">%1$s - %2$s | %3$d min</string>
     <string name="player_next_label">Next:</string>
     <string name="player_full_epg">Full EPG</string>
     <string name="player_stats">Stats</string>
     <string name="player_minutes_remaining">%1$d min remaining</string>
+    <string name="player_action_playback">Playback</string>
+    <string name="player_action_restart_short">Restart</string>
+    <string name="player_action_view">View</string>
+    <string name="player_action_group">Group</string>
+    <string name="player_action_recent_short">Recent</string>
+    <string name="player_action_guide">Guide</string>
+    <string name="player_action_split">Split</string>
+    <string name="player_action_diagnostics">Diagnostics</string>
+    <string name="player_diagnostics_title">Playback Diagnostics</string>
+    <string name="player_diagnostics_provider">Provider</string>
+    <string name="player_diagnostics_source">Source</string>
+    <string name="player_diagnostics_decoder">Decoder</string>
+    <string name="player_diagnostics_stream_class">Stream Class</string>
+    <string name="player_diagnostics_playback_state">Playback State</string>
+    <string name="player_diagnostics_archive">Archive</string>
+    <string name="player_diagnostics_alternates">Alternate Streams</string>
+    <string name="player_diagnostics_channel_errors">Channel Errors</string>
+    <string name="player_diagnostics_resolution">Resolution</string>
+    <string name="player_diagnostics_video_codec">Video Codec</string>
+    <string name="player_diagnostics_audio_codec">Audio Codec</string>
+    <string name="player_diagnostics_video_bitrate">Video Bitrate</string>
+    <string name="player_diagnostics_dropped_frames">Dropped Frames</string>
+    <string name="player_diagnostics_last_failure">Last Failure</string>
+    <string name="player_diagnostics_recovery_actions">Recovery Actions</string>
+    <string name="player_diagnostics_troubleshooting">Troubleshooting</string>
     <string name="epg_loading">Loading TV guide...</string>
     <string name="epg_error">Unable to load the TV guide right now.</string>
     <string name="epg_no_provider">Add or activate a provider to view the TV guide.</string>
@@ -503,6 +592,8 @@
     <string name="epg_view_scheduled_only_on">Scheduled only</string>
     <string name="epg_view_scheduled_only_off">All loaded channels</string>
     <string name="epg_view_scheduled_only_hint">Hide channels with no guide data</string>
+    <string name="epg_show_options">Show guide options</string>
+    <string name="epg_hide_options">Hide guide options</string>
     <string name="epg_showing_channels">Showing %1$d of %2$d channels</string>
     <string name="epg_schedule_summary">Guide data available on %1$d of %2$d channels</string>
     <string name="epg_window_label">%1$s - %2$s</string>
@@ -558,19 +649,26 @@
     <string name="player_no_archive">No archived programs found</string>
     <string name="series_loading_details">Loading details...</string>
     <string name="series_not_found">Series not found</string>
+    <string name="series_detail_back">Back to library</string>
+    <string name="series_plot_fallback">No plot available</string>
     <string name="series_seasons">Seasons</string>
     <string name="series_episodes">Episodes (%1$d)</string>
-    <string name="epg_now_playing">NOW PLAYING</string>
-    <string name="epg_no_data">No EPG Data</string>
-    <string name="epg_up_next">UP NEXT</string>
+    <string name="epg_now_playing">Now Playing</string>
+    <string name="epg_no_data">No EPG data</string>
+    <string name="epg_up_next">Up Next</string>
 
     <!-- Multi-View / Split Screen -->
     <string name="multiview_add_to_split">Add to Split Screen</string>
-    <string name="multiview_queued">In Split Screen ✓</string>
+    <string name="multiview_queued">In Split Screen</string>
     <string name="multiview_planner_title">Split Screen Manager</string>
     <string name="multiview_planner_empty">No channels in slots yet.\nLong-press a channel to add it.</string>
     <string name="multiview_planner_clear">Clear All</string>
     <string name="multiview_planner_launch">Launch Split Screen</string>
+    <string name="multiview_planner_launch_disabled">Add channels first</string>
+    <string name="multiview_planner_pick_slot">Choose a slot for %1$s.</string>
+    <string name="multiview_planner_added">%1$s is ready for split screen.</string>
+    <string name="multiview_planner_ready_subtitle">Review the active slots, replace any stream, and launch when ready.</string>
+    <string name="multiview_planner_slot_hint">Select a slot to place this channel.</string>
     <string name="multiview_empty_slot">Empty Slot</string>
     <string name="multiview_stream_error">Stream Error</string>
     <string name="multiview_nav">Split Screen</string>
@@ -585,6 +683,7 @@
     <string name="multiview_audio_follow_focus">Follow Focus</string>
     <string name="multiview_replace_title">Replace Focused Slot</string>
     <string name="multiview_replace_empty">Use Live TV favorites or recent channels first so replacement choices appear here.</string>
+    <string name="multiview_slot_label">Slot %1$d</string>
     <string name="multiview_policy_summary">%1$s tier • %2$d active slot(s)</string>
     <string name="multiview_policy_auto">Auto</string>
     <string name="multiview_policy_conservative">Conservative</string>

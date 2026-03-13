@@ -48,6 +48,9 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import com.streamvault.app.R
+import com.streamvault.app.ui.components.dialogs.PremiumDialog
+import com.streamvault.app.ui.components.dialogs.PremiumDialogActionButton
+import com.streamvault.app.ui.components.dialogs.PremiumDialogFooterButton
 import com.streamvault.app.ui.theme.Primary
 
 @Composable
@@ -481,54 +484,34 @@ private fun ReplaceSlotDialog(
     onDismiss: () -> Unit,
     onReplace: (com.streamvault.domain.model.Channel) -> Unit
 ) {
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        androidx.compose.material3.Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = Color(0xFF12121F),
-            modifier = Modifier
-                .fillMaxWidth(0.55f)
-                .padding(20.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+    PremiumDialog(
+        title = stringResource(R.string.multiview_replace_title),
+        subtitle = stringResource(R.string.multiview_replace_empty),
+        onDismissRequest = onDismiss,
+        widthFraction = 0.5f,
+        content = {
+            if (candidates.isEmpty()) {
                 Text(
-                    text = stringResource(R.string.multiview_replace_title),
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleMedium
+                    text = stringResource(R.string.multiview_replace_empty),
+                    color = Color.White.copy(alpha = 0.72f),
+                    style = MaterialTheme.typography.bodyMedium
                 )
-                if (candidates.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.multiview_replace_empty),
-                        color = Color(0xFFAAAAAA),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        candidates.forEach { channel ->
-                            Surface(
-                                onClick = { onReplace(channel) },
-                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
-                                colors = ClickableSurfaceDefaults.colors(
-                                    containerColor = Color(0xFF1A1A30),
-                                    focusedContainerColor = Color(0xFF2C2C46)
-                                )
-                            ) {
-                                Column(modifier = Modifier.padding(14.dp)) {
-                                    Text(channel.name, color = Color.White, style = MaterialTheme.typography.bodyLarge)
-                                    channel.categoryName?.takeIf { it.isNotBlank() }?.let {
-                                        Text(it, color = Color(0xFFAAAAAA), style = MaterialTheme.typography.bodySmall)
-                                    }
-                                }
-                            }
-                        }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    candidates.forEach { channel ->
+                        PremiumDialogActionButton(
+                            label = channel.name,
+                            onClick = { onReplace(channel) }
+                        )
                     }
                 }
-                Button(onClick = onDismiss) {
-                    Text(stringResource(R.string.settings_cancel))
-                }
             }
+        },
+        footer = {
+            PremiumDialogFooterButton(
+                label = stringResource(R.string.settings_cancel),
+                onClick = onDismiss
+            )
         }
-    }
+    )
 }

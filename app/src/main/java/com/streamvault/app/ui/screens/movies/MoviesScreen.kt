@@ -1,5 +1,6 @@
 package com.streamvault.app.ui.screens.movies
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -42,7 +43,6 @@ import com.streamvault.app.ui.components.SavedCategoryContextCard
 import com.streamvault.app.ui.components.SavedCategoryShortcut
 import com.streamvault.app.ui.components.SavedCategoryShortcutsRow
 import com.streamvault.app.ui.components.SkeletonRow
-import com.streamvault.app.ui.components.TopNavBar
 import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.model.Movie
 import kotlinx.coroutines.launch
@@ -56,6 +56,11 @@ import com.streamvault.app.ui.components.dialogs.DeleteGroupDialog
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import com.streamvault.app.ui.components.shell.BrowseSearchLaunchCard
+import com.streamvault.app.ui.components.shell.LoadMoreCard
+import com.streamvault.app.ui.components.shell.AppNavigationChrome
+import com.streamvault.app.ui.components.shell.AppMessageState
+import com.streamvault.app.ui.components.shell.AppScreenScaffold
 import androidx.tv.material3.Border
 import com.streamvault.app.ui.components.dialogs.RenameGroupDialog
 
@@ -85,6 +90,10 @@ fun MoviesScreen(
         }
     }
 
+    BackHandler(enabled = uiState.selectedCategory != null && !uiState.isReorderMode) {
+        viewModel.selectCategory(null)
+    }
+
     if (showPinDialog) {
         com.streamvault.app.ui.components.dialogs.PinDialog(
             onDismissRequest = {
@@ -109,15 +118,22 @@ fun MoviesScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        AppScreenScaffold(
+            currentRoute = currentRoute,
+            onNavigate = onNavigate,
+            title = stringResource(R.string.nav_movies),
+            subtitle = null,
+            navigationChrome = AppNavigationChrome.TopBar,
+            compactHeader = true,
+            showScreenHeader = false
+        ) {
         if (uiState.isReorderMode && uiState.reorderCategory != null) {
             ReorderTopBar(
                 categoryName = uiState.reorderCategory!!.name,
                 onSave = { viewModel.saveReorder() },
-                onCancel = { viewModel.exitCategoryReorderMode() }
+                onCancel = { viewModel.exitCategoryReorderMode() },
+                subtitle = stringResource(R.string.movies_reorder_subtitle)
             )
-        } else {
-            TopNavBar(currentRoute = currentRoute, onNavigate = onNavigate)
         }
 
         if (uiState.isLoading) {
@@ -133,11 +149,10 @@ fun MoviesScreen(
             }
         } else if (uiState.moviesByCategory.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("🎬", style = MaterialTheme.typography.displayLarge)
-                    Spacer(Modifier.height(8.dp))
-                    Text(stringResource(R.string.movies_no_found), style = MaterialTheme.typography.bodyLarge, color = OnSurface)
-                }
+                AppMessageState(
+                    title = stringResource(R.string.movies_no_found),
+                    subtitle = stringResource(R.string.movies_no_found_subtitle)
+                )
             }
         } else {
             Row(modifier = Modifier.fillMaxSize()) {
@@ -147,13 +162,6 @@ fun MoviesScreen(
                 var lastFocusedCategoryName by rememberSaveable { mutableStateOf<String?>(null) }
                 var shouldRestoreCategoryFocus by remember { mutableStateOf(false) }
                 var preferCategoryRestore by rememberSaveable { mutableStateOf(false) }
-                val heroMovie = remember(uiState.categoryNames, uiState.moviesByCategory) {
-                    uiState.categoryNames
-                        .asSequence()
-                        .mapNotNull { categoryName -> uiState.moviesByCategory[categoryName]?.firstOrNull() }
-                        .firstOrNull()
-                }
-
                 LaunchedEffect(
                     uiState.selectedCategoryForOptions,
                     uiState.showRenameGroupDialog,
@@ -183,16 +191,16 @@ fun MoviesScreen(
 
                 Column(
                     modifier = Modifier
-                        .width(220.dp)
+                        .width(188.dp)
                         .fillMaxHeight()
-                        .background(SurfaceElevated.copy(alpha = 0.5f))
+                        .background(SurfaceElevated.copy(alpha = 0.72f), RoundedCornerShape(20.dp))
                         .padding(top = 8.dp)
                 ) {
                     // Sticky Header
-                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
                         Text(
                             text = stringResource(R.string.movies_categories_title),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleSmall,
                             color = Primary,
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
@@ -367,43 +375,12 @@ fun MoviesScreen(
                         )
                     ) {
                         item {
-                            Surface(
+                            BrowseSearchLaunchCard(
+                                title = stringResource(R.string.movies_search_launch_title),
+                                subtitle = stringResource(R.string.movies_search_launch_subtitle),
                                 onClick = { onNavigate(Routes.SEARCH) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = LocalSpacing.current.md),
-                                shape = ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)),
-                                colors = ClickableSurfaceDefaults.colors(
-                                    containerColor = SurfaceElevated,
-                                    focusedContainerColor = Primary.copy(alpha = 0.2f)
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("🔍", style = MaterialTheme.typography.titleMedium)
-                                    Spacer(Modifier.width(16.dp))
-                                    Text(stringResource(R.string.search_hint), color = OnSurfaceDim, style = MaterialTheme.typography.bodyLarge)
-                                }
-                            }
-                        }
-
-                        if (heroMovie != null) {
-                            item {
-                                HeroBanner(
-                                    movie = heroMovie,
-                                    onClick = {
-                                        val isLocked = (heroMovie.isAdult || heroMovie.isUserProtected) && uiState.parentalControlLevel == 1
-                                        if (isLocked) {
-                                            pendingMovie = heroMovie
-                                            showPinDialog = true
-                                        } else {
-                                            onMovieClick(heroMovie)
-                                        }
-                                    }
-                                )
-                            }
+                                modifier = Modifier.padding(vertical = LocalSpacing.current.md)
+                            )
                         }
 
                         item(key = "saved_shortcuts") {
@@ -643,7 +620,7 @@ fun MoviesScreen(
                         }
 
                         LazyVerticalGrid(
-                            columns = GridCells.Adaptive(minSize = 160.dp),
+                            columns = GridCells.Adaptive(minSize = 138.dp),
                             modifier = Modifier
                                 .fillMaxSize()
                                 .onPreviewKeyEvent { event ->
@@ -659,9 +636,9 @@ fun MoviesScreen(
                                         } else false
                                     } else false
                                 },
-                            contentPadding = PaddingValues(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                            contentPadding = PaddingValues(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
                                 Column(modifier = Modifier.padding(bottom = 16.dp)) {
@@ -670,7 +647,7 @@ fun MoviesScreen(
                                             uiState.fullLibraryCategoryName -> stringResource(R.string.library_full_browse_title_movies)
                                             else -> uiState.selectedCategory ?: ""
                                         },
-                                        style = MaterialTheme.typography.headlineSmall,
+                                        style = MaterialTheme.typography.titleLarge,
                                         color = Primary,
                                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                                     )
@@ -749,26 +726,15 @@ fun MoviesScreen(
 
                             if (!uiState.isReorderMode && uiState.canLoadMoreSelectedCategory) {
                                 item(span = { GridItemSpan(maxLineSpan) }) {
-                                    Surface(
-                                        onClick = viewModel::loadMoreSelectedCategory,
-                                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
-                                        colors = ClickableSurfaceDefaults.colors(
-                                            containerColor = Color.White.copy(alpha = 0.06f),
-                                            focusedContainerColor = Primary
+                                    LoadMoreCard(
+                                        label = stringResource(
+                                            R.string.library_load_more,
+                                            uiState.selectedCategoryLoadedCount,
+                                            uiState.selectedCategoryTotalCount
                                         ),
+                                        onClick = viewModel::loadMoreSelectedCategory,
                                         modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
-                                    ) {
-                                        Text(
-                                            text = stringResource(
-                                                R.string.library_load_more,
-                                                uiState.selectedCategoryLoadedCount,
-                                                uiState.selectedCategoryTotalCount
-                                            ),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)
-                                        )
-                                    }
+                                    )
                                 }
                             }
                         }
@@ -836,90 +802,6 @@ fun MoviesScreen(
             onDismissRequest = { viewModel.cancelDeleteGroup() },
             onConfirmDelete = { viewModel.confirmDeleteGroup() }
         )
-    }
-}
-
-@Composable
-fun HeroBanner(
-    movie: Movie,
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-
-    Surface(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(400.dp)
-            .padding(horizontal = 32.dp, vertical = 16.dp)
-            .onFocusChanged { isFocused = it.isFocused },
-        shape = ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
-        border = ClickableSurfaceDefaults.border(
-            focusedBorder = Border(
-                border = BorderStroke(3.dp, Color.White),
-                shape = RoundedCornerShape(8.dp)
-            )
-        )
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            AsyncImage(
-                model = movie.posterUrl ?: movie.backdropUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // Gradient
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f)),
-                            startY = 200f
-                        )
-                    )
-            )
-
-            // Content
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(32.dp)
-            ) {
-                Text(
-                    text = movie.name,
-                    style = MaterialTheme.typography.displayMedium,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(8.dp))
-                if (!movie.plot.isNullOrEmpty()) {
-                    Text(
-                        text = movie.plot!!,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth(0.6f)
-                    )
-                    Spacer(Modifier.height(16.dp))
-                }
-                
-                // Play Button
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .background(if (isFocused) Primary else Color.White, androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
-                        .padding(horizontal = 24.dp, vertical = 8.dp)
-                ) {
-                    Text("▶", color = if (isFocused) Color.White else Color.Black)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.player_resume).substringBefore(" "), color = if (isFocused) Color.White else Color.Black, style = MaterialTheme.typography.titleMedium) // "Play" fallback
-                }
-            }
-        }
     }
 }
 
@@ -994,3 +876,5 @@ private fun movieReleaseScore(movie: Movie): Long {
         ?: movie.year?.toLongOrNull()
         ?: 0L
 }
+
+
