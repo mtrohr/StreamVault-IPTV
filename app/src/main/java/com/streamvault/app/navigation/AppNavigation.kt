@@ -1,7 +1,10 @@
 package com.streamvault.app.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.navigation.NavHostController
+import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -153,7 +156,14 @@ private fun isStreamUrlSafe(url: String?): Boolean {
     return scheme in setOf("http", "https", "rtsp", "rtmp", "rtsps", "mms", "xtream")
 }
 
+/** Navigate only when the current destination is fully resumed – prevents double-navigation during transitions. */
+private fun NavHostController.navigateIfResumed(route: String, builder: NavOptionsBuilder.() -> Unit = {}) {
+    if (currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) != true) return
+    navigate(route, builder)
+}
+
 private fun NavHostController.navigateToPlayer(request: PlayerNavigationRequest) {
+    if (currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) != true) return
     currentBackStackEntry?.savedStateHandle?.set(PLAYER_REQUEST_KEY, request)
     navigate(Routes.PLAYER) { launchSingleTop = true }
 }
@@ -165,7 +175,9 @@ fun AppNavigation() {
     // NAV-M02/NAV-H02: Single helper replacing repeated tab lambdas without serializing
     // each tab's full UI tree into saved state on every switch.
     fun tabNavigate(route: String) {
-        val currentRoute = navController.currentBackStackEntry?.destination?.route
+        val entry = navController.currentBackStackEntry ?: return
+        if (!entry.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        val currentRoute = entry.destination?.route
         if (currentRoute == route || currentRoute?.startsWith("$route?") == true) return
 
         navController.navigate(route) {
@@ -180,12 +192,12 @@ fun AppNavigation() {
     ) {
         composable(Routes.WELCOME) {
             WelcomeScreen(
-                onNavigateToHome = {
+                onNavigateToHome = dropUnlessResumed {
                     navController.navigate(Routes.HOME) {
                         popUpTo(Routes.WELCOME) { inclusive = true }
                     }
                 },
-                onNavigateToSetup = {
+                onNavigateToSetup = dropUnlessResumed {
                     navController.navigate(Routes.PROVIDER_SETUP) {
                         popUpTo(Routes.WELCOME) { inclusive = true }
                     }
@@ -203,7 +215,7 @@ fun AppNavigation() {
             
             ProviderSetupScreen(
                 editProviderId = providerId,
-                onProviderAdded = {
+                onProviderAdded = dropUnlessResumed {
                     navController.navigate(Routes.HOME) {
                         popUpTo(Routes.PROVIDER_SETUP) { inclusive = true }
                     }
@@ -215,7 +227,7 @@ fun AppNavigation() {
         composable(Routes.HOME) {
             DashboardScreen(
                 onNavigate = { route -> tabNavigate(route) },
-                onAddProvider = {
+                onAddProvider = dropUnlessResumed {
                     navController.navigate(Routes.providerSetup(null))
                 },
                 onChannelClick = { channel ->
@@ -232,7 +244,7 @@ fun AppNavigation() {
                     navController.navigateToPlayer(Routes.moviePlayer(movie))
                 },
                 onSeriesClick = { series ->
-                    navController.navigate(Routes.seriesDetail(series.id))
+                    navController.navigateIfResumed(Routes.seriesDetail(series.id))
                 },
                 onPlaybackHistoryClick = { history ->
                     val route = when (history.contentType) {
@@ -270,7 +282,7 @@ fun AppNavigation() {
                     if (route is PlayerNavigationRequest) {
                         navController.navigateToPlayer(route)
                     } else {
-                        navController.navigate(route) { launchSingleTop = true }
+                        navController.navigateIfResumed(route as String) { launchSingleTop = true }
                     }
                 },
                 currentRoute = Routes.HOME
@@ -315,7 +327,7 @@ fun AppNavigation() {
         composable(Routes.SERIES) {
             SeriesScreen(
                 onSeriesClick = { seriesId ->
-                    navController.navigate(Routes.seriesDetail(seriesId))
+                    navController.navigateIfResumed(Routes.seriesDetail(seriesId))
                 },
                 onNavigate = { route -> tabNavigate(route) },
                 currentRoute = Routes.SERIES
@@ -353,7 +365,7 @@ fun AppNavigation() {
                     if (route is PlayerNavigationRequest) {
                         navController.navigateToPlayer(route)
                     } else {
-                        navController.navigate(route) { launchSingleTop = true }
+                        navController.navigateIfResumed(route as String) { launchSingleTop = true }
                     }
                 },
                 onHistoryClick = { item ->
@@ -395,7 +407,7 @@ fun AppNavigation() {
                     if (route is PlayerNavigationRequest) {
                         navController.navigateToPlayer(route)
                     } else {
-                        navController.navigate(route) { launchSingleTop = true }
+                        navController.navigateIfResumed(route as String) { launchSingleTop = true }
                     }
                 },
                 onNavigate = { route -> tabNavigate(route) },
@@ -455,14 +467,14 @@ fun AppNavigation() {
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 onNavigate = { route -> tabNavigate(route) },
-                onAddProvider = {
+                onAddProvider = dropUnlessResumed {
                     navController.navigate(Routes.providerSetup(null))
                 },
                 onEditProvider = { provider ->
-                    navController.navigate(Routes.providerSetup(provider.id))
+                    navController.navigateIfResumed(Routes.providerSetup(provider.id))
                 },
                 onNavigateToParentalControl = { providerId ->
-                    navController.navigate(Routes.parentalControlGroups(providerId))
+                    navController.navigateIfResumed(Routes.parentalControlGroups(providerId))
                 },
                 currentRoute = Routes.SETTINGS
             )
@@ -497,7 +509,7 @@ fun AppNavigation() {
                      navController.navigateToPlayer(Routes.moviePlayer(movie))
                 },
                 onSeriesClick = { series ->
-                     navController.navigate(Routes.seriesDetail(series.id))
+                     navController.navigateIfResumed(Routes.seriesDetail(series.id))
                 },
                 onNavigate = { route -> tabNavigate(route) },
                 currentRoute = Routes.SEARCH

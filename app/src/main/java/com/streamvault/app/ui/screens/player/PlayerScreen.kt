@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -110,42 +111,42 @@ fun PlayerScreen(
         ?.collectAsState(initial = mainActivity.isInPictureInPictureMode)
         ?.value
         ?: false
-    val playbackState by viewModel.playerEngine.playbackState.collectAsState()
-    val isPlaying by viewModel.playerEngine.isPlaying.collectAsState()
-    val showControls by viewModel.showControls.collectAsState()
-    val videoFormat by viewModel.videoFormat.collectAsState()
-    val playerError by viewModel.playerError.collectAsState()
-    val currentProgram by viewModel.currentProgram.collectAsState()
-    val nextProgram by viewModel.nextProgram.collectAsState()
-    val programHistory by viewModel.programHistory.collectAsState()
-    val currentChannel by viewModel.currentChannel.collectAsState()
-    val resumePrompt by viewModel.resumePrompt.collectAsState()
+    val playbackState by viewModel.playerEngine.playbackState.collectAsStateWithLifecycle()
+    val isPlaying by viewModel.playerEngine.isPlaying.collectAsStateWithLifecycle()
+    val showControls by viewModel.showControls.collectAsStateWithLifecycle()
+    val videoFormat by viewModel.videoFormat.collectAsStateWithLifecycle()
+    val playerError by viewModel.playerError.collectAsStateWithLifecycle()
+    val currentProgram by viewModel.currentProgram.collectAsStateWithLifecycle()
+    val nextProgram by viewModel.nextProgram.collectAsStateWithLifecycle()
+    val programHistory by viewModel.programHistory.collectAsStateWithLifecycle()
+    val currentChannel by viewModel.currentChannel.collectAsStateWithLifecycle()
+    val resumePrompt by viewModel.resumePrompt.collectAsStateWithLifecycle()
     
-    val showChannelListOverlay by viewModel.showChannelListOverlay.collectAsState()
-    val showCategoryListOverlay by viewModel.showCategoryListOverlay.collectAsState()
-    val availableCategories by viewModel.availableCategories.collectAsState()
-    val activeCategoryId by viewModel.activeCategoryId.collectAsState()
-    val showEpgOverlay by viewModel.showEpgOverlay.collectAsState()
-    val currentChannelList by viewModel.currentChannelList.collectAsState()
-    val recentChannels by viewModel.recentChannels.collectAsState()
-    val lastVisitedCategory by viewModel.lastVisitedCategory.collectAsState()
-    val displayChannelNumber by viewModel.displayChannelNumber.collectAsState()
-    val upcomingPrograms by viewModel.upcomingPrograms.collectAsState()
-    val showChannelInfoOverlay by viewModel.showChannelInfoOverlay.collectAsState()
-    val numericChannelInput by viewModel.numericChannelInput.collectAsState()
+    val showChannelListOverlay by viewModel.showChannelListOverlay.collectAsStateWithLifecycle()
+    val showCategoryListOverlay by viewModel.showCategoryListOverlay.collectAsStateWithLifecycle()
+    val availableCategories by viewModel.availableCategories.collectAsStateWithLifecycle()
+    val activeCategoryId by viewModel.activeCategoryId.collectAsStateWithLifecycle()
+    val showEpgOverlay by viewModel.showEpgOverlay.collectAsStateWithLifecycle()
+    val currentChannelList by viewModel.currentChannelList.collectAsStateWithLifecycle()
+    val recentChannels by viewModel.recentChannels.collectAsStateWithLifecycle()
+    val lastVisitedCategory by viewModel.lastVisitedCategory.collectAsStateWithLifecycle()
+    val displayChannelNumber by viewModel.displayChannelNumber.collectAsStateWithLifecycle()
+    val upcomingPrograms by viewModel.upcomingPrograms.collectAsStateWithLifecycle()
+    val showChannelInfoOverlay by viewModel.showChannelInfoOverlay.collectAsStateWithLifecycle()
+    val numericChannelInput by viewModel.numericChannelInput.collectAsStateWithLifecycle()
     
-    val availableAudioTracks by viewModel.availableAudioTracks.collectAsState()
-    val availableSubtitleTracks by viewModel.availableSubtitleTracks.collectAsState()
-    val availableVideoQualities by viewModel.availableVideoQualities.collectAsState()
-    val aspectRatio by viewModel.aspectRatio.collectAsState()
-    val showDiagnostics by viewModel.showDiagnostics.collectAsState()
-    val playerDiagnostics by viewModel.playerDiagnostics.collectAsState()
-    val currentPosition by viewModel.playerEngine.currentPosition.collectAsState()
-    val duration by viewModel.playerEngine.duration.collectAsState()
-    val playerNotice by viewModel.playerNotice.collectAsState()
-    val currentChannelRecording by viewModel.currentChannelRecording.collectAsState()
-    val isMuted by viewModel.isMuted.collectAsState()
-    val mediaTitle by viewModel.mediaTitle.collectAsState()
+    val availableAudioTracks by viewModel.availableAudioTracks.collectAsStateWithLifecycle()
+    val availableSubtitleTracks by viewModel.availableSubtitleTracks.collectAsStateWithLifecycle()
+    val availableVideoQualities by viewModel.availableVideoQualities.collectAsStateWithLifecycle()
+    val aspectRatio by viewModel.aspectRatio.collectAsStateWithLifecycle()
+    val showDiagnostics by viewModel.showDiagnostics.collectAsStateWithLifecycle()
+    val playerDiagnostics by viewModel.playerDiagnostics.collectAsStateWithLifecycle()
+    val currentPosition by viewModel.playerEngine.currentPosition.collectAsStateWithLifecycle()
+    val duration by viewModel.playerEngine.duration.collectAsStateWithLifecycle()
+    val playerNotice by viewModel.playerNotice.collectAsStateWithLifecycle()
+    val currentChannelRecording by viewModel.currentChannelRecording.collectAsStateWithLifecycle()
+    val isMuted by viewModel.isMuted.collectAsStateWithLifecycle()
+    val mediaTitle by viewModel.mediaTitle.collectAsStateWithLifecycle()
 
     var showTrackSelection by remember { mutableStateOf<TrackType?>(null) }
     var showProgramHistory by remember { mutableStateOf(false) }
@@ -654,7 +655,7 @@ fun PlayerScreen(
 
         // --- Overlays ---
         if (!isInPictureInPictureMode && showDiagnostics) {
-            val playerStats by viewModel.playerStats.collectAsState()
+            val playerStats by viewModel.playerStats.collectAsStateWithLifecycle()
             DiagnosticsOverlay(
                 stats = playerStats,
                 diagnostics = playerDiagnostics,

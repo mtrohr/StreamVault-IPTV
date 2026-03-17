@@ -13,6 +13,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -98,7 +99,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
     multiViewViewModel: MultiViewViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isProMode = uiState.liveTvChannelMode == LiveTvChannelMode.PRO
     val isDenseMode = uiState.liveTvChannelMode != LiveTvChannelMode.COMFORTABLE
     val channelRowHeight = when (uiState.liveTvChannelMode) {
@@ -117,7 +118,7 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Split screen state
-    val splitSlots by multiViewViewModel.slotsFlow.collectAsState()
+    val splitSlots by multiViewViewModel.slotsFlow.collectAsStateWithLifecycle()
     val hasSplitChannels = splitSlots.any { it != null }
     var showSplitManagerDialog by rememberSaveable { mutableStateOf(false) }
     var pendingSplitPlannerChannel by remember { mutableStateOf<Channel?>(null) }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.TextButton
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -199,10 +200,10 @@ fun SearchScreen(
     currentRoute: String,
     viewModel: SearchViewModel = hiltViewModel()
 ) {
-    val query by viewModel.query.collectAsState()
-    val selectedTab by viewModel.selectedTab.collectAsState()
-    val recentQueries by viewModel.recentQueries.collectAsState()
-    val uiState by viewModel.uiState.collectAsState()
+    val query by viewModel.query.collectAsStateWithLifecycle()
+    val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
+    val recentQueries by viewModel.recentQueries.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
     val searchFocusRequester = remember { FocusRequester() }
     val context = androidx.compose.ui.platform.LocalContext.current

@@ -8,9 +8,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,7 +65,7 @@ fun WelcomeScreen(
     onNavigateToSetup: () -> Unit,
     viewModel: WelcomeViewModel = hiltViewModel()
 ) {
-    val hasProviders by viewModel.hasProviders.collectAsState()
+    val hasProviders by viewModel.hasProviders.collectAsStateWithLifecycle()
 
     LaunchedEffect(hasProviders) {
         when (hasProviders) {
