@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.streamvault.app.R
 import com.streamvault.app.tvinput.TvInputChannelSyncManager
 import com.streamvault.app.ui.model.LiveTvChannelMode
+import com.streamvault.app.ui.model.VodViewMode
 import com.streamvault.data.preferences.PreferencesRepository
 import com.streamvault.data.sync.SyncManager
 import com.streamvault.data.sync.SyncRepairSection
@@ -69,7 +70,8 @@ private data class SettingsPreferenceSnapshot(
     val lastSpeedTestRecommendedHeight: Int?,
     val lastSpeedTestEstimated: Boolean,
     val isIncognitoMode: Boolean,
-    val liveTvChannelMode: LiveTvChannelMode
+    val liveTvChannelMode: LiveTvChannelMode,
+    val vodViewMode: VodViewMode
 )
 
 @HiltViewModel
@@ -122,7 +124,8 @@ class SettingsViewModel @Inject constructor(
                     lastSpeedTestRecommendedHeight = null,
                     lastSpeedTestEstimated = false,
                     isIncognitoMode = false,
-                    liveTvChannelMode = LiveTvChannelMode.COMPACT
+                    liveTvChannelMode = LiveTvChannelMode.COMPACT,
+                    vodViewMode = VodViewMode.MODERN
                 )
             }.combine(preferencesRepository.appLanguage) { snapshot, language ->
                 snapshot.copy(appLanguage = language)
@@ -154,6 +157,8 @@ class SettingsViewModel @Inject constructor(
                 snapshot.copy(isIncognitoMode = incognito)
             }.combine(preferencesRepository.liveTvChannelMode) { snapshot, liveTvChannelMode ->
                 snapshot.copy(liveTvChannelMode = LiveTvChannelMode.fromStorage(liveTvChannelMode))
+            }.combine(preferencesRepository.vodViewMode) { snapshot, vodViewMode ->
+                snapshot.copy(vodViewMode = VodViewMode.fromStorage(vodViewMode))
             }.collect { snapshot ->
                 _uiState.update {
                     it.copy(
@@ -179,7 +184,8 @@ class SettingsViewModel @Inject constructor(
                             )
                         },
                         isIncognitoMode = snapshot.isIncognitoMode,
-                        liveTvChannelMode = snapshot.liveTvChannelMode
+                        liveTvChannelMode = snapshot.liveTvChannelMode,
+                        vodViewMode = snapshot.vodViewMode
                     )
                 }
             }
@@ -333,6 +339,12 @@ class SettingsViewModel @Inject constructor(
     fun setLiveTvChannelMode(mode: LiveTvChannelMode) {
         viewModelScope.launch {
             preferencesRepository.setLiveTvChannelMode(mode.name)
+        }
+    }
+
+    fun setVodViewMode(mode: VodViewMode) {
+        viewModelScope.launch {
+            preferencesRepository.setVodViewMode(mode.storageValue)
         }
     }
 
@@ -762,6 +774,7 @@ data class SettingsUiState(
     val recordingStorageState: RecordingStorageState = RecordingStorageState(),
     val isIncognitoMode: Boolean = false,
     val liveTvChannelMode: LiveTvChannelMode = LiveTvChannelMode.COMFORTABLE,
+    val vodViewMode: VodViewMode = VodViewMode.MODERN,
     val categorySortModes: Map<ContentType, CategorySortMode> = emptyMap(),
     val hiddenCategories: List<Category> = emptyList()
 )

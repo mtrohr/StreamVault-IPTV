@@ -3,6 +3,7 @@ package com.streamvault.app.ui.screens.movies
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.streamvault.data.preferences.PreferencesRepository
+import com.streamvault.app.ui.model.VodViewMode
 import com.streamvault.app.ui.model.applyProviderCategoryDisplayPreferences
 import com.streamvault.domain.model.Category
 import com.streamvault.domain.model.CategorySortMode
@@ -183,6 +184,12 @@ class MoviesViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Failed to load movies") }
+            }
+        }
+
+        viewModelScope.launch {
+            preferencesRepository.vodViewMode.collectLatest { mode ->
+                _uiState.update { it.copy(vodViewMode = VodViewMode.fromStorage(mode)) }
             }
         }
 
@@ -1066,6 +1073,7 @@ data class MoviesUiState(
     val searchQuery: String = "",
     val selectedLibraryFilterType: LibraryFilterType = LibraryFilterType.ALL,
     val selectedLibrarySortBy: LibrarySortBy = LibrarySortBy.LIBRARY,
+    val vodViewMode: VodViewMode = VodViewMode.MODERN,
     val continueWatching: List<PlaybackHistory> = emptyList(),
     val isLoading: Boolean = true,
     val parentalControlLevel: Int = 0,

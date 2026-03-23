@@ -74,8 +74,12 @@ import com.streamvault.app.ui.components.shell.VodActionChipRow
 import com.streamvault.app.ui.components.shell.VodCategoryOption
 import com.streamvault.app.ui.components.shell.VodCategoryPickerDialog
 import com.streamvault.app.ui.components.shell.VodBrowseOptionsDialog
+import com.streamvault.app.ui.components.shell.VodClassicCategoryOption
+import com.streamvault.app.ui.components.shell.VodClassicContentHeader
+import com.streamvault.app.ui.components.shell.VodClassicSplitLayout
 import com.streamvault.app.ui.components.shell.VodHeroStrip
 import com.streamvault.app.ui.components.shell.VodSectionHeader
+import com.streamvault.app.ui.model.VodViewMode
 import com.streamvault.app.ui.screens.vod.HandleVodUserMessage
 import com.streamvault.app.ui.screens.vod.ProtectedVodPinDialog
 import com.streamvault.app.ui.screens.vod.VodBrowseDefaults
@@ -345,6 +349,29 @@ private fun MoviesVodContent(
             categories = categoryOptions,
             onDismiss = { showCategoryPicker = false }
         )
+    }
+
+    if (uiState.vodViewMode == VodViewMode.CLASSIC) {
+        MoviesVodClassicContent(
+            uiState = uiState,
+            selectedFilterType = selectedFilterType,
+            onSelectedFilterTypeChange = onSelectedFilterTypeChange,
+            selectedSortBy = selectedSortBy,
+            onSelectedSortByChange = onSelectedSortByChange,
+            searchQuery = searchQuery,
+            onSearchQueryChange = onSearchQueryChange,
+            onMovieClick = onMovieClick,
+            onProtectedMovieClick = onProtectedMovieClick,
+            onShowDialog = onShowDialog,
+            onShowCategoryOptions = onShowCategoryOptions,
+            onSelectCategory = onSelectCategory,
+            onSelectFullLibraryBrowse = onSelectFullLibraryBrowse,
+            onOpenContinueWatching = onOpenContinueWatching,
+            onOpenFresh = onOpenFresh,
+            onLoadMore = onLoadMore,
+            onDismissReorder = onDismissReorder
+        )
+        return
     }
 
     if (uiState.selectedCategory == null) {
@@ -704,6 +731,270 @@ private fun MoviesVodContent(
                         onClick = onLoadMore,
                         modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MoviesVodClassicContent(
+    uiState: MoviesUiState,
+    selectedFilterType: LibraryFilterType,
+    onSelectedFilterTypeChange: (LibraryFilterType) -> Unit,
+    selectedSortBy: LibrarySortBy,
+    onSelectedSortByChange: (LibrarySortBy) -> Unit,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    onMovieClick: (Movie) -> Unit,
+    onProtectedMovieClick: (Movie) -> Unit,
+    onShowDialog: (Movie) -> Unit,
+    onShowCategoryOptions: (String) -> Unit,
+    onSelectCategory: (String?) -> Unit,
+    onSelectFullLibraryBrowse: () -> Unit,
+    onOpenContinueWatching: () -> Unit,
+    onOpenFresh: () -> Unit,
+    onLoadMore: () -> Unit,
+    onDismissReorder: () -> Unit
+) {
+    val allLabel = stringResource(R.string.vod_classic_all)
+    val continueLabel = stringResource(R.string.vod_classic_continue_watching)
+    val recentLabel = stringResource(R.string.vod_classic_recently_added)
+    var categoryQuery by rememberSaveable { mutableStateOf("") }
+    var showBrowseOptions by rememberSaveable(uiState.selectedCategory) { mutableStateOf(false) }
+    var showSearchBar by rememberSaveable(uiState.selectedCategory) { mutableStateOf(searchQuery.isNotBlank()) }
+    val baseMovies = uiState.selectedCategoryItems
+    val filteredGridMovies = remember(baseMovies, uiState.isReorderMode, uiState.filteredMovies) {
+        if (uiState.isReorderMode) uiState.filteredMovies else baseMovies
+    }
+    var draggingMovie by remember { mutableStateOf<Movie?>(null) }
+
+    LaunchedEffect(uiState.vodViewMode, uiState.selectedCategory, uiState.isReorderMode) {
+        if (uiState.vodViewMode == VodViewMode.CLASSIC && uiState.selectedCategory == null && !uiState.isReorderMode) {
+            onSelectFullLibraryBrowse()
+        }
+    }
+
+    if (showBrowseOptions) {
+        VodBrowseOptionsDialog(
+            title = stringResource(R.string.nav_movies),
+            filterTitle = stringResource(R.string.library_filter_title),
+            filterChips = movieFilterChips(),
+            selectedFilterKey = selectedFilterType.name,
+            onFilterSelected = { key ->
+                LibraryFilterType.entries.firstOrNull { it.name == key }?.let(onSelectedFilterTypeChange)
+            },
+            sortTitle = stringResource(R.string.library_sort_title),
+            sortChips = movieSortChips(),
+            selectedSortKey = selectedSortBy.name,
+            onSortSelected = { key ->
+                LibrarySortBy.entries.firstOrNull { it.name == key }?.let(onSelectedSortByChange)
+            },
+            onDismiss = { showBrowseOptions = false }
+        )
+    }
+
+    val selectedKey = when {
+        uiState.selectedCategory == uiState.favoriteCategoryName -> "favorites"
+        uiState.selectedCategory == uiState.fullLibraryCategoryName && selectedFilterType == LibraryFilterType.IN_PROGRESS -> "continue"
+        uiState.selectedCategory == uiState.fullLibraryCategoryName && selectedFilterType == LibraryFilterType.RECENTLY_UPDATED -> "recent"
+        uiState.selectedCategory == null || uiState.selectedCategory == uiState.fullLibraryCategoryName -> "all"
+        else -> "category:${uiState.selectedCategory}"
+    }
+    val continueCount = remember(uiState.continueWatching) {
+        uiState.continueWatching.map { it.contentId }.distinct().size
+    }
+    val recentCount = uiState.libraryLensRows[MovieLibraryLens.FRESH]?.size ?: 0
+    val railOptions = remember(
+        uiState.categoryNames,
+        uiState.categoryCounts,
+        uiState.favoriteCategoryName,
+        uiState.selectedCategory,
+        selectedFilterType,
+        categoryQuery,
+        continueCount,
+        recentCount,
+        uiState.libraryCount
+    ) {
+        buildList {
+            add(
+                VodClassicCategoryOption(
+                    key = "all",
+                    label = allLabel,
+                    count = uiState.libraryCount,
+                    isSelected = selectedKey == "all",
+                    onClick = onSelectFullLibraryBrowse
+                )
+            )
+            add(
+                VodClassicCategoryOption(
+                    key = "favorites",
+                    label = uiState.favoriteCategoryName,
+                    count = uiState.categoryCounts[uiState.favoriteCategoryName] ?: 0,
+                    isSelected = selectedKey == "favorites",
+                    onClick = { onSelectCategory(uiState.favoriteCategoryName) }
+                )
+            )
+            add(
+                VodClassicCategoryOption(
+                    key = "continue",
+                    label = continueLabel,
+                    count = continueCount,
+                    isSelected = selectedKey == "continue",
+                    onClick = onOpenContinueWatching
+                )
+            )
+            add(
+                VodClassicCategoryOption(
+                    key = "recent",
+                    label = recentLabel,
+                    count = recentCount,
+                    isSelected = selectedKey == "recent",
+                    onClick = onOpenFresh
+                )
+            )
+            uiState.categoryNames
+                .filterNot { it == uiState.favoriteCategoryName }
+                .forEach { name ->
+                    add(
+                        VodClassicCategoryOption(
+                            key = "category:$name",
+                            label = name,
+                            count = uiState.categoryCounts[name] ?: 0,
+                            isSelected = selectedKey == "category:$name",
+                            onClick = { onSelectCategory(name) },
+                            onLongClick = { onShowCategoryOptions(name) }
+                        )
+                    )
+                }
+        }.filter { option ->
+            categoryQuery.isBlank() || option.label.contains(categoryQuery.trim(), ignoreCase = true)
+        }
+    }
+
+    VodClassicSplitLayout(
+        railTitle = stringResource(R.string.nav_movies),
+        railSearchValue = categoryQuery,
+        onRailSearchValueChange = { categoryQuery = it },
+        railSearchPlaceholder = stringResource(R.string.vod_classic_category_search),
+        categories = railOptions
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            VodClassicContentHeader(
+                title = when {
+                    selectedKey == "all" -> allLabel
+                    selectedKey == "continue" -> continueLabel
+                    selectedKey == "recent" -> recentLabel
+                    else -> uiState.selectedCategory ?: allLabel
+                },
+                subtitle = stringResource(
+                    R.string.vod_classic_results_count,
+                    uiState.selectedCategoryTotalCount.takeIf { it > 0 } ?: filteredGridMovies.size
+                ),
+                actions = buildList {
+                    add(
+                        VodActionChip(
+                            key = "search_toggle",
+                            label = if (showSearchBar) "Hide Search" else "Search",
+                            onClick = { showSearchBar = !showSearchBar }
+                        )
+                    )
+                    add(
+                        VodActionChip(
+                            key = "browse_options",
+                            label = "Filters & Sort",
+                            onClick = { showBrowseOptions = true }
+                        )
+                    )
+                }
+            )
+
+            if (showSearchBar) {
+                SearchInput(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    placeholder = stringResource(R.string.movies_search_placeholder),
+                    onSearch = {},
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 148.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .onPreviewKeyEvent { event ->
+                        if (uiState.isReorderMode && event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN) {
+                            if (event.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_BACK) {
+                                draggingMovie = null
+                                onDismissReorder()
+                                true
+                            } else false
+                        } else false
+                    },
+                contentPadding = PaddingValues(bottom = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                if (uiState.isLoadingSelectedCategory) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(320.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = Color.White)
+                        }
+                    }
+                } else if (filteredGridMovies.isEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        AppMessageState(
+                            title = stringResource(R.string.movies_no_found),
+                            subtitle = stringResource(R.string.vod_classic_empty_category)
+                        )
+                    }
+                } else {
+                    gridItems(filteredGridMovies, key = { it.id }) { movie ->
+                        val isLocked = (movie.isAdult || movie.isUserProtected) && uiState.parentalControlLevel == 1
+                        val isDraggingThis = draggingMovie == movie
+                        MovieCard(
+                            movie = movie,
+                            isLocked = isLocked,
+                            isReorderMode = uiState.isReorderMode,
+                            isDragging = isDraggingThis,
+                            onClick = {
+                                if (uiState.isReorderMode) {
+                                    draggingMovie = if (isDraggingThis) null else movie
+                                } else if (isLocked) {
+                                    onProtectedMovieClick(movie)
+                                } else {
+                                    onMovieClick(movie)
+                                }
+                            },
+                            onLongClick = {
+                                if (!uiState.isReorderMode) onShowDialog(movie)
+                            }
+                        )
+                    }
+
+                    if (!uiState.isReorderMode && uiState.canLoadMoreSelectedCategory) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            LoadMoreCard(
+                                label = stringResource(
+                                    R.string.library_load_more,
+                                    uiState.selectedCategoryLoadedCount,
+                                    uiState.selectedCategoryTotalCount
+                                ),
+                                onClick = onLoadMore,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+                    }
                 }
             }
         }

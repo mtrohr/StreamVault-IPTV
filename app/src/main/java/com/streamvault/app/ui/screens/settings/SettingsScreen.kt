@@ -39,6 +39,7 @@ import com.streamvault.app.ui.components.TvEmptyState
 import com.streamvault.app.ui.components.shell.AppNavigationChrome
 import com.streamvault.app.ui.components.shell.AppScreenScaffold
 import com.streamvault.app.ui.model.LiveTvChannelMode
+import com.streamvault.app.ui.model.VodViewMode
 import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.manager.BackupConflictStrategy
 import com.streamvault.domain.model.Category
@@ -126,6 +127,7 @@ fun SettingsScreen(
     var showLevelDialog by rememberSaveable { mutableStateOf(false) }
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     var showLiveTvModeDialog by rememberSaveable { mutableStateOf(false) }
+    var showVodViewModeDialog by rememberSaveable { mutableStateOf(false) }
     var showPlaybackSpeedDialog by rememberSaveable { mutableStateOf(false) }
     var showAudioLanguageDialog by rememberSaveable { mutableStateOf(false) }
     var showSubtitleSizeDialog by rememberSaveable { mutableStateOf(false) }
@@ -498,6 +500,11 @@ fun SettingsScreen(
                     onClick = { showLiveTvModeDialog = true }
                 )
                 ClickableSettingsRow(
+                    label = stringResource(R.string.settings_vod_view_mode),
+                    value = stringResource(uiState.vodViewMode.labelResId()),
+                    onClick = { showVodViewModeDialog = true }
+                )
+                ClickableSettingsRow(
                     label = stringResource(R.string.settings_default_playback_speed),
                     value = playbackSpeedLabel,
                     onClick = { showPlaybackSpeedDialog = true }
@@ -702,6 +709,17 @@ fun SettingsScreen(
                 onModeSelected = { mode ->
                     viewModel.setLiveTvChannelMode(mode)
                     showLiveTvModeDialog = false
+                }
+            )
+        }
+
+        if (showVodViewModeDialog) {
+            VodViewModeDialog(
+                selectedMode = uiState.vodViewMode,
+                onDismiss = { showVodViewModeDialog = false },
+                onModeSelected = { mode ->
+                    viewModel.setVodViewMode(mode)
+                    showVodViewModeDialog = false
                 }
             )
         }
@@ -1969,6 +1987,57 @@ private fun SettingsSectionHeader(
 }
 
 @Composable
+private fun VodViewModeDialog(
+    selectedMode: VodViewMode,
+    onDismiss: () -> Unit,
+    onModeSelected: (VodViewMode) -> Unit
+) {
+    PremiumDialog(
+        title = stringResource(R.string.settings_vod_view_mode),
+        subtitle = stringResource(R.string.settings_vod_view_mode_subtitle),
+        onDismissRequest = onDismiss,
+        widthFraction = 0.52f,
+        content = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                VodViewMode.entries.forEach { mode ->
+                    Surface(
+                        onClick = { onModeSelected(mode) },
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(14.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = if (mode == selectedMode) Primary.copy(alpha = 0.18f) else SurfaceElevated,
+                            focusedContainerColor = Primary.copy(alpha = 0.28f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = stringResource(mode.labelResId()),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = if (mode == selectedMode) Primary else OnBackground
+                            )
+                            Text(
+                                text = stringResource(mode.descriptionResId()),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = OnSurfaceDim
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        footer = {
+            PremiumDialogFooterButton(
+                label = stringResource(R.string.settings_cancel),
+                onClick = onDismiss
+            )
+        }
+    )
+}
+
+@Composable
 private fun SettingsRow(label: String, value: String) {
     Surface(
         onClick = {},
@@ -2680,5 +2749,15 @@ private fun LiveTvChannelMode.descriptionResId(): Int = when (this) {
     LiveTvChannelMode.COMFORTABLE -> R.string.settings_live_tv_mode_comfortable_desc
     LiveTvChannelMode.COMPACT -> R.string.settings_live_tv_mode_compact_desc
     LiveTvChannelMode.PRO -> R.string.settings_live_tv_mode_pro_desc
+}
+
+private fun VodViewMode.labelResId(): Int = when (this) {
+    VodViewMode.MODERN -> R.string.settings_vod_view_mode_modern
+    VodViewMode.CLASSIC -> R.string.settings_vod_view_mode_classic
+}
+
+private fun VodViewMode.descriptionResId(): Int = when (this) {
+    VodViewMode.MODERN -> R.string.settings_vod_view_mode_modern_desc
+    VodViewMode.CLASSIC -> R.string.settings_vod_view_mode_classic_desc
 }
 
