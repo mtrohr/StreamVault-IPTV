@@ -39,6 +39,11 @@ Placeholder images are included in `docs/images/` so the repository renders clea
 ![Search placeholder](docs/images/search.svg)
 ![Multiview placeholder](docs/images/multiview.svg)
 
+## Download
+
+- [Download StreamVault.apk](releases/StreamVault.apk)
+- The repository currently tracks a built release APK so GitHub can serve it directly from the project page.
+
 ## Project Structure
 
 - `app/` Android app UI, navigation, dependency injection, and Android TV integrations
