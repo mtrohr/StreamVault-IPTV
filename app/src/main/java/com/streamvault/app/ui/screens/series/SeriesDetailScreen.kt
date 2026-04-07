@@ -50,12 +50,17 @@ import com.streamvault.app.device.rememberIsTelevisionDevice
 import com.streamvault.app.ui.components.rememberCrossfadeImageModel
 import com.streamvault.app.ui.components.shell.ContentMetadataStrip
 import com.streamvault.app.ui.components.shell.EpisodeRowCard
+import com.streamvault.app.ui.components.shell.ExternalRatingsStrip
 import com.streamvault.app.ui.components.shell.StatusPill
 import com.streamvault.app.ui.design.AppColors
 import com.streamvault.app.ui.model.formatVodRatingLabel
 import com.streamvault.domain.model.Episode
+import com.streamvault.domain.model.ExternalRatings
 import com.streamvault.domain.model.Season
 import com.streamvault.domain.model.Series
+import com.streamvault.app.ui.interaction.TvClickableSurface
+import com.streamvault.app.ui.interaction.TvButton
+import com.streamvault.app.ui.interaction.TvIconButton
 
 @Composable
 fun SeriesDetailScreen(
@@ -97,6 +102,8 @@ fun SeriesDetailScreen(
         series = series,
         selectedSeason = uiState.selectedSeason,
         unwatchedEpisodeCount = uiState.unwatchedEpisodeCount,
+        externalRatings = uiState.externalRatings,
+        isLoadingExternalRatings = uiState.isLoadingExternalRatings,
         onSeasonSelected = viewModel::selectSeason,
         onEpisodeClick = onEpisodeClick,
         onBack = onBack
@@ -108,6 +115,8 @@ private fun SeriesDetailContent(
     series: Series,
     selectedSeason: Season?,
     unwatchedEpisodeCount: Int,
+    externalRatings: ExternalRatings,
+    isLoadingExternalRatings: Boolean,
     onSeasonSelected: (Season) -> Unit,
     onEpisodeClick: (Episode) -> Unit,
     onBack: () -> Unit
@@ -162,7 +171,7 @@ private fun SeriesDetailContent(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item {
-                Button(
+                TvButton(
                     onClick = onBack,
                     colors = ButtonDefaults.colors(
                         containerColor = AppColors.Surface.copy(alpha = 0.72f),
@@ -228,6 +237,10 @@ private fun SeriesDetailContent(
                                     selectedSeason?.name.orEmpty()
                                 )
                             )
+                            ExternalRatingsStrip(
+                                ratings = externalRatings,
+                                isLoading = isLoadingExternalRatings
+                            )
                             Text(
                                 text = series.plot ?: stringResource(R.string.series_plot_fallback),
                                 style = MaterialTheme.typography.bodyLarge,
@@ -290,6 +303,10 @@ private fun SeriesDetailContent(
                                     series.genre.orEmpty(),
                                     selectedSeason?.name.orEmpty()
                                 )
+                            )
+                            ExternalRatingsStrip(
+                                ratings = externalRatings,
+                                isLoading = isLoadingExternalRatings
                             )
                             Text(
                                 text = series.plot ?: stringResource(R.string.series_plot_fallback),
@@ -356,7 +373,7 @@ fun SeasonChip(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    Surface(
+    TvClickableSurface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
         colors = ClickableSurfaceDefaults.colors(
@@ -389,7 +406,7 @@ fun EpisodeItem(
     episode: Episode,
     onClick: () -> Unit
 ) {
-    Surface(
+    TvClickableSurface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(18.dp)),
         colors = ClickableSurfaceDefaults.colors(

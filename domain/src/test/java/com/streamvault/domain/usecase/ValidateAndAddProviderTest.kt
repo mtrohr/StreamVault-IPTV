@@ -201,6 +201,7 @@ private class FakeProviderRepository : ProviderRepository {
     override suspend fun refreshProviderData(
         providerId: Long,
         force: Boolean,
+        movieFastSyncOverride: Boolean?,
         onProgress: ((String) -> Unit)?
     ): Result<Unit> = error("Not used in test")
 

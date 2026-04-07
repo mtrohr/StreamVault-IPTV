@@ -4,9 +4,12 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.streamvault.app.util.isPlaybackComplete
+import com.streamvault.domain.model.ExternalRatings
+import com.streamvault.domain.model.ExternalRatingsLookup
 import com.streamvault.domain.model.Movie
 import com.streamvault.domain.model.ContentType
 import com.streamvault.domain.model.Result
+import com.streamvault.domain.repository.ExternalRatingsRepository
 import com.streamvault.domain.repository.MovieRepository
 import com.streamvault.domain.repository.PlaybackHistoryRepository
 import com.streamvault.domain.repository.ProviderRepository
@@ -24,7 +27,8 @@ class MovieDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val movieRepository: MovieRepository,
     private val providerRepository: ProviderRepository,
-    private val playbackHistoryRepository: PlaybackHistoryRepository
+    private val playbackHistoryRepository: PlaybackHistoryRepository,
+    private val externalRatingsRepository: ExternalRatingsRepository
 ) : ViewModel() {
 
     private val movieId: Long = checkNotNull(
@@ -69,12 +73,41 @@ class MovieDetailViewModel @Inject constructor(
                             hasResume = hasResume,
                             resumePositionMs = if (hasResume) resumePositionMs else 0L
                         )
+                }.also {
+                    loadExternalRatings(result.data)
                 }
                 is Result.Error -> _uiState.update {
                     it.copy(isLoading = false, error = result.message)
                 }
                 is Result.Loading -> _uiState.update {
                     it.copy(isLoading = true)
+                }
+            }
+        }
+    }
+
+    private fun loadExternalRatings(movie: Movie) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingExternalRatings = true) }
+            val ratingsResult = externalRatingsRepository.getRatings(
+                ExternalRatingsLookup(
+                    contentType = ContentType.MOVIE,
+                    title = movie.name,
+                    releaseYear = movie.year ?: movie.releaseDate,
+                    tmdbId = movie.tmdbId
+                )
+            )
+            _uiState.update { currentState ->
+                when (ratingsResult) {
+                    is Result.Success -> currentState.copy(
+                        isLoadingExternalRatings = false,
+                        externalRatings = ratingsResult.data
+                    )
+                    is Result.Error -> currentState.copy(
+                        isLoadingExternalRatings = false,
+                        externalRatings = ExternalRatings.unavailable()
+                    )
+                    is Result.Loading -> currentState
                 }
             }
         }
@@ -86,5 +119,7 @@ data class MovieDetailUiState(
     val movie: Movie? = null,
     val error: String? = null,
     val hasResume: Boolean = false,
-    val resumePositionMs: Long = 0L
+    val resumePositionMs: Long = 0L,
+    val isLoadingExternalRatings: Boolean = false,
+    val externalRatings: ExternalRatings = ExternalRatings.unavailable()
 )

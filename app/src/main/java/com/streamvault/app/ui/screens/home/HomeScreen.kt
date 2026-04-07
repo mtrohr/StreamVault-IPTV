@@ -2,7 +2,9 @@ package com.streamvault.app.ui.screens.home
 
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -17,6 +19,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.streamvault.app.ui.components.SearchInput
+import com.streamvault.app.ui.components.SelectionChip
+import com.streamvault.app.ui.components.SelectionChipRow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
@@ -41,6 +45,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import com.streamvault.app.device.rememberIsTelevisionDevice
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.streamvault.app.ui.components.CategoryRow
 import com.streamvault.app.ui.components.ChannelCard
 import com.streamvault.app.ui.components.shell.ContentMetadataStrip
@@ -49,13 +55,16 @@ import com.streamvault.app.ui.components.shell.StatusPill
 import com.streamvault.app.ui.components.dialogs.CategoryOptionsDialog
 import com.streamvault.app.ui.components.dialogs.PinDialog
 import com.streamvault.app.ui.components.dialogs.PremiumDialog
+import com.streamvault.app.ui.components.dialogs.PremiumDialogActionButton
 import com.streamvault.app.ui.components.dialogs.PremiumDialogFooterButton
 import com.streamvault.app.ui.components.dialogs.RenameGroupDialog
 import com.streamvault.app.ui.components.ReorderTopBar
 import com.streamvault.app.ui.components.shell.AppNavigationChrome
 import com.streamvault.app.ui.components.shell.AppScreenScaffold
 import com.streamvault.app.ui.design.FocusRestoreHost
+import com.streamvault.app.ui.design.requestFocusSafely
 import androidx.activity.compose.BackHandler
+import com.streamvault.app.ui.model.LiveTvQuickFilterVisibilityMode
 import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.model.Category
 import com.streamvault.domain.model.Channel
@@ -75,13 +84,16 @@ import com.streamvault.player.PlayerSurfaceResizeMode
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.streamvault.app.ui.interaction.TvClickableSurface
+import com.streamvault.app.ui.interaction.TvButton
+import com.streamvault.app.ui.interaction.TvIconButton
 
 private enum class FocusRestoreTarget {
     CATEGORY,
     CHANNEL
 }
 
-private const val HOME_CATEGORY_SEARCH_RESULT_LIMIT = 250
+private const val HOME_ALL_FILTER_KEY = "__all_categories__"
 
 @Composable
 private fun HomeLoadingPane(
@@ -163,10 +175,10 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Split screen state
-    val splitSlots by multiViewViewModel.slotsFlow.collectAsStateWithLifecycle()
-    val hasSplitChannels = splitSlots.any { it != null }
+    val hasSplitChannels = uiState.multiviewChannelCount > 0
     var showSplitManagerDialog by rememberSaveable { mutableStateOf(false) }
     var pendingSplitPlannerChannel by remember { mutableStateOf<Channel?>(null) }
+    var showAddQuickFilterDialog by rememberSaveable { mutableStateOf(false) }
     
     // Parental Control State
     var showPinDialog by rememberSaveable { mutableStateOf(false) }
@@ -188,13 +200,25 @@ fun HomeScreen(
         }
     }
 
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        viewModel.clearPreview()
+    }
+
+    DisposableEffect(viewModel) {
+        onDispose {
+            viewModel.clearPreview()
+        }
+    }
+
     val hasOverlay = showPinDialog || showSplitManagerDialog || pendingSplitPlannerChannel != null ||
+        showAddQuickFilterDialog ||
         uiState.showDialog || uiState.showDeleteGroupDialog ||
         uiState.showRenameGroupDialog || uiState.selectedCategoryForOptions != null ||
         isReorderMode
 
     BackHandler(enabled = hasOverlay) {
         when {
+            showAddQuickFilterDialog -> showAddQuickFilterDialog = false
             showPinDialog -> {
                 showPinDialog = false
                 pinError = null
@@ -282,6 +306,10 @@ fun HomeScreen(
                     viewModel.dismissCategoryOptions()
                 }
             },
+            isPinned = category.id in uiState.pinnedCategoryIds,
+            onTogglePinned = if (!isCategoryLocked && !category.isVirtual && category.id != ChannelRepository.ALL_CHANNELS_ID) {
+                { viewModel.toggleCategoryPinned(category) }
+            } else null,
             onHide = if (!isCategoryLocked && !category.isVirtual && category.id != ChannelRepository.ALL_CHANNELS_ID) {
                 { viewModel.hideCategory(category) }
             } else null,
@@ -301,6 +329,44 @@ fun HomeScreen(
             onReorderChannels = if (!isCategoryLocked && category.isVirtual && category.id != VirtualCategoryIds.RECENT) {
                 { viewModel.enterChannelReorderMode(category) }
             } else null
+        )
+    }
+
+    if (showAddQuickFilterDialog) {
+        var pendingFilter by rememberSaveable { mutableStateOf("") }
+        PremiumDialog(
+            title = stringResource(R.string.home_quick_filters_add_title),
+            subtitle = stringResource(R.string.home_quick_filters_add_subtitle),
+            onDismissRequest = { showAddQuickFilterDialog = false },
+            widthFraction = 0.42f,
+            content = {
+                SearchInput(
+                    value = pendingFilter,
+                    onValueChange = { pendingFilter = it },
+                    placeholder = stringResource(R.string.home_quick_filters_add_placeholder),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                PremiumDialogActionButton(
+                    label = stringResource(R.string.home_quick_filters_add_action),
+                    enabled = pendingFilter.isNotBlank(),
+                    onClick = {
+                        val normalized = pendingFilter.trim()
+                        val isDuplicate = uiState.savedCategoryFilters.any {
+                            it.equals(normalized, ignoreCase = true)
+                        }
+                        viewModel.addLiveTvCategoryFilter(pendingFilter)
+                        if (normalized.isNotBlank() && !isDuplicate) {
+                            showAddQuickFilterDialog = false
+                        }
+                    }
+                )
+            },
+            footer = {
+                PremiumDialogFooterButton(
+                    label = stringResource(R.string.settings_cancel),
+                    onClick = { showAddQuickFilterDialog = false }
+                )
+            }
         )
     }
 
@@ -359,7 +425,6 @@ fun HomeScreen(
                             uiState.categorySearchQuery.isEmpty() ||
                                 it.name.contains(uiState.categorySearchQuery, ignoreCase = true)
                         }
-                        .take(HOME_CATEGORY_SEARCH_RESULT_LIMIT)
                         .toList()
                 }
                 val isCategoryLocked: (Category) -> Boolean = remember(uiState.parentalControlLevel, uiState.unlockedCategoryIds) {
@@ -410,6 +475,42 @@ fun HomeScreen(
                 var preferredRestoreTarget by rememberSaveable { mutableStateOf(FocusRestoreTarget.CHANNEL.name) }
                 var pendingRestoreTarget by remember { mutableStateOf<FocusRestoreTarget?>(null) }
                 var focusRestoreNonce by rememberSaveable { mutableStateOf(0) }
+                var pendingCategoryContentJumpCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
+
+                fun requestChannelFocus(channelId: Long?): Boolean {
+                    val resolvedChannelId = channelId ?: return false
+                    return channelFocusRequesters[resolvedChannelId]
+                        ?.requestFocusSafely(tag = "HomeScreen", target = "Channel $resolvedChannelId")
+                        ?: false
+                }
+
+                fun requestCategoryFocus(categoryId: Long?): Boolean {
+                    val resolvedCategoryId = categoryId ?: return false
+                    return categoryFocusRequesters[resolvedCategoryId]
+                        ?.requestFocusSafely(tag = "HomeScreen", target = "Category $resolvedCategoryId")
+                        ?: false
+                }
+
+                fun requestChannelFocusFromCategory(): Boolean {
+                    if (uiState.filteredChannels.isEmpty()) return false
+                    val preferredChannelId = lastFocusedChannelId
+                        ?.takeIf { channelId -> uiState.filteredChannels.any { it.id == channelId } }
+                        ?: uiState.filteredChannels.first().id
+                    lastFocusedChannelId = preferredChannelId
+                    preferredRestoreTarget = FocusRestoreTarget.CHANNEL.name
+                    pendingRestoreTarget = FocusRestoreTarget.CHANNEL
+                    focusRestoreNonce++
+                    val focusedImmediately = requestChannelFocus(preferredChannelId)
+                    scope.launch {
+                        kotlinx.coroutines.delay(60)
+                        val focused = requestChannelFocus(preferredChannelId)
+                        if (!focused) {
+                            pendingRestoreTarget = FocusRestoreTarget.CHANNEL
+                            focusRestoreNonce++
+                        }
+                    }
+                    return focusedImmediately
+                }
 
                 val displayedCategory = uiState.selectedCategory?.takeIf { !isCategoryLocked(it) }
                 val hasBlockedCategorySearch =
@@ -427,6 +528,25 @@ fun HomeScreen(
                     channelFocusRequesters.keys.retainAll(validIds)
                 }
 
+                LaunchedEffect(
+                    uiState.isLoading,
+                    uiState.filteredChannels,
+                    uiState.selectedCategory?.id,
+                    pendingCategoryContentJumpCategoryId
+                ) {
+                    val pendingCategoryId = pendingCategoryContentJumpCategoryId ?: return@LaunchedEffect
+                    if (uiState.selectedCategory?.id != pendingCategoryId) {
+                        pendingCategoryContentJumpCategoryId = null
+                        return@LaunchedEffect
+                    }
+                    if (uiState.isLoading) return@LaunchedEffect
+
+                    if (uiState.filteredChannels.isNotEmpty()) {
+                        requestChannelFocusFromCategory()
+                    }
+                    pendingCategoryContentJumpCategoryId = null
+                }
+
                 LaunchedEffect(uiState.categories, uiState.selectedCategory?.id, uiState.parentalControlLevel, isReorderMode) {
                     if (isReorderMode) return@LaunchedEffect
                     val selectedCategory = uiState.selectedCategory ?: return@LaunchedEffect
@@ -442,6 +562,7 @@ fun HomeScreen(
                 LaunchedEffect(
                     uiState.showDialog,
                     showPinDialog,
+                    showAddQuickFilterDialog,
                     uiState.showDeleteGroupDialog,
                     uiState.selectedCategoryForOptions,
                     uiState.showRenameGroupDialog,
@@ -452,6 +573,7 @@ fun HomeScreen(
                     val modalClosed =
                         !uiState.showDialog &&
                         !showPinDialog &&
+                        !showAddQuickFilterDialog &&
                         !uiState.showDeleteGroupDialog &&
                         !uiState.showRenameGroupDialog &&
                         !showSplitManagerDialog &&
@@ -484,37 +606,23 @@ fun HomeScreen(
                     val restoreTarget = pendingRestoreTarget ?: return@LaunchedEffect
                     kotlinx.coroutines.delay(80)
                     val restored = when (restoreTarget) {
-                        FocusRestoreTarget.CHANNEL -> {
-                            val channelId = lastFocusedChannelId
-                            channelId != null && runCatching {
-                                channelFocusRequesters[channelId]?.requestFocus()
-                            }.isSuccess
-                        }
-                        FocusRestoreTarget.CATEGORY -> {
-                            val categoryId = lastFocusedCategoryId
-                            categoryId != null && runCatching {
-                                categoryFocusRequesters[categoryId]?.requestFocus()
-                            }.isSuccess
-                        }
+                        FocusRestoreTarget.CHANNEL -> requestChannelFocus(lastFocusedChannelId)
+                        FocusRestoreTarget.CATEGORY -> requestCategoryFocus(lastFocusedCategoryId)
                     }
                     if (!restored) {
                         when (restoreTarget) {
                             FocusRestoreTarget.CHANNEL -> {
                                 val fallbackChannelId = uiState.filteredChannels.firstOrNull()?.id
                                 if (fallbackChannelId != null) {
-                                    runCatching { channelFocusRequesters[fallbackChannelId]?.requestFocus() }
+                                    requestChannelFocus(fallbackChannelId)
                                 } else {
                                     val fallbackCategoryId = uiState.categories.firstOrNull()?.id
-                                    fallbackCategoryId?.let {
-                                        runCatching { categoryFocusRequesters[it]?.requestFocus() }
-                                    }
+                                    requestCategoryFocus(fallbackCategoryId)
                                 }
                             }
                             FocusRestoreTarget.CATEGORY -> {
                                 val fallbackCategoryId = uiState.categories.firstOrNull()?.id
-                                fallbackCategoryId?.let {
-                                    runCatching { categoryFocusRequesters[it]?.requestFocus() }
-                                }
+                                requestCategoryFocus(fallbackCategoryId)
                             }
                         }
                     }
@@ -559,6 +667,9 @@ fun HomeScreen(
                     ) {
                         // Sticky Header Part
                         Column(modifier = Modifier.padding(horizontal = 10.dp)) {
+                            var showQuickFiltersDrawer by rememberSaveable(uiState.savedCategoryFilters) {
+                                mutableStateOf(false)
+                            }
                             Text(
                                 text = stringResource(R.string.home_categories_title),
                                 style = MaterialTheme.typography.titleMedium,
@@ -577,6 +688,138 @@ fun HomeScreen(
                                 modifier = Modifier.padding(bottom = 10.dp),
                                 enabled = !isReorderMode
                             )
+                            val shouldShowQuickFiltersControl = when (uiState.liveTvQuickFilterVisibilityMode) {
+                                LiveTvQuickFilterVisibilityMode.HIDE -> false
+                                LiveTvQuickFilterVisibilityMode.SHOW_WHEN_FILTERS_AVAILABLE -> uiState.savedCategoryFilters.isNotEmpty()
+                                LiveTvQuickFilterVisibilityMode.ALWAYS_VISIBLE -> true
+                            }
+                            if (shouldShowQuickFiltersControl) {
+                                val activeSavedFilter = uiState.activeCategoryFilter
+                                val filterSubtitle = when {
+                                    uiState.categorySearchQuery.isBlank() -> {
+                                        stringResource(R.string.home_quick_filters_showing_all)
+                                    }
+                                    activeSavedFilter != null -> {
+                                        stringResource(
+                                            R.string.home_quick_filters_active,
+                                            activeSavedFilter
+                                        )
+                                    }
+                                    else -> {
+                                        stringResource(
+                                            R.string.home_quick_filters_manual_search,
+                                            uiState.categorySearchQuery
+                                        )
+                                    }
+                                }
+                                TvClickableSurface(
+                                    onClick = { if (!isReorderMode) showQuickFiltersDrawer = !showQuickFiltersDrawer },
+                                    enabled = !isReorderMode,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 10.dp),
+                                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+                                    colors = ClickableSurfaceDefaults.colors(
+                                        containerColor = SurfaceElevated,
+                                        focusedContainerColor = SurfaceHighlight.copy(alpha = 0.9f)
+                                    ),
+                                    border = ClickableSurfaceDefaults.border(
+                                        focusedBorder = Border(
+                                            border = BorderStroke(2.dp, Primary.copy(alpha = 0.85f)),
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+                                    ),
+                                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1f)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = stringResource(R.string.home_quick_filters_button),
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = OnSurface
+                                            )
+                                            Text(
+                                                text = if (showQuickFiltersDrawer) {
+                                                    stringResource(R.string.home_quick_filters_hide)
+                                                } else {
+                                                    stringResource(R.string.home_quick_filters_show)
+                                                },
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = Primary
+                                            )
+                                        }
+                                        Text(
+                                            text = filterSubtitle,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = OnSurfaceDim
+                                        )
+                                    }
+                                }
+                                if (showQuickFiltersDrawer) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 8.dp),
+                                        horizontalArrangement = Arrangement.End
+                                    ) {
+                                        TvButton(
+                                            onClick = { showAddQuickFilterDialog = true },
+                                            enabled = !isReorderMode
+                                        ) {
+                                            Text(stringResource(R.string.home_quick_filters_add_chip))
+                                        }
+                                    }
+                                    if (uiState.savedCategoryFilters.isNotEmpty() || uiState.categorySearchQuery.isNotBlank()) {
+                                        SelectionChipRow(
+                                            title = stringResource(R.string.home_quick_filters_title),
+                                            chips = buildList {
+                                                add(
+                                                    SelectionChip(
+                                                        key = HOME_ALL_FILTER_KEY,
+                                                        label = stringResource(R.string.home_quick_filters_all)
+                                                    )
+                                                )
+                                                addAll(
+                                                    uiState.savedCategoryFilters.map { filter ->
+                                                        SelectionChip(key = filter, label = filter)
+                                                    }
+                                                )
+                                            },
+                                            selectedKey = uiState.activeCategoryFilter ?: HOME_ALL_FILTER_KEY.takeIf {
+                                                uiState.categorySearchQuery.isBlank()
+                                            },
+                                            onChipSelected = { filter ->
+                                                if (!isReorderMode) {
+                                                    if (filter == HOME_ALL_FILTER_KEY) {
+                                                        viewModel.clearCategorySearchQuery()
+                                                    } else {
+                                                        viewModel.applySavedCategoryFilter(filter)
+                                                    }
+                                                    showQuickFiltersDrawer = false
+                                                }
+                                            },
+                                            modifier = Modifier.padding(bottom = 10.dp),
+                                            contentPadding = PaddingValues(horizontal = 0.dp)
+                                        )
+                                    } else {
+                                        Text(
+                                            text = stringResource(R.string.home_quick_filters_empty),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = OnSurfaceDim,
+                                            modifier = Modifier.padding(start = 4.dp, bottom = 10.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
 
                         LazyColumn(
@@ -589,7 +832,7 @@ fun HomeScreen(
                             item {
                                 Spacer(Modifier.height(8.dp))
                                 var isFocused by remember { mutableStateOf(false) }
-                                Surface(
+                                TvClickableSurface(
                                     onClick = { showSplitManagerDialog = true },
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -627,7 +870,7 @@ fun HomeScreen(
                                                 fontWeight = FontWeight.Medium
                                             )
                                             Text(
-                                                text = stringResource(R.string.label_slots_count, splitSlots.count { it != null }),
+                                                text = stringResource(R.string.label_slots_count, uiState.multiviewChannelCount),
                                                 style = androidx.compose.ui.text.TextStyle(
                                                     fontSize = 9.sp,
                                                     color = Color(0xFF81C784)
@@ -651,6 +894,7 @@ fun HomeScreen(
                                 category = category,
                                 isSelected = category.id == uiState.selectedCategory?.id,
                                 isLocked = isLocked,
+                                isPinned = category.id in uiState.pinnedCategoryIds,
                                 focusRequester = categoryFocusRequester,
                                 onClick = {
                                     if (isReorderMode) return@CategoryItem
@@ -666,28 +910,26 @@ fun HomeScreen(
                                     preferredRestoreTarget = FocusRestoreTarget.CATEGORY.name
                                     viewModel.showCategoryOptions(category)
                                 },
-                                onJumpToSearch = { categorySearchFocusRequester.requestFocus() },
+                                onJumpToSearch = {
+                                    runCatching { categorySearchFocusRequester.requestFocus() }.isSuccess
+                                },
                                 onJumpToContent = {
-                                    if (uiState.filteredChannels.isNotEmpty()) {
-                                        val preferredChannelId = lastFocusedChannelId
-                                            ?.takeIf { channelId -> uiState.filteredChannels.any { it.id == channelId } }
-                                            ?: uiState.filteredChannels.first().id
-                                        lastFocusedChannelId = preferredChannelId
-                                        preferredRestoreTarget = FocusRestoreTarget.CHANNEL.name
-                                        pendingRestoreTarget = FocusRestoreTarget.CHANNEL
-                                        focusRestoreNonce++
-                                        scope.launch {
-                                            kotlinx.coroutines.delay(60)
-                                            val focused = runCatching {
-                                                channelFocusRequesters[preferredChannelId]?.requestFocus()
-                                            }.getOrNull() != null
-                                            if (!focused) {
-                                                pendingRestoreTarget = FocusRestoreTarget.CHANNEL
-                                                focusRestoreNonce++
-                                            }
-                                        }
+                                    if (isLocked) {
+                                        pendingCategoryContentJumpCategoryId = null
+                                        false
+                                    } else if (uiState.selectedCategory?.id != category.id) {
+                                        pendingCategoryContentJumpCategoryId = category.id
+                                        viewModel.selectCategory(category)
+                                        true
+                                    } else if (uiState.isLoading) {
+                                        pendingCategoryContentJumpCategoryId = category.id
+                                        true
+                                    } else if (uiState.filteredChannels.isNotEmpty()) {
+                                        pendingCategoryContentJumpCategoryId = null
+                                        requestChannelFocusFromCategory()
                                     } else {
-                                        runCatching { channelSearchFocusRequester.requestFocus() }
+                                        pendingCategoryContentJumpCategoryId = null
+                                        false
                                     }
                                 },
                                 onFocused = { lastFocusedCategoryId = category.id }
@@ -771,7 +1013,7 @@ fun HomeScreen(
                                 )
                                 if (hasSplitChannels) {
                                     StatusPill(
-                                        label = stringResource(R.string.split_count_format, stringResource(R.string.live_shell_split), splitSlots.count { it != null })
+                                        label = stringResource(R.string.split_count_format, stringResource(R.string.live_shell_split), uiState.multiviewChannelCount)
                                     )
                                 }
                             }
@@ -884,6 +1126,27 @@ fun HomeScreen(
                                 if (!isReorderMode) {
                                     draggingChannel = null
                                 }
+                            }
+
+                            LaunchedEffect(isReorderMode, draggingChannel?.id, uiState.filteredChannels) {
+                                if (!isReorderMode) return@LaunchedEffect
+                                val draggingChannelId = draggingChannel?.id ?: return@LaunchedEffect
+                                val draggedIndex = uiState.filteredChannels.indexOfFirst { it.id == draggingChannelId }
+                                if (draggedIndex < 0) return@LaunchedEffect
+
+                                val visibleItems = channelListState.layoutInfo.visibleItemsInfo
+                                val firstVisibleIndex = visibleItems.firstOrNull()?.index
+                                val lastVisibleIndex = visibleItems.lastOrNull()?.index
+
+                                if (
+                                    firstVisibleIndex != null &&
+                                    lastVisibleIndex != null &&
+                                    (draggedIndex <= firstVisibleIndex || draggedIndex >= lastVisibleIndex)
+                                ) {
+                                    channelListState.scrollToItem(draggedIndex)
+                                }
+
+                                runCatching { channelFocusRequesters[draggingChannelId]?.requestFocus() }
                             }
 
                             LaunchedEffect(channelListState, uiState.filteredChannels, lastFocusedChannelId) {
@@ -1279,16 +1542,17 @@ private fun CategoryItem(
     category: Category,
     isSelected: Boolean,
     isLocked: Boolean = false,
+    isPinned: Boolean = false,
     focusRequester: FocusRequester,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
-    onJumpToSearch: () -> Unit,
-    onJumpToContent: () -> Unit,
+    onJumpToSearch: () -> Boolean,
+    onJumpToContent: () -> Boolean,
     onFocused: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
     
-    Surface(
+    TvClickableSurface(
         onClick = onClick,
         onLongClick = onLongClick,
         modifier = Modifier
@@ -1304,11 +1568,9 @@ private fun CategoryItem(
                     when (event.nativeKeyEvent.keyCode) {
                         android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
                             onJumpToSearch()
-                            true
                         }
                         android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
                             onJumpToContent()
-                            true
                         }
                         else -> false
                     }
@@ -1333,6 +1595,12 @@ private fun CategoryItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            if (isPinned) {
+                PinnedCategoryGlyph(
+                    tint = if (isFocused) OnBackground else if (isSelected) Primary else OnSurfaceDim,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+            }
             Text(
                 text = category.name,
                 style = MaterialTheme.typography.bodyMedium,
@@ -1358,6 +1626,35 @@ private fun CategoryItem(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PinnedCategoryGlyph(
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier.size(12.dp)) {
+        val headRadius = size.minDimension * 0.18f
+        val centerX = size.width * 0.45f
+        val headCenterY = size.height * 0.26f
+        drawCircle(
+            color = tint,
+            radius = headRadius,
+            center = androidx.compose.ui.geometry.Offset(centerX, headCenterY)
+        )
+        drawLine(
+            color = tint,
+            start = androidx.compose.ui.geometry.Offset(centerX, headCenterY + headRadius * 0.6f),
+            end = androidx.compose.ui.geometry.Offset(centerX, size.height * 0.8f),
+            strokeWidth = size.minDimension * 0.12f
+        )
+        drawLine(
+            color = tint,
+            start = androidx.compose.ui.geometry.Offset(size.width * 0.18f, size.height * 0.38f),
+            end = androidx.compose.ui.geometry.Offset(size.width * 0.72f, size.height * 0.38f),
+            strokeWidth = size.minDimension * 0.14f
+        )
     }
 }
 
@@ -1412,18 +1709,18 @@ fun ReorderSidePanel(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
             ) {
-                androidx.tv.material3.Button(
+                TvButton(
                     onClick = onSave,
-                    colors = androidx.tv.material3.ButtonDefaults.colors(
+                    colors = ButtonDefaults.colors(
                         containerColor = Primary,
                         contentColor = Color.White
                     ),
                     modifier = Modifier.weight(1f)
                 ) { Text(stringResource(R.string.action_save), maxLines = 1) }
 
-                androidx.tv.material3.Button(
+                TvButton(
                     onClick = onCancel,
-                    colors = androidx.tv.material3.ButtonDefaults.colors(
+                    colors = ButtonDefaults.colors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                         contentColor = OnSurface
                     ),
@@ -1441,7 +1738,7 @@ fun ReorderSidePanel(
                     var isFocused by remember { mutableStateOf(false) }
                     val isDraggingThis = draggingChannel == channel
                     
-                    Surface(
+                    TvClickableSurface(
                         onClick = { 
                             draggingChannel = if (isDraggingThis) null else channel 
                         },

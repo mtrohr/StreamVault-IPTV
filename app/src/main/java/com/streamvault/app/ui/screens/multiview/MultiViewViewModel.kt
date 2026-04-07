@@ -440,6 +440,10 @@ class MultiViewViewModel @Inject constructor(
 
     fun selectPickerCategory(category: Category) {
         val providerId = currentProviderId ?: return
+        parentalControlManager.retainUnlockedCategory(
+            providerId = providerId,
+            categoryId = category.id.takeIf { !category.isVirtual && it > 0L }
+        )
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 pickerState = _uiState.value.pickerState.copy(
@@ -475,6 +479,7 @@ class MultiViewViewModel @Inject constructor(
     }
 
     fun backToPickerCategories() {
+        currentProviderId?.let { parentalControlManager.clearUnlockedCategories(it) }
         _uiState.value = _uiState.value.copy(
             pickerState = _uiState.value.pickerState.copy(
                 selectedCategory = null,
@@ -486,6 +491,7 @@ class MultiViewViewModel @Inject constructor(
     }
 
     fun resetPicker() {
+        currentProviderId?.let { parentalControlManager.clearUnlockedCategories(it) }
         _uiState.value = _uiState.value.copy(pickerState = MultiViewPickerState())
     }
 

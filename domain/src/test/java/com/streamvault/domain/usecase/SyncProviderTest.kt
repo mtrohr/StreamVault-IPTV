@@ -121,6 +121,7 @@ private class FakeSyncProviderRepository(
     override suspend fun refreshProviderData(
         providerId: Long,
         force: Boolean,
+        movieFastSyncOverride: Boolean?,
         onProgress: ((String) -> Unit)?
     ): Result<Unit> {
         lastRefreshCall = RefreshCall(providerId, force)

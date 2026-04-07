@@ -50,6 +50,9 @@ abstract class RepositoryModule {
     abstract fun bindPlaybackHistoryRepository(impl: PlaybackHistoryRepositoryImpl): PlaybackHistoryRepository
 
     @Binds @Singleton
+    abstract fun bindExternalRatingsRepository(impl: ExternalRatingsRepositoryImpl): ExternalRatingsRepository
+
+    @Binds @Singleton
     abstract fun bindSyncMetadataRepository(impl: SyncMetadataRepositoryImpl): SyncMetadataRepository
 
     @Binds @Singleton

@@ -77,12 +77,16 @@ import androidx.compose.foundation.BorderStroke
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.streamvault.app.ui.interaction.TvClickableSurface
+import com.streamvault.app.ui.interaction.TvButton
+import com.streamvault.app.ui.interaction.TvIconButton
 
 @Composable
 fun DashboardScreen(
     onNavigate: (String) -> Unit,
     onAddProvider: () -> Unit,
     onChannelClick: (Channel) -> Unit,
+    onFavoriteChannelClick: (Channel) -> Unit,
     onMovieClick: (Movie) -> Unit,
     onSeriesClick: (Series) -> Unit,
     onPlaybackHistoryClick: (PlaybackHistory) -> Unit,
@@ -151,7 +155,7 @@ fun DashboardScreen(
                         title = stringResource(R.string.dashboard_favorite_channels),
                         channels = uiState.favoriteChannels,
                         onSeeAll = { onNavigate(Routes.liveTv(com.streamvault.domain.model.VirtualCategoryIds.FAVORITES)) },
-                        onChannelClick = onChannelClick
+                        onChannelClick = onFavoriteChannelClick
                     )
 
                     DashboardHomeSection.RECENT_CHANNELS -> CategoryRow(
@@ -378,7 +382,7 @@ private fun DashboardShortcutCard(
         DashboardShortcutType.CUSTOM_GROUP -> Primary
     }
 
-    Surface(
+    TvClickableSurface(
         onClick = onClick,
         modifier = Modifier
             .width(cardWidth)
@@ -439,7 +443,7 @@ private fun DashboardActionButton(
     label: String,
     onClick: () -> Unit
 ) {
-    Button(
+    TvButton(
         onClick = onClick,
         colors = ButtonDefaults.colors(
             containerColor = Primary.copy(alpha = 0.18f),
@@ -659,10 +663,10 @@ private fun EmptyDashboard(
                     color = OnSurfaceDim
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = onAddProvider) {
+                    TvButton(onClick = onAddProvider) {
                         Text(stringResource(R.string.settings_add_provider))
                     }
-                    Button(
+                    TvButton(
                         onClick = onOpenSettings,
                         colors = ButtonDefaults.colors(
                             containerColor = SurfaceElevated,
@@ -742,7 +746,7 @@ private fun FavoriteChannelsRow(
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary
             )
-            Surface(
+            TvClickableSurface(
                 onClick = onSeeAll,
                 shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(999.dp)),
                 colors = ClickableSurfaceDefaults.colors(
@@ -778,7 +782,7 @@ private fun FavoriteChannelLogoCard(
     channel: Channel,
     onClick: () -> Unit
 ) {
-    Surface(
+    TvClickableSurface(
         onClick = onClick,
         modifier = Modifier.width(86.dp),
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(18.dp)),

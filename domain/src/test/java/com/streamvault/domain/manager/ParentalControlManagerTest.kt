@@ -10,13 +10,11 @@ class ParentalControlManagerTest {
 
     private lateinit var manager: ParentalControlManager
     private lateinit var store: FakeParentalControlSessionStore
-    private var baseNow: Long = 0L
 
     @Before
     fun setup() {
         store = FakeParentalControlSessionStore()
         manager = ParentalControlManager(store)
-        baseNow = System.currentTimeMillis() + 10_000L
     }
 
     @Test
@@ -27,55 +25,55 @@ class ParentalControlManagerTest {
 
     @Test
     fun `unlockCategory makes category accessible`() {
-        manager.unlockCategory(1L, 100L, nowMs = baseNow)
-        assertThat(manager.isCategoryUnlocked(1L, 100L, nowMs = baseNow + 1)).isTrue()
+        manager.unlockCategory(1L, 100L)
+        assertThat(manager.isCategoryUnlocked(1L, 100L)).isTrue()
     }
 
     @Test
     fun `unlockCategory is scoped to provider`() {
-        manager.unlockCategory(1L, 100L, nowMs = baseNow)
-        assertThat(manager.isCategoryUnlocked(1L, 100L, nowMs = baseNow + 1)).isTrue()
-        assertThat(manager.isCategoryUnlocked(2L, 100L, nowMs = baseNow + 1)).isFalse()
+        manager.unlockCategory(1L, 100L)
+        assertThat(manager.isCategoryUnlocked(1L, 100L)).isTrue()
+        assertThat(manager.isCategoryUnlocked(2L, 100L)).isFalse()
     }
 
     @Test
-    fun `multiple categories can be unlocked per provider`() {
-        manager.unlockCategory(1L, 100L, nowMs = baseNow)
-        manager.unlockCategory(1L, 200L, nowMs = baseNow)
-        assertThat(manager.isCategoryUnlocked(1L, 100L, nowMs = baseNow + 1)).isTrue()
-        assertThat(manager.isCategoryUnlocked(1L, 200L, nowMs = baseNow + 1)).isTrue()
+    fun `unlockCategory replaces previous unlocked category for provider`() {
+        manager.unlockCategory(1L, 100L)
+        manager.unlockCategory(1L, 200L)
+
+        assertThat(manager.isCategoryUnlocked(1L, 100L)).isFalse()
+        assertThat(manager.isCategoryUnlocked(1L, 200L)).isTrue()
     }
 
     @Test
     fun `clearUnlockedCategories with provider clears that provider only`() {
-        manager.unlockCategory(1L, 100L, nowMs = baseNow)
-        manager.unlockCategory(2L, 200L, nowMs = baseNow)
+        manager.unlockCategory(1L, 100L)
+        manager.unlockCategory(2L, 200L)
 
         manager.clearUnlockedCategories(1L)
 
-        assertThat(manager.isCategoryUnlocked(1L, 100L, nowMs = baseNow + 1)).isFalse()
-        assertThat(manager.isCategoryUnlocked(2L, 200L, nowMs = baseNow + 1)).isTrue()
+        assertThat(manager.isCategoryUnlocked(1L, 100L)).isFalse()
+        assertThat(manager.isCategoryUnlocked(2L, 200L)).isTrue()
     }
 
     @Test
     fun `clearUnlockedCategories without provider clears all`() {
-        manager.unlockCategory(1L, 100L, nowMs = baseNow)
-        manager.unlockCategory(2L, 200L, nowMs = baseNow)
+        manager.unlockCategory(1L, 100L)
+        manager.unlockCategory(2L, 200L)
 
         manager.clearUnlockedCategories()
 
-        assertThat(manager.isCategoryUnlocked(1L, 100L, nowMs = baseNow + 1)).isFalse()
-        assertThat(manager.isCategoryUnlocked(2L, 200L, nowMs = baseNow + 1)).isFalse()
+        assertThat(manager.isCategoryUnlocked(1L, 100L)).isFalse()
+        assertThat(manager.isCategoryUnlocked(2L, 200L)).isFalse()
         assertThat(manager.unlockedCategoriesByProvider.value).isEmpty()
     }
 
     @Test
     fun `unlockedCategoriesForProvider emits correct set`() = runTest {
-        manager.unlockCategory(1L, 100L, nowMs = baseNow)
-        manager.unlockCategory(1L, 200L, nowMs = baseNow)
+        manager.unlockCategory(1L, 200L)
 
         val unlocked = manager.unlockedCategoriesForProvider(1L).first()
-        assertThat(unlocked).containsExactly(100L, 200L)
+        assertThat(unlocked).containsExactly(200L)
     }
 
     @Test
@@ -86,45 +84,40 @@ class ParentalControlManagerTest {
 
     @Test
     fun `unlocking same category twice is idempotent`() {
-        manager.unlockCategory(1L, 100L, nowMs = baseNow)
-        manager.unlockCategory(1L, 100L, nowMs = baseNow + 1_000L)
-        assertThat(manager.isCategoryUnlocked(1L, 100L, nowMs = baseNow + 1_001L)).isTrue()
+        manager.unlockCategory(1L, 100L)
+        manager.unlockCategory(1L, 100L)
+        assertThat(manager.isCategoryUnlocked(1L, 100L)).isTrue()
         assertThat(manager.unlockedCategoriesByProvider.value[1L]).hasSize(1)
     }
 
     @Test
-    fun `refreshSessionState prunes expired unlocks from persisted store`() {
+    fun `retainUnlockedCategory keeps unlocked category when revisiting same category`() {
+        manager.unlockCategory(1L, 100L)
+
+        manager.retainUnlockedCategory(1L, 100L)
+
+        assertThat(manager.isCategoryUnlocked(1L, 100L)).isTrue()
+    }
+
+    @Test
+    fun `retainUnlockedCategory clears unlock when leaving category`() {
+        manager.unlockCategory(1L, 100L)
+
+        manager.retainUnlockedCategory(1L, 200L)
+
+        assertThat(manager.isCategoryUnlocked(1L, 100L)).isFalse()
+    }
+
+    @Test
+    fun `manager clears persisted unlock state on startup`() {
         store.state = ParentalControlSessionState(
-            unlockedCategoryExpirationsByProvider = mapOf(
-                1L to mapOf(
-                    100L to (baseNow - 500L),
-                    200L to (baseNow + 2_000L)
-                )
-            )
+            unlockedCategoryIdsByProvider = mapOf(1L to setOf(100L))
         )
 
-        manager.refreshSessionState(nowMs = baseNow)
+        manager = ParentalControlManager(store)
 
-        assertThat(manager.isCategoryUnlocked(1L, 100L, nowMs = baseNow)).isFalse()
-        assertThat(manager.isCategoryUnlocked(1L, 200L, nowMs = baseNow)).isTrue()
-        assertThat(store.state.unlockedCategoryExpirationsByProvider[1L]).containsKey(200L)
-        assertThat(store.state.unlockedCategoryExpirationsByProvider[1L]).doesNotContainKey(100L)
-    }
-
-    @Test
-    fun `setUnlockTimeout persists minimum normalized timeout`() {
-        manager.setUnlockTimeout(5_000L)
-
-        assertThat(store.state.unlockTimeoutMs).isEqualTo(ParentalControlSessionState.MIN_UNLOCK_TIMEOUT_MS)
-    }
-
-    @Test
-    fun `unlockCategory expires after timeout`() {
-        manager.setUnlockTimeout(60_000L)
-        manager.unlockCategory(1L, 100L, nowMs = baseNow)
-
-        assertThat(manager.isCategoryUnlocked(1L, 100L, nowMs = baseNow + 59_999L)).isTrue()
-        assertThat(manager.isCategoryUnlocked(1L, 100L, nowMs = baseNow + 60_000L)).isFalse()
+        assertThat(store.state.unlockedCategoryIdsByProvider).isEmpty()
+        assertThat(manager.unlockedCategoriesByProvider.value).isEmpty()
     }
 
     private class FakeParentalControlSessionStore : ParentalControlSessionStore {

@@ -5,6 +5,7 @@ import java.util.Locale
 
 object UrlSecurityPolicy {
     private val secureRemoteSchemes = setOf("https")
+    private val playlistSourceSchemes = setOf("http", "https")
     private val xtreamServerSchemes = setOf("http", "https")
     private val localSchemes = setOf("file", "content")
     // IPTV stream/asset URLs may legitimately use plain HTTP or RTSP
@@ -37,10 +38,10 @@ object UrlSecurityPolicy {
     }
 
     fun validatePlaylistSourceUrl(url: String): String? {
-        return if (isAllowedImportedUrl(url)) {
+        return if (!containsNewlines(url) && hasAllowedScheme(url, playlistSourceSchemes + localSchemes)) {
             null
         } else {
-            "Playlist sources must use HTTPS or point to a local file."
+            "Playlist sources must use HTTP, HTTPS, or point to a local file."
         }
     }
 

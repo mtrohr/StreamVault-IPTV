@@ -66,6 +66,8 @@ class BackupManagerImpl @Inject constructor(
                 "parentalPinHash" to (parentalPinBackup?.hash ?: ""),
                 "parentalPinSalt" to (parentalPinBackup?.saltBase64 ?: ""),
                 "appLanguage" to preferencesRepository.appLanguage.first(),
+                "liveTvCategoryFilters" to preferencesRepository.liveTvCategoryFilters.first().joinToString("\n"),
+                "liveTvQuickFilterVisibility" to (preferencesRepository.liveTvQuickFilterVisibility.first() ?: "always"),
                 "playerPlaybackSpeed" to preferencesRepository.playerPlaybackSpeed.first().toString(),
                 "preferredAudioLanguage" to (preferencesRepository.preferredAudioLanguage.first() ?: "auto"),
                 "playerSubtitleTextScale" to preferencesRepository.playerSubtitleTextScale.first().toString(),
@@ -291,6 +293,9 @@ class BackupManagerImpl @Inject constructor(
                     ).takeIf { it.hash.isNotBlank() && it.saltBase64.isNotBlank() }
                 )
                 prefs["appLanguage"]?.takeIf { it.isNotBlank() }?.let { preferencesRepository.setAppLanguage(it) }
+                prefs["liveTvCategoryFilters"]?.let { preferencesRepository.setLiveTvCategoryFilters(it.split('\n')) }
+                prefs["liveTvQuickFilterVisibility"]?.takeIf { it.isNotBlank() }
+                    ?.let { preferencesRepository.setLiveTvQuickFilterVisibility(it) }
                 prefs["playerPlaybackSpeed"]?.toFloatOrNull()?.let { preferencesRepository.setPlayerPlaybackSpeed(it) }
                 preferencesRepository.setPreferredAudioLanguage(prefs["preferredAudioLanguage"])
                 prefs["playerSubtitleTextScale"]?.toFloatOrNull()?.let { preferencesRepository.setPlayerSubtitleTextScale(it) }

@@ -30,6 +30,20 @@
     <string name="home_loading_channels">Loading channels...</string>
     <string name="home_categories_title">Categories</string>
     <string name="home_search_categories">Search categories...</string>
+    <string name="home_quick_filters_title">Quick filters</string>
+    <string name="home_quick_filters_button">Quick filters</string>
+    <string name="home_quick_filters_show">Show</string>
+    <string name="home_quick_filters_hide">Hide</string>
+    <string name="home_quick_filters_add_chip">+ Add filter</string>
+    <string name="home_quick_filters_add_title">Add quick filter</string>
+    <string name="home_quick_filters_add_subtitle">Save a literal category search term so it appears in the Live TV quick filters drawer.</string>
+    <string name="home_quick_filters_add_placeholder">Enter a quick filter</string>
+    <string name="home_quick_filters_add_action">Save filter</string>
+    <string name="home_quick_filters_all">All</string>
+    <string name="home_quick_filters_showing_all">Showing all categories</string>
+    <string name="home_quick_filters_active">Applied filter: %1$s</string>
+    <string name="home_quick_filters_manual_search">Manual search: %1$s</string>
+    <string name="home_quick_filters_empty">No saved quick filters yet. Add one to keep category searches close at hand.</string>
     <string name="home_all_channels">All Channels</string>
     <string name="home_recent_channels">Recent</string>
     <string name="home_last_channel">Last Channel</string>
@@ -118,6 +132,10 @@
     <string name="category_options_cancel">Cancel</string>
     <string name="category_options_reorder">Reorder Items</string>
     <string name="category_options_hide">Hide Category</string>
+    <string name="category_options_pin">Pin Category</string>
+    <string name="category_options_unpin">Unpin Category</string>
+    <string name="category_pinned">Pinned %1$s.</string>
+    <string name="category_unpinned">Unpinned %1$s.</string>
 
     <string name="add_group_manage_title">Manage: %1$s</string>
     <string name="add_group_close_cd">Close</string>
@@ -267,6 +285,31 @@
     <string name="settings_playback_subtitle">Tune decoder and buffering behavior for smoother playback.</string>
     <string name="settings_live_tv_channel_mode">Live TV Channel Mode</string>
     <string name="settings_live_tv_channel_mode_subtitle">Choose how the Live TV browser should present channels and whether it should preview before playback.</string>
+    <string name="settings_live_tv_quick_filters">Live TV Quick Filters</string>
+    <string name="settings_live_tv_quick_filters_none">None</string>
+    <plurals name="settings_live_tv_quick_filters_count">
+        <item quantity="one">%1$d saved</item>
+        <item quantity="other">%1$d saved</item>
+    </plurals>
+    <string name="settings_live_tv_quick_filters_dialog_title">Manage Live TV Quick Filters</string>
+    <string name="settings_live_tv_quick_filters_dialog_subtitle">Save literal search terms like |AR| or Sports so they appear under the Live TV category search bar.</string>
+    <string name="settings_live_tv_quick_filters_placeholder">Add a quick filter</string>
+    <string name="settings_live_tv_quick_filters_add">Add Filter</string>
+    <string name="settings_live_tv_quick_filters_empty">No quick filters saved yet.</string>
+    <string name="settings_live_tv_quick_filters_saved">Saved filters</string>
+    <string name="settings_live_tv_quick_filters_remove">Remove</string>
+    <string name="settings_live_tv_quick_filter_visibility">Quick Filter Visibility</string>
+    <string name="settings_live_tv_quick_filter_visibility_subtitle">Choose when the Live TV quick-filter control should appear under category search.</string>
+    <string name="settings_live_tv_quick_filter_visibility_hide">Hide</string>
+    <string name="settings_live_tv_quick_filter_visibility_hide_desc">Never show the quick-filter control in Live TV.</string>
+    <string name="settings_live_tv_quick_filter_visibility_available">Show When Filters Exist</string>
+    <string name="settings_live_tv_quick_filter_visibility_available_desc">Show the control only when at least one saved quick filter is available.</string>
+    <string name="settings_live_tv_quick_filter_visibility_always">Always Visible</string>
+    <string name="settings_live_tv_quick_filter_visibility_always_desc">Always show the control so filters can be added directly from Live TV.</string>
+    <string name="settings_live_tv_quick_filter_blank">Enter a filter before saving it.</string>
+    <string name="settings_live_tv_quick_filter_duplicate">%1$s is already saved.</string>
+    <string name="settings_live_tv_quick_filter_added">Saved %1$s to Live TV quick filters.</string>
+    <string name="settings_live_tv_quick_filter_removed">Removed %1$s from Live TV quick filters.</string>
     <string name="settings_live_channel_numbering_mode">Live TV Channel Numbering</string>
     <string name="settings_live_channel_numbering_mode_subtitle">Choose whether live channels use their position in the current group or keep the original numbers from the provider.</string>
     <string name="settings_default_playback_speed">Default Playback Speed</string>
@@ -608,6 +651,8 @@
     <string name="setup_server_hint">Server URL</string>
     <string name="setup_user_hint">Username</string>
     <string name="setup_pass_hint">Password</string>
+    <string name="setup_show_password">Show password</string>
+    <string name="setup_hide_password">Hide password</string>
     <string name="setup_connecting">Connecting...</string>
     <string name="setup_save">Save Changes</string>
     <string name="setup_login">Login</string>
@@ -884,6 +929,11 @@
     <string name="series_seasons">Seasons</string>
     <string name="series_episodes">Episodes (%1$d)</string>
     <string name="series_unwatched_badge">%1$d left to finish</string>
+    <string name="vod_external_ratings_heading">Ratings</string>
+    <string name="vod_rating_imdb">IMDb</string>
+    <string name="vod_rating_rotten_tomatoes">Rotten Tomatoes</string>
+    <string name="vod_rating_metacritic">Metacritic</string>
+    <string name="vod_rating_tmdb">TMDb</string>
     <string name="movie_loading_details">Loading details...</string>
     <string name="movie_not_found">Movie not found</string>
     <string name="movie_detail_back">Back to library</string>
@@ -953,6 +1003,8 @@
     <string name="settings_clear_history_confirm">Clear History</string>
     <string name="settings_xtream_text_classification">Xtream Name-Based Adult Detection</string>
     <string name="settings_xtream_text_classification_subtitle">Use category name keywords to flag adult content when the provider doesn\'t set the adult flag explicitly</string>
+    <string name="settings_prevent_standby">Keep Screen On During Playback</string>
+    <string name="settings_prevent_standby_subtitle">Prevents the TV from showing a standby warning while a channel or video is playing</string>
     <string name="settings_clear_history_dialog_title">Clear Watch History?</string>
     <string name="settings_clear_history_dialog_body">This will permanently delete all watch history, continue watching progress, and last visited categories across all providers.</string>
 

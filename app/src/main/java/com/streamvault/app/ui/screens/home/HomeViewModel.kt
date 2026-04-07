@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.streamvault.app.di.AuxiliaryPlayerEngine
 import com.streamvault.app.tvinput.TvInputChannelSyncManager
+import com.streamvault.app.ui.screens.multiview.MultiViewManager
 import com.streamvault.app.ui.model.applyProviderCategoryDisplayPreferences
 import com.streamvault.app.ui.model.guideLookupKey
 import com.streamvault.app.ui.model.LiveTvChannelMode
+import com.streamvault.app.ui.model.LiveTvQuickFilterVisibilityMode
 import com.streamvault.data.preferences.PreferencesRepository
 import com.streamvault.data.sync.SyncManager
 import com.streamvault.domain.manager.ParentalControlManager
@@ -64,6 +66,7 @@ class HomeViewModel @Inject constructor(
     private val parentalControlManager: ParentalControlManager,
     private val syncManager: SyncManager,
     private val tvInputChannelSyncManager: TvInputChannelSyncManager,
+    private val multiViewManager: MultiViewManager,
     @AuxiliaryPlayerEngine
     private val playerEngineProvider: InjectProvider<PlayerEngine>
 ) : ViewModel() {
@@ -91,6 +94,11 @@ class HomeViewModel @Inject constructor(
 
     init {
         loadAllProviders()
+        viewModelScope.launch {
+            multiViewManager.slots.collect { slots ->
+                _uiState.update { it.copy(multiviewChannelCount = slots.count { it != null }) }
+            }
+        }
         viewModelScope.launch {
             providerRepository.getActiveProvider()
                 .filterNotNull()
@@ -209,6 +217,29 @@ class HomeViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            preferencesRepository.liveTvCategoryFilters.collectLatest { filters ->
+                _uiState.update { state ->
+                    val activeFilter = state.activeCategoryFilter
+                        ?.takeIf { selected -> filters.any { it.equals(selected, ignoreCase = true) } }
+                        ?: filters.firstOrNull { it == state.categorySearchQuery }
+                    state.copy(
+                        savedCategoryFilters = filters,
+                        activeCategoryFilter = activeFilter
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            preferencesRepository.liveTvQuickFilterVisibility
+                .map(LiveTvQuickFilterVisibilityMode::fromStorage)
+                .distinctUntilChanged()
+                .collectLatest { mode ->
+                    _uiState.update { it.copy(liveTvQuickFilterVisibilityMode = mode) }
+                }
+        }
+
+        viewModelScope.launch {
             _uiState.map { it.provider?.id }
                 .distinctUntilChanged()
                 .flatMapLatest { providerId ->
@@ -255,7 +286,8 @@ class HomeViewModel @Inject constructor(
                     preferencesRepository.defaultCategoryId,
                     preferencesRepository.getLastLiveCategoryId(providerId),
                     preferencesRepository.getHiddenCategoryIds(providerId, ContentType.LIVE),
-                    preferencesRepository.getCategorySortMode(providerId, ContentType.LIVE)
+                    preferencesRepository.getCategorySortMode(providerId, ContentType.LIVE),
+                    preferencesRepository.getPinnedCategoryIds(providerId, ContentType.LIVE)
                 ) { values ->
                     val providerCats = values[0] as List<Category>
                     val customCats = values[1] as List<Category>
@@ -263,6 +295,7 @@ class HomeViewModel @Inject constructor(
                     val lastVisitedCategoryId = values[3] as Long?
                     val hiddenCategoryIds = values[4] as Set<Long>
                     val sortMode = values[5] as CategorySortMode
+                    val pinnedCategoryIds = values[6] as Set<Long>
                     val recentCategory = Category(
                         id = VirtualCategoryIds.RECENT,
                         name = "Recent",
@@ -283,6 +316,8 @@ class HomeViewModel @Inject constructor(
                         hiddenCategoryIds = hiddenCategoryIds,
                         sortMode = sortMode
                     )
+                    val pinnedProviderCategories = visibleProviderCategories.filter { it.id in pinnedCategoryIds }
+                    val unpinnedProviderCategories = visibleProviderCategories.filterNot { it.id in pinnedCategoryIds }
 
                     val orderedCategories = buildList {
                         val favoritesCategory = customCats.find { it.id == VirtualCategoryIds.FAVORITES }
@@ -292,13 +327,15 @@ class HomeViewModel @Inject constructor(
                         add(recentCategory)
                         addAll(customCats.filter { it.id != VirtualCategoryIds.FAVORITES })
                         add(allChannelsCategory)
-                        addAll(visibleProviderCategories)
+                        addAll(pinnedProviderCategories)
+                        addAll(unpinnedProviderCategories)
                     }
 
                     CategorySelectionContext(
                         categories = orderedCategories,
                         defaultCategoryId = defaultId,
-                        lastVisitedCategoryId = lastVisitedCategoryId
+                        lastVisitedCategoryId = lastVisitedCategoryId,
+                        pinnedCategoryIds = pinnedCategoryIds
                     )
                 }.collect { selectionContext ->
                     val categories = selectionContext.categories
@@ -311,7 +348,8 @@ class HomeViewModel @Inject constructor(
                         it.copy(
                             categories = categories,
                             lastVisitedCategory = lastVisitedCategory,
-                            isCategoriesLoading = false
+                            isCategoriesLoading = false,
+                            pinnedCategoryIds = selectionContext.pinnedCategoryIds
                         )
                     }
 
@@ -365,10 +403,19 @@ class HomeViewModel @Inject constructor(
 
     fun selectCategory(category: Category) {
         if (_uiState.value.selectedCategory?.id == category.id) return
+        _uiState.value.provider?.id?.let { providerId ->
+            parentalControlManager.retainUnlockedCategory(
+                providerId = providerId,
+                categoryId = category.id.takeIf { !category.isVirtual && it > 0L }
+            )
+        }
         clearPreview()
+        _localChannels.value = emptyList()
         _uiState.update {
             it.copy(
                 selectedCategory = category,
+                filteredChannels = emptyList(),
+                hasChannels = false,
                 isLoading = true,
                 errorMessage = null
             )
@@ -493,7 +540,70 @@ class HomeViewModel @Inject constructor(
 
     fun updateCategorySearchQuery(query: String) {
         if (_uiState.value.isChannelReorderMode) return
-        _uiState.update { it.copy(categorySearchQuery = query) }
+        _uiState.update { state ->
+            state.copy(
+                categorySearchQuery = query,
+                activeCategoryFilter = state.savedCategoryFilters.firstOrNull {
+                    it.equals(query, ignoreCase = true)
+                }
+            )
+        }
+    }
+
+    fun applySavedCategoryFilter(filter: String) {
+        if (_uiState.value.isChannelReorderMode) return
+        _uiState.update { state ->
+            val shouldClear = state.activeCategoryFilter == filter && state.categorySearchQuery == filter
+            state.copy(
+                categorySearchQuery = if (shouldClear) "" else filter,
+                activeCategoryFilter = if (shouldClear) null else filter
+            )
+        }
+    }
+
+    fun clearCategorySearchQuery() {
+        if (_uiState.value.isChannelReorderMode) return
+        _uiState.update {
+            it.copy(
+                categorySearchQuery = "",
+                activeCategoryFilter = null
+            )
+        }
+    }
+
+    fun addLiveTvCategoryFilter(filter: String) {
+        viewModelScope.launch {
+            val normalized = filter.trim()
+            when {
+                normalized.isBlank() -> {
+                    _uiState.update {
+                        it.copy(userMessage = appContext.getString(R.string.settings_live_tv_quick_filter_blank))
+                    }
+                }
+                _uiState.value.savedCategoryFilters.any { existing ->
+                    existing.equals(normalized, ignoreCase = true)
+                } -> {
+                    _uiState.update {
+                        it.copy(
+                            userMessage = appContext.getString(
+                                R.string.settings_live_tv_quick_filter_duplicate,
+                                normalized
+                            )
+                        )
+                    }
+                }
+                preferencesRepository.addLiveTvCategoryFilter(normalized) -> {
+                    _uiState.update {
+                        it.copy(
+                            userMessage = appContext.getString(
+                                R.string.settings_live_tv_quick_filter_added,
+                                normalized
+                            )
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun clearVisibleChannelsForFilteredCategories() {
@@ -1014,6 +1124,29 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun toggleCategoryPinned(category: Category) {
+        if (category.isVirtual || category.id == ChannelRepository.ALL_CHANNELS_ID) return
+        val providerId = _uiState.value.provider?.id ?: return
+        val shouldPin = category.id !in _uiState.value.pinnedCategoryIds
+        viewModelScope.launch {
+            preferencesRepository.setCategoryPinned(
+                providerId = providerId,
+                type = ContentType.LIVE,
+                categoryId = category.id,
+                pinned = shouldPin
+            )
+            dismissCategoryOptions()
+            _uiState.update {
+                it.copy(
+                    userMessage = appContext.getString(
+                        if (shouldPin) R.string.category_pinned else R.string.category_unpinned,
+                        category.name
+                    )
+                )
+            }
+        }
+    }
+
     fun enterChannelReorderMode(category: Category) {
         dismissCategoryOptions()
         viewModelScope.launch {
@@ -1160,6 +1293,9 @@ data class HomeUiState(
     val isCategoriesLoading: Boolean = true,
     val isSyncing: Boolean = false,
     val categorySearchQuery: String = "",
+    val savedCategoryFilters: List<String> = emptyList(),
+    val activeCategoryFilter: String? = null,
+    val liveTvQuickFilterVisibilityMode: LiveTvQuickFilterVisibilityMode = LiveTvQuickFilterVisibilityMode.ALWAYS_VISIBLE,
     val channelSearchQuery: String = "",
     val showDialog: Boolean = false,
     val selectedChannelForDialog: Channel? = null,
@@ -1172,6 +1308,7 @@ data class HomeUiState(
     val groupToDelete: Category? = null,
     val parentalControlLevel: Int = 0,
     val unlockedCategoryIds: Set<Long> = emptySet(),
+    val pinnedCategoryIds: Set<Long> = emptySet(),
     val selectedCategoryForOptions: Category? = null,
     val isChannelReorderMode: Boolean = false,
     val reorderCategory: Category? = null,
@@ -1180,11 +1317,13 @@ data class HomeUiState(
     val previewPlayerEngine: PlayerEngine? = null,
     val isPreviewLoading: Boolean = false,
     val previewErrorMessage: String? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val multiviewChannelCount: Int = 0
 )
 
 private data class CategorySelectionContext(
     val categories: List<Category>,
     val defaultCategoryId: Long?,
-    val lastVisitedCategoryId: Long?
+    val lastVisitedCategoryId: Long?,
+    val pinnedCategoryIds: Set<Long>
 )

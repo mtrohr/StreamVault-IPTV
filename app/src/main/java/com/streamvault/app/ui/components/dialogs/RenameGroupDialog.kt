@@ -1,4 +1,4 @@
-package com.streamvault.app.ui.components.dialogs
+﻿package com.streamvault.app.ui.components.dialogs
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.text.KeyboardActions

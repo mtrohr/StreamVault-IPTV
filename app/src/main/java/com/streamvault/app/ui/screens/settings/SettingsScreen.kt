@@ -2,6 +2,8 @@ package com.streamvault.app.ui.screens.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,11 +16,18 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.tv.material3.*
@@ -37,9 +46,13 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.streamvault.app.ui.interaction.TvClickableSurface
+import com.streamvault.app.ui.interaction.TvButton
+import com.streamvault.app.ui.interaction.TvIconButton
 
 import com.streamvault.app.ui.components.dialogs.PinDialog
 import com.streamvault.app.ui.components.dialogs.PremiumDialog
+import com.streamvault.app.ui.components.dialogs.PremiumDialogActionButton
 import com.streamvault.app.ui.components.dialogs.PremiumDialogFooterButton
 import com.streamvault.app.ui.components.TvEmptyState
 import com.streamvault.app.localization.localeForLanguageTag
@@ -47,6 +60,7 @@ import com.streamvault.app.localization.supportedAppLanguageTags
 import com.streamvault.app.ui.components.shell.AppNavigationChrome
 import com.streamvault.app.ui.components.shell.AppScreenScaffold
 import com.streamvault.app.ui.model.LiveTvChannelMode
+import com.streamvault.app.ui.model.LiveTvQuickFilterVisibilityMode
 import com.streamvault.app.ui.model.VodViewMode
 import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.manager.BackupConflictStrategy
@@ -137,9 +151,11 @@ fun SettingsScreen(
     var showLevelDialog by rememberSaveable { mutableStateOf(false) }
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     var showLiveTvModeDialog by rememberSaveable { mutableStateOf(false) }
+    var showLiveTvQuickFilterVisibilityDialog by rememberSaveable { mutableStateOf(false) }
     var showLiveChannelNumberingDialog by rememberSaveable { mutableStateOf(false) }
     var showVodViewModeDialog by rememberSaveable { mutableStateOf(false) }
     var showPlaybackSpeedDialog by rememberSaveable { mutableStateOf(false) }
+    var showLiveTvFiltersDialog by rememberSaveable { mutableStateOf(false) }
     var showAudioLanguageDialog by rememberSaveable { mutableStateOf(false) }
     var showSubtitleSizeDialog by rememberSaveable { mutableStateOf(false) }
     var showSubtitleTextColorDialog by rememberSaveable { mutableStateOf(false) }
@@ -304,7 +320,7 @@ fun SettingsScreen(
                             }
                         }
                         item {
-                            Surface(
+                            TvClickableSurface(
                                 onClick = onAddProvider,
                                 shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                                 colors = ClickableSurfaceDefaults.colors(
@@ -334,10 +350,43 @@ fun SettingsScreen(
                     // ── 1: Playback ───────────────────────────────────────────
                     else if (selectedCategory == 1) {
                         item {
+                            TvClickableSurface(
+                                onClick = { viewModel.setPreventStandbyDuringPlayback(!uiState.preventStandbyDuringPlayback) },
+                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                                colors = ClickableSurfaceDefaults.colors(
+                                    containerColor = Color.Transparent,
+                                    focusedContainerColor = Primary.copy(alpha = 0.15f)
+                                ),
+                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(text = stringResource(R.string.settings_prevent_standby), style = MaterialTheme.typography.bodyMedium, color = OnSurface)
+                                        Text(text = stringResource(R.string.settings_prevent_standby_subtitle), style = MaterialTheme.typography.bodySmall, color = OnBackground.copy(alpha = 0.6f))
+                                    }
+                                    Switch(checked = uiState.preventStandbyDuringPlayback, onCheckedChange = { viewModel.setPreventStandbyDuringPlayback(it) })
+                                }
+                            }
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.07f), modifier = Modifier.padding(vertical = 4.dp))
                             ClickableSettingsRow(
                                 label = stringResource(R.string.settings_live_tv_channel_mode),
                                 value = stringResource(uiState.liveTvChannelMode.labelResId()),
                                 onClick = { showLiveTvModeDialog = true }
+                            )
+                            ClickableSettingsRow(
+                                label = stringResource(R.string.settings_live_tv_quick_filters),
+                                value = formatLiveTvQuickFiltersValue(uiState.liveTvCategoryFilters, context),
+                                onClick = { showLiveTvFiltersDialog = true }
+                            )
+                            ClickableSettingsRow(
+                                label = stringResource(R.string.settings_live_tv_quick_filter_visibility),
+                                value = stringResource(uiState.liveTvQuickFilterVisibilityMode.labelResId()),
+                                onClick = { showLiveTvQuickFilterVisibilityDialog = true }
                             )
                             ClickableSettingsRow(
                                 label = stringResource(R.string.settings_live_channel_numbering_mode),
@@ -366,7 +415,7 @@ fun SettingsScreen(
                                 onClick = { categorySortDialogType = ContentType.SERIES.name }
                             )
                             HorizontalDivider(color = Color.White.copy(alpha = 0.07f), modifier = Modifier.padding(vertical = 4.dp))
-                            Surface(
+                            TvClickableSurface(
                                 onClick = { showLanguageDialog = true },
                                 shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                                 colors = ClickableSurfaceDefaults.colors(
@@ -466,7 +515,7 @@ fun SettingsScreen(
                         }
                         item {
                             HorizontalDivider(color = Color.White.copy(alpha = 0.07f), modifier = Modifier.padding(vertical = 4.dp))
-                            Surface(
+                            TvClickableSurface(
                                 onClick = { viewModel.toggleIncognitoMode() },
                                 shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                                 colors = ClickableSurfaceDefaults.colors(
@@ -489,7 +538,7 @@ fun SettingsScreen(
                                 }
                             }
                             Spacer(Modifier.height(2.dp))
-                            Surface(
+                            TvClickableSurface(
                                 onClick = { viewModel.toggleXtreamTextClassification() },
                                 shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                                 colors = ClickableSurfaceDefaults.colors(
@@ -512,7 +561,7 @@ fun SettingsScreen(
                                 }
                             }
                             Spacer(Modifier.height(2.dp))
-                            Surface(
+                            TvClickableSurface(
                                 onClick = { showClearHistoryDialog = true },
                                 shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                                 colors = ClickableSurfaceDefaults.colors(
@@ -550,7 +599,7 @@ fun SettingsScreen(
                         }
                         if (uiState.recordingItems.isEmpty()) {
                             item {
-                                Surface(
+                                TvClickableSurface(
                                     onClick = {},
                                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
                                     colors = ClickableSurfaceDefaults.colors(
@@ -584,7 +633,7 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Surface(
+                                TvClickableSurface(
                                     onClick = { createDocumentLauncher.launch("streamvault_backup.json") },
                                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
                                     colors = ClickableSurfaceDefaults.colors(
@@ -604,7 +653,7 @@ fun SettingsScreen(
                                         Text(text = stringResource(R.string.settings_backup_subtitle), style = MaterialTheme.typography.bodySmall, color = OnSurfaceDim, textAlign = TextAlign.Center)
                                     }
                                 }
-                                Surface(
+                                TvClickableSurface(
                                     onClick = { openDocumentLauncher.launch(arrayOf("application/json")) },
                                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
                                     colors = ClickableSurfaceDefaults.colors(
@@ -685,7 +734,7 @@ fun SettingsScreen(
                                                 placeholder = "XMLTV URL (HTTPS) or browse file"
                                             )
                                         }
-                                        Surface(
+                                        TvClickableSurface(
                                             onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
                                             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                                             colors = ClickableSurfaceDefaults.colors(
@@ -697,7 +746,7 @@ fun SettingsScreen(
                                             Text("Browse", modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), style = MaterialTheme.typography.labelMedium, color = Primary)
                                         }
                                     }
-                                    Surface(
+                                    TvClickableSurface(
                                         onClick = {
                                             if (newName.isNotBlank() && newUrl.isNotBlank()) {
                                                 viewModel.addEpgSource(newName.trim(), newUrl.trim())
@@ -751,7 +800,7 @@ fun SettingsScreen(
                                                 }
                                             }
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                Surface(
+                                                TvClickableSurface(
                                                     onClick = { viewModel.toggleEpgSourceEnabled(source.id, !source.enabled) },
                                                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                                                     colors = ClickableSurfaceDefaults.colors(
@@ -767,7 +816,7 @@ fun SettingsScreen(
                                                         color = if (source.enabled) Color(0xFF66BB6A) else OnSurfaceDim
                                                     )
                                                 }
-                                                Surface(
+                                                TvClickableSurface(
                                                     onClick = { viewModel.refreshEpgSource(source.id) },
                                                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                                                     colors = ClickableSurfaceDefaults.colors(
@@ -778,7 +827,7 @@ fun SettingsScreen(
                                                 ) {
                                                     Text("Refresh", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelSmall, color = Primary)
                                                 }
-                                                Surface(
+                                                TvClickableSurface(
                                                     onClick = { viewModel.deleteEpgSource(source.id) },
                                                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                                                     colors = ClickableSurfaceDefaults.colors(
@@ -842,7 +891,7 @@ fun SettingsScreen(
                                                         color = Color.White,
                                                         modifier = Modifier.weight(1f)
                                                     )
-                                                    Surface(
+                                                    TvClickableSurface(
                                                         onClick = { viewModel.unassignEpgSourceFromProvider(provider.id, assignment.epgSourceId) },
                                                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
                                                         colors = ClickableSurfaceDefaults.colors(
@@ -860,7 +909,7 @@ fun SettingsScreen(
                                         if (unassignedSources.isNotEmpty()) {
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 unassignedSources.forEach { source ->
-                                                    Surface(
+                                                    TvClickableSurface(
                                                         onClick = { viewModel.assignEpgSourceToProvider(provider.id, source.id) },
                                                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                                                         colors = ClickableSurfaceDefaults.colors(
@@ -915,13 +964,19 @@ fun SettingsScreen(
             androidx.activity.compose.BackHandler(enabled = true) {
                 // Do nothing, effectively blocking back
             }
-            
+
+            val overlayFocusRequester = remember { FocusRequester() }
+            LaunchedEffect(Unit) { overlayFocusRequester.requestFocus() }
+
             // Overlay
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.7f))
                     .clickable(enabled = true, onClick = {}) // Consume clicks
+                    .focusRequester(overlayFocusRequester)
+                    .focusable()
+                    .onKeyEvent { true } // Consume all d-pad/key events
                     .align(Alignment.Center),
                 contentAlignment = Alignment.Center
             ) {
@@ -952,6 +1007,17 @@ fun SettingsScreen(
                 onModeSelected = { mode ->
                     viewModel.setLiveTvChannelMode(mode)
                     showLiveTvModeDialog = false
+                }
+            )
+        }
+
+        if (showLiveTvQuickFilterVisibilityDialog) {
+            LiveTvQuickFilterVisibilityDialog(
+                selectedMode = uiState.liveTvQuickFilterVisibilityMode,
+                onDismiss = { showLiveTvQuickFilterVisibilityDialog = false },
+                onModeSelected = { mode ->
+                    viewModel.setLiveTvQuickFilterVisibilityMode(mode)
+                    showLiveTvQuickFilterVisibilityDialog = false
                 }
             )
         }
@@ -996,6 +1062,15 @@ fun SettingsScreen(
                     )
                 }
             }
+        }
+
+        if (showLiveTvFiltersDialog) {
+            LiveTvQuickFiltersDialog(
+                filters = uiState.liveTvCategoryFilters,
+                onDismiss = { showLiveTvFiltersDialog = false },
+                onAddFilter = viewModel::addLiveTvCategoryFilter,
+                onRemoveFilter = viewModel::removeLiveTvCategoryFilter
+            )
         }
 
         if (showAudioLanguageDialog) {
@@ -1337,11 +1412,6 @@ private fun ProviderSyncOptionsDialog(
             SyncOptionButton(stringResource(R.string.settings_sync_option_all)) {
                 onSelect(ProviderSyncSelection.ALL)
             }
-            if (provider.type == ProviderType.XTREAM_CODES) {
-                SyncOptionButton(stringResource(R.string.settings_sync_option_fast)) {
-                    onSelect(ProviderSyncSelection.FAST)
-                }
-            }
             availableSyncSelections(provider).forEach { option ->
                 SyncOptionButton(text = syncSelectionLabel(option)) {
                     onSelect(option)
@@ -1422,7 +1492,7 @@ private fun SyncOptionButton(
     text: String,
     onClick: () -> Unit
 ) {
-    Button(
+    TvButton(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -1479,7 +1549,7 @@ private fun PremiumSelectionDialog(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         horizontalArrangement = Arrangement.End
                     ) {
-                        Surface(
+                        TvClickableSurface(
                             onClick = onDismiss,
                             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
                             colors = ClickableSurfaceDefaults.colors(
@@ -1577,7 +1647,7 @@ private fun CategorySortModeDialog(
         content = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 CategorySortMode.entries.forEach { mode ->
-                    Surface(
+                    TvClickableSurface(
                         onClick = { onModeSelected(mode) },
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(14.dp)),
                         colors = ClickableSurfaceDefaults.colors(
@@ -1649,7 +1719,7 @@ private fun ParentalControlCard(
             }
             
             // Custom Focusable Button for "Change"
-            Surface(
+            TvClickableSurface(
                 onClick = onChangeLevel,
                 shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
                 colors = ClickableSurfaceDefaults.colors(
@@ -1677,7 +1747,7 @@ private fun ParentalControlCard(
             Text(stringResource(R.string.settings_parental_pin), style = MaterialTheme.typography.bodyLarge, color = OnBackground)
             
             // Custom Focusable Button for "Change PIN"
-            Surface(
+            TvClickableSurface(
                 onClick = onChangePin,
                 shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
                 colors = ClickableSurfaceDefaults.colors(
@@ -1811,7 +1881,7 @@ private fun ProviderSettingsCard(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (hasEpgWarning) {
-                    Surface(
+                    TvClickableSurface(
                         onClick = { onRetryWarningAction(ProviderWarningAction.EPG) },
                         enabled = !isSyncing,
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
@@ -1829,7 +1899,7 @@ private fun ProviderSettingsCard(
                     }
                 }
                 if (hasMoviesWarning) {
-                    Surface(
+                    TvClickableSurface(
                         onClick = { onRetryWarningAction(ProviderWarningAction.MOVIES) },
                         enabled = !isSyncing,
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
@@ -1847,7 +1917,7 @@ private fun ProviderSettingsCard(
                     }
                 }
                 if (hasSeriesWarning && provider.type == ProviderType.XTREAM_CODES) {
-                    Surface(
+                    TvClickableSurface(
                         onClick = { onRetryWarningAction(ProviderWarningAction.SERIES) },
                         enabled = !isSyncing,
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
@@ -1870,7 +1940,7 @@ private fun ProviderSettingsCard(
         // Action buttons - each independently focusable for d-pad
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (!isActive) {
-                Surface(
+                TvClickableSurface(
                     onClick = onConnect,
                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
                     colors = ClickableSurfaceDefaults.colors(
@@ -1888,7 +1958,7 @@ private fun ProviderSettingsCard(
                     )
                 }
             } else {
-                Surface(
+                TvClickableSurface(
                     onClick = onRefresh,
                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
                     colors = ClickableSurfaceDefaults.colors(
@@ -1906,7 +1976,7 @@ private fun ProviderSettingsCard(
                 }
             }
 
-            Surface(
+            TvClickableSurface(
                 onClick = onEdit,
                 shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
                 colors = ClickableSurfaceDefaults.colors(
@@ -1923,7 +1993,7 @@ private fun ProviderSettingsCard(
                 )
             }
 
-            Surface(
+            TvClickableSurface(
                 onClick = onDelete,
                 shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
                 colors = ClickableSurfaceDefaults.colors(
@@ -1941,7 +2011,7 @@ private fun ProviderSettingsCard(
             }
 
             if (isActive) {
-                Surface(
+                TvClickableSurface(
                     onClick = onParentalControl,
                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
                     colors = ClickableSurfaceDefaults.colors(
@@ -1971,7 +2041,7 @@ private fun ProviderSelectorTab(
     onClick: () -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
-    Surface(
+    TvClickableSurface(
         onClick = onClick,
         modifier = Modifier
             .focusRequester(focusRequester)
@@ -2283,7 +2353,58 @@ private fun LiveTvChannelModeDialog(
         content = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 LiveTvChannelMode.entries.forEach { mode ->
-                    Surface(
+                    TvClickableSurface(
+                        onClick = { onModeSelected(mode) },
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(14.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = if (mode == selectedMode) Primary.copy(alpha = 0.18f) else SurfaceElevated,
+                            focusedContainerColor = Primary.copy(alpha = 0.28f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = stringResource(mode.labelResId()),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = if (mode == selectedMode) Primary else OnBackground
+                            )
+                            Text(
+                                text = stringResource(mode.descriptionResId()),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = OnSurfaceDim
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        footer = {
+            PremiumDialogFooterButton(
+                label = stringResource(R.string.settings_cancel),
+                onClick = onDismiss
+            )
+        }
+    )
+}
+
+@Composable
+private fun LiveTvQuickFilterVisibilityDialog(
+    selectedMode: LiveTvQuickFilterVisibilityMode,
+    onDismiss: () -> Unit,
+    onModeSelected: (LiveTvQuickFilterVisibilityMode) -> Unit
+) {
+    PremiumDialog(
+        title = stringResource(R.string.settings_live_tv_quick_filter_visibility),
+        subtitle = stringResource(R.string.settings_live_tv_quick_filter_visibility_subtitle),
+        onDismissRequest = onDismiss,
+        widthFraction = 0.52f,
+        content = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                LiveTvQuickFilterVisibilityMode.entries.forEach { mode ->
+                    TvClickableSurface(
                         onClick = { onModeSelected(mode) },
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(14.dp)),
                         colors = ClickableSurfaceDefaults.colors(
@@ -2356,7 +2477,7 @@ private fun VodViewModeDialog(
         content = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 VodViewMode.entries.forEach { mode ->
-                    Surface(
+                    TvClickableSurface(
                         onClick = { onModeSelected(mode) },
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(14.dp)),
                         colors = ClickableSurfaceDefaults.colors(
@@ -2407,7 +2528,7 @@ private fun LiveChannelNumberingModeDialog(
         content = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 ChannelNumberingMode.entries.forEach { mode ->
-                    Surface(
+                    TvClickableSurface(
                         onClick = { onModeSelected(mode) },
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(14.dp)),
                         colors = ClickableSurfaceDefaults.colors(
@@ -2447,7 +2568,7 @@ private fun LiveChannelNumberingModeDialog(
 @Composable
 private fun SettingsRow(label: String, value: String) {
     val focusRequester = remember { FocusRequester() }
-    Surface(
+    TvClickableSurface(
         onClick = {},
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
         colors = ClickableSurfaceDefaults.colors(
@@ -2479,7 +2600,7 @@ private fun SettingsRow(label: String, value: String) {
 @Composable
 private fun ClickableSettingsRow(label: String, value: String, onClick: () -> Unit) {
     val focusRequester = remember { FocusRequester() }
-    Surface(
+    TvClickableSurface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
         colors = ClickableSurfaceDefaults.colors(
@@ -2520,7 +2641,7 @@ private fun InternetSpeedTestCard(
     onApplyEthernet: () -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
-    Surface(
+    TvClickableSurface(
         onClick = onRunTest,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
         colors = ClickableSurfaceDefaults.colors(
@@ -2587,7 +2708,7 @@ private fun InternetSpeedTestCard(
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Surface(
+                TvClickableSurface(
                     onClick = onRunTest,
                     enabled = !isRunning,
                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
@@ -2603,7 +2724,7 @@ private fun InternetSpeedTestCard(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
                     )
                 }
-                Surface(
+                TvClickableSurface(
                     onClick = onApplyWifi,
                     enabled = canApplyRecommendation && !isRunning,
                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
@@ -2619,7 +2740,7 @@ private fun InternetSpeedTestCard(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
                     )
                 }
-                Surface(
+                TvClickableSurface(
                     onClick = onApplyEthernet,
                     enabled = canApplyRecommendation && !isRunning,
                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
@@ -2746,7 +2867,7 @@ private fun BackupStrategyChip(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    Surface(
+    TvClickableSurface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(24.dp)),
         colors = ClickableSurfaceDefaults.colors(
@@ -2787,7 +2908,7 @@ private fun RecordingOverviewCard(
     activeCount: Int,
     scheduledCount: Int
 ) {
-    Surface(
+    TvClickableSurface(
         onClick = {},
         modifier = Modifier.fillMaxWidth(),
         colors = ClickableSurfaceDefaults.colors(
@@ -2906,7 +3027,7 @@ private fun RecordingItemCard(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (item.status == RecordingStatus.RECORDING) {
-                    Surface(
+                    TvClickableSurface(
                         onClick = onStop,
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                         colors = ClickableSurfaceDefaults.colors(
@@ -2922,7 +3043,7 @@ private fun RecordingItemCard(
                     }
                 }
                 if (item.status == RecordingStatus.SCHEDULED) {
-                    Surface(
+                    TvClickableSurface(
                         onClick = onCancel,
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                         colors = ClickableSurfaceDefaults.colors(
@@ -2938,7 +3059,7 @@ private fun RecordingItemCard(
                     }
                 }
                 if (item.status == RecordingStatus.COMPLETED || item.status == RecordingStatus.FAILED || item.status == RecordingStatus.CANCELLED) {
-                    Surface(
+                    TvClickableSurface(
                         onClick = onDelete,
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                         colors = ClickableSurfaceDefaults.colors(
@@ -2973,35 +3094,234 @@ private fun EpgSourceTextField(
     onValueChange: (String) -> Unit,
     placeholder: String
 ) {
+    val isTelevisionDevice = com.streamvault.app.device.rememberIsTelevisionDevice()
     val focusRequester = remember { FocusRequester() }
-    var isFocused by remember { mutableStateOf(false) }
-    Surface(
-        onClick = { focusRequester.requestFocus() },
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val coroutineScope = rememberCoroutineScope()
+    var hasContainerFocus by remember { mutableStateOf(false) }
+    var hasInputFocus by remember { mutableStateOf(false) }
+    var acceptsInput by remember(isTelevisionDevice) { mutableStateOf(!isTelevisionDevice) }
+    var pendingInputActivation by remember { mutableStateOf(false) }
+    var fieldValue by remember {
+        mutableStateOf(TextFieldValue(text = value, selection = TextRange(value.length)))
+    }
+    val isFocused = hasContainerFocus || hasInputFocus
+
+    fun requestBringIntoView(delayMillis: Long = 0L) {
+        coroutineScope.launch {
+            if (delayMillis > 0) {
+                kotlinx.coroutines.delay(delayMillis)
+            }
+            runCatching { bringIntoViewRequester.bringIntoView() }
+        }
+    }
+
+    LaunchedEffect(value) {
+        if (value != fieldValue.text) {
+            val coercedSelectionStart = fieldValue.selection.start.coerceIn(0, value.length)
+            val coercedSelectionEnd = fieldValue.selection.end.coerceIn(0, value.length)
+            val coercedComposition = fieldValue.composition?.let { composition ->
+                val compositionStart = composition.start.coerceIn(0, value.length)
+                val compositionEnd = composition.end.coerceIn(0, value.length)
+                if (compositionStart <= compositionEnd) {
+                    TextRange(compositionStart, compositionEnd)
+                } else {
+                    null
+                }
+            }
+            fieldValue = fieldValue.copy(
+                text = value,
+                selection = TextRange(coercedSelectionStart, coercedSelectionEnd),
+                composition = coercedComposition
+            )
+        }
+    }
+
+    LaunchedEffect(acceptsInput, pendingInputActivation) {
+        if (!isTelevisionDevice || !acceptsInput || !pendingInputActivation) {
+            return@LaunchedEffect
+        }
+        focusRequester.requestFocus()
+        keyboardController?.show()
+        requestBringIntoView(120)
+        pendingInputActivation = false
+    }
+
+    TvClickableSurface(
+        onClick = {
+            if (!isTelevisionDevice) {
+                focusRequester.requestFocus()
+                keyboardController?.show()
+                requestBringIntoView()
+                requestBringIntoView(180)
+                return@TvClickableSurface
+            }
+            acceptsInput = true
+            pendingInputActivation = true
+            requestBringIntoView()
+        },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.White.copy(alpha = 0.08f),
             focusedContainerColor = Color.White.copy(alpha = 0.12f)
         ),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .bringIntoViewRequester(bringIntoViewRequester)
+            .onFocusChanged { hasContainerFocus = it.isFocused }
     ) {
         Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             if (value.isEmpty() && !isFocused) {
                 Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = OnSurfaceDim)
             }
             BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
+                value = fieldValue,
+                onValueChange = { updatedValue ->
+                    fieldValue = updatedValue
+                    if (updatedValue.text != value) {
+                        onValueChange(updatedValue.text)
+                    }
+                },
                 textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
                 singleLine = true,
                 cursorBrush = SolidColor(Primary),
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester)
-                    .onFocusChanged { isFocused = it.isFocused }
+                    .focusProperties {
+                        canFocus = !isTelevisionDevice || acceptsInput
+                        if (isTelevisionDevice && acceptsInput) {
+                            left = FocusRequester.Cancel
+                            right = FocusRequester.Cancel
+                        }
+                    }
+                    .onPreviewKeyEvent { event ->
+                        if (!isTelevisionDevice || !acceptsInput || event.nativeKeyEvent.action != android.view.KeyEvent.ACTION_DOWN) {
+                            return@onPreviewKeyEvent false
+                        }
+                        val cursor = fieldValue.selection.end
+                        when (event.nativeKeyEvent.keyCode) {
+                            android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                                val nextCursor = (cursor - 1).coerceAtLeast(0)
+                                fieldValue = fieldValue.copy(selection = TextRange(nextCursor))
+                                true
+                            }
+                            android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                val nextCursor = (cursor + 1).coerceAtMost(fieldValue.text.length)
+                                fieldValue = fieldValue.copy(selection = TextRange(nextCursor))
+                                true
+                            }
+                            else -> false
+                        }
+                    }
+                    .onFocusChanged {
+                        hasInputFocus = it.isFocused
+                        if (it.isFocused) {
+                            requestBringIntoView(120)
+                        } else {
+                            if (isTelevisionDevice) {
+                                acceptsInput = false
+                            }
+                            keyboardController?.hide()
+                        }
+                    },
+                readOnly = isTelevisionDevice && !acceptsInput
             )
         }
     }
+}
+
+@Composable
+private fun LiveTvQuickFiltersDialog(
+    filters: List<String>,
+    onDismiss: () -> Unit,
+    onAddFilter: (String) -> Unit,
+    onRemoveFilter: (String) -> Unit
+) {
+    var pendingFilter by rememberSaveable { mutableStateOf("") }
+
+    PremiumDialog(
+        title = stringResource(R.string.settings_live_tv_quick_filters_dialog_title),
+        subtitle = stringResource(R.string.settings_live_tv_quick_filters_dialog_subtitle),
+        onDismissRequest = onDismiss,
+        widthFraction = 0.5f,
+        content = {
+            EpgSourceTextField(
+                value = pendingFilter,
+                onValueChange = { pendingFilter = it },
+                placeholder = stringResource(R.string.settings_live_tv_quick_filters_placeholder)
+            )
+            PremiumDialogActionButton(
+                label = stringResource(R.string.settings_live_tv_quick_filters_add),
+                enabled = pendingFilter.isNotBlank(),
+                onClick = {
+                    onAddFilter(pendingFilter)
+                    pendingFilter = ""
+                }
+            )
+            if (filters.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.settings_live_tv_quick_filters_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OnSurfaceDim
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.settings_live_tv_quick_filters_saved),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = OnSurfaceDim
+                )
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 260.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(filters, key = { it }) { filter ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = filter,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = OnSurface,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TvButton(onClick = { onRemoveFilter(filter) }) {
+                                    Text(stringResource(R.string.settings_live_tv_quick_filters_remove))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        footer = {
+            PremiumDialogFooterButton(
+                label = stringResource(R.string.settings_cancel),
+                onClick = onDismiss
+            )
+        }
+    )
+}
+
+private fun formatLiveTvQuickFiltersValue(filters: List<String>, context: android.content.Context): String {
+    if (filters.isEmpty()) {
+        return context.getString(R.string.settings_live_tv_quick_filters_none)
+    }
+    return context.resources.getQuantityString(
+        R.plurals.settings_live_tv_quick_filters_count,
+        filters.size,
+        filters.size
+    )
 }
 
 @Composable
@@ -3013,7 +3333,7 @@ private fun SettingsNavItem(
     onClick: () -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
-    Surface(
+    TvClickableSurface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(0.dp)),
         colors = ClickableSurfaceDefaults.colors(
@@ -3255,6 +3575,18 @@ private fun LiveTvChannelMode.descriptionResId(): Int = when (this) {
     LiveTvChannelMode.COMFORTABLE -> R.string.settings_live_tv_mode_comfortable_desc
     LiveTvChannelMode.COMPACT -> R.string.settings_live_tv_mode_compact_desc
     LiveTvChannelMode.PRO -> R.string.settings_live_tv_mode_pro_desc
+}
+
+private fun LiveTvQuickFilterVisibilityMode.labelResId(): Int = when (this) {
+    LiveTvQuickFilterVisibilityMode.HIDE -> R.string.settings_live_tv_quick_filter_visibility_hide
+    LiveTvQuickFilterVisibilityMode.SHOW_WHEN_FILTERS_AVAILABLE -> R.string.settings_live_tv_quick_filter_visibility_available
+    LiveTvQuickFilterVisibilityMode.ALWAYS_VISIBLE -> R.string.settings_live_tv_quick_filter_visibility_always
+}
+
+private fun LiveTvQuickFilterVisibilityMode.descriptionResId(): Int = when (this) {
+    LiveTvQuickFilterVisibilityMode.HIDE -> R.string.settings_live_tv_quick_filter_visibility_hide_desc
+    LiveTvQuickFilterVisibilityMode.SHOW_WHEN_FILTERS_AVAILABLE -> R.string.settings_live_tv_quick_filter_visibility_available_desc
+    LiveTvQuickFilterVisibilityMode.ALWAYS_VISIBLE -> R.string.settings_live_tv_quick_filter_visibility_always_desc
 }
 
 private fun VodViewMode.labelResId(): Int = when (this) {

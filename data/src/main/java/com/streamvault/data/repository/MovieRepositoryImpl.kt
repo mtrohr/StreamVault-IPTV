@@ -915,7 +915,6 @@ class MovieRepositoryImpl @Inject constructor(
     }
 
     private suspend fun shouldUsePersistedCategoryHydration(provider: ProviderEntity, providerId: Long): Boolean {
-        if (provider.xtreamFastSyncEnabled) return true
         return syncMetadataRepository.getMetadata(providerId)?.movieSyncMode == VodSyncMode.LAZY_BY_CATEGORY
     }
 

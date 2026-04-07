@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.streamvault.app.R
 import com.streamvault.app.tvinput.TvInputChannelSyncManager
 import com.streamvault.app.ui.model.LiveTvChannelMode
+import com.streamvault.app.ui.model.LiveTvQuickFilterVisibilityMode
 import com.streamvault.app.ui.model.VodViewMode
 import com.streamvault.data.preferences.PreferencesRepository
 import com.streamvault.data.sync.SyncManager
@@ -82,8 +83,11 @@ private data class SettingsPreferenceSnapshot(
     val isIncognitoMode: Boolean,
     val useXtreamTextClassification: Boolean,
     val liveTvChannelMode: LiveTvChannelMode,
+    val liveTvCategoryFilters: List<String>,
+    val liveTvQuickFilterVisibilityMode: LiveTvQuickFilterVisibilityMode,
     val liveChannelNumberingMode: ChannelNumberingMode,
-    val vodViewMode: VodViewMode
+    val vodViewMode: VodViewMode,
+    val preventStandbyDuringPlayback: Boolean
 )
 
 @HiltViewModel
@@ -140,8 +144,11 @@ class SettingsViewModel @Inject constructor(
                     isIncognitoMode = false,
                     useXtreamTextClassification = true,
                     liveTvChannelMode = LiveTvChannelMode.COMPACT,
+                    liveTvCategoryFilters = emptyList(),
+                    liveTvQuickFilterVisibilityMode = LiveTvQuickFilterVisibilityMode.ALWAYS_VISIBLE,
                     liveChannelNumberingMode = ChannelNumberingMode.GROUP,
-                    vodViewMode = VodViewMode.MODERN
+                    vodViewMode = VodViewMode.MODERN,
+                    preventStandbyDuringPlayback = true
                 )
             }.combine(preferencesRepository.appLanguage) { snapshot, language ->
                 snapshot.copy(appLanguage = language)
@@ -175,10 +182,18 @@ class SettingsViewModel @Inject constructor(
                 snapshot.copy(useXtreamTextClassification = useTextClass)
             }.combine(preferencesRepository.liveTvChannelMode) { snapshot, liveTvChannelMode ->
                 snapshot.copy(liveTvChannelMode = LiveTvChannelMode.fromStorage(liveTvChannelMode))
+            }.combine(preferencesRepository.liveTvCategoryFilters) { snapshot, liveTvCategoryFilters ->
+                snapshot.copy(liveTvCategoryFilters = liveTvCategoryFilters)
+            }.combine(preferencesRepository.liveTvQuickFilterVisibility) { snapshot, visibilityMode ->
+                snapshot.copy(
+                    liveTvQuickFilterVisibilityMode = LiveTvQuickFilterVisibilityMode.fromStorage(visibilityMode)
+                )
             }.combine(preferencesRepository.liveChannelNumberingMode) { snapshot, liveChannelNumberingMode ->
                 snapshot.copy(liveChannelNumberingMode = liveChannelNumberingMode)
             }.combine(preferencesRepository.vodViewMode) { snapshot, vodViewMode ->
                 snapshot.copy(vodViewMode = VodViewMode.fromStorage(vodViewMode))
+            }.combine(preferencesRepository.preventStandbyDuringPlayback) { snapshot, preventStandby ->
+                snapshot.copy(preventStandbyDuringPlayback = preventStandby)
             }.collect { snapshot ->
                 _uiState.update {
                     it.copy(
@@ -206,8 +221,11 @@ class SettingsViewModel @Inject constructor(
                         isIncognitoMode = snapshot.isIncognitoMode,
                         useXtreamTextClassification = snapshot.useXtreamTextClassification,
                         liveTvChannelMode = snapshot.liveTvChannelMode,
+                        liveTvCategoryFilters = snapshot.liveTvCategoryFilters,
+                        liveTvQuickFilterVisibilityMode = snapshot.liveTvQuickFilterVisibilityMode,
                         liveChannelNumberingMode = snapshot.liveChannelNumberingMode,
-                        vodViewMode = snapshot.vodViewMode
+                        vodViewMode = snapshot.vodViewMode,
+                        preventStandbyDuringPlayback = snapshot.preventStandbyDuringPlayback
                     )
                 }
             }
@@ -364,6 +382,47 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setLiveTvQuickFilterVisibilityMode(mode: LiveTvQuickFilterVisibilityMode) {
+        viewModelScope.launch {
+            preferencesRepository.setLiveTvQuickFilterVisibility(mode.storageValue)
+        }
+    }
+
+    fun addLiveTvCategoryFilter(filter: String) {
+        viewModelScope.launch {
+            val normalized = filter.trim()
+            when {
+                normalized.isBlank() -> {
+                    _uiState.update {
+                        it.copy(userMessage = appContext.getString(R.string.settings_live_tv_quick_filter_blank))
+                    }
+                }
+                _uiState.value.liveTvCategoryFilters.any { existing ->
+                    existing.equals(normalized, ignoreCase = true)
+                } -> {
+                    _uiState.update {
+                        it.copy(userMessage = appContext.getString(R.string.settings_live_tv_quick_filter_duplicate, normalized))
+                    }
+                }
+                preferencesRepository.addLiveTvCategoryFilter(normalized) -> {
+                    _uiState.update {
+                        it.copy(userMessage = appContext.getString(R.string.settings_live_tv_quick_filter_added, normalized))
+                    }
+                }
+            }
+        }
+    }
+
+    fun removeLiveTvCategoryFilter(filter: String) {
+        viewModelScope.launch {
+            if (preferencesRepository.removeLiveTvCategoryFilter(filter)) {
+                _uiState.update {
+                    it.copy(userMessage = appContext.getString(R.string.settings_live_tv_quick_filter_removed, filter))
+                }
+            }
+        }
+    }
+
     fun setLiveChannelNumberingMode(mode: ChannelNumberingMode) {
         viewModelScope.launch {
             preferencesRepository.setLiveChannelNumberingMode(mode)
@@ -373,6 +432,12 @@ class SettingsViewModel @Inject constructor(
     fun setVodViewMode(mode: VodViewMode) {
         viewModelScope.launch {
             preferencesRepository.setVodViewMode(mode.storageValue)
+        }
+    }
+
+    fun setPreventStandbyDuringPlayback(prevent: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.setPreventStandbyDuringPlayback(prevent)
         }
     }
 
@@ -538,6 +603,7 @@ class SettingsViewModel @Inject constructor(
     fun refreshProvider(providerId: Long, movieFastSyncOverride: Boolean? = null) {
         viewModelScope.launch {
             _uiState.update { it.copy(isSyncing = true) }
+            try {
             val result = syncProvider(
                 SyncProviderCommand(
                     providerId = providerId,
@@ -568,14 +634,16 @@ class SettingsViewModel @Inject constructor(
                     }
                 )
             }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isSyncing = false, userMessage = "Sync failed: ${e.message}") }
+            }
         }
     }
 
     fun syncProviderSection(providerId: Long, selection: ProviderSyncSelection) {
         viewModelScope.launch {
             when (selection) {
-                ProviderSyncSelection.ALL -> refreshProvider(providerId)
-                ProviderSyncSelection.FAST -> refreshProvider(providerId, movieFastSyncOverride = true)
+                ProviderSyncSelection.ALL, ProviderSyncSelection.FAST -> refreshProvider(providerId)
                 else -> runSectionSync(providerId, listOf(selection))
             }
         }
@@ -646,6 +714,7 @@ class SettingsViewModel @Inject constructor(
         selections: List<ProviderSyncSelection>
     ) {
         _uiState.update { it.copy(isSyncing = true) }
+        try {
         val failures = mutableListOf<String>()
         val completed = mutableListOf<String>()
 
@@ -687,6 +756,9 @@ class SettingsViewModel @Inject constructor(
                     )
                 }
             )
+        }
+        } catch (e: Exception) {
+            _uiState.update { it.copy(isSyncing = false, userMessage = "Sync failed: ${e.message}") }
         }
     }
 
@@ -980,8 +1052,11 @@ data class SettingsUiState(
     val isIncognitoMode: Boolean = false,
     val useXtreamTextClassification: Boolean = true,
     val liveTvChannelMode: LiveTvChannelMode = LiveTvChannelMode.COMFORTABLE,
+    val liveTvCategoryFilters: List<String> = emptyList(),
+    val liveTvQuickFilterVisibilityMode: LiveTvQuickFilterVisibilityMode = LiveTvQuickFilterVisibilityMode.ALWAYS_VISIBLE,
     val liveChannelNumberingMode: ChannelNumberingMode = ChannelNumberingMode.GROUP,
     val vodViewMode: VodViewMode = VodViewMode.MODERN,
+    val preventStandbyDuringPlayback: Boolean = true,
     val categorySortModes: Map<ContentType, CategorySortMode> = emptyMap(),
     val hiddenCategories: List<Category> = emptyList(),
     val epgSources: List<com.streamvault.domain.model.EpgSource> = emptyList(),

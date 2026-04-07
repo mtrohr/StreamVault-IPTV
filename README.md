@@ -1,51 +1,51 @@
 # StreamVault
 
-StreamVault is an Android TV IPTV player built with Kotlin, Jetpack Compose, Room, Hilt, and Media3.
+StreamVault is a TV-first IPTV player for Android TV built with Kotlin, Jetpack Compose, Room, Hilt, and Media3.
 
-It is designed for large catalogs, remote-friendly navigation, and a polished TV-first playback experience. The app supports common IPTV provider formats, full library browsing, TV playback, and modern Android TV integrations.
+It is designed for large playlists, remote-friendly browsing, fast provider switching, and a polished living-room playback experience. StreamVault supports both `M3U` playlists and `Xtream Codes`, with dedicated flows for `Live TV`, `Movies`, and `Series`.
 
-## What It Does
+## Highlights
 
-- Connects to IPTV providers using `M3U` playlists or `Xtream Codes`
-- Syncs and organizes `Live TV`, `Movies`, and `Series`
-- Provides a dedicated Android TV experience with Leanback launcher support
-- Plays streams with Media3-based playback controls and track selection
-
-## Supported Features
-
-- Provider setup for `M3U` and `Xtream Codes`
-- Live TV with categories, channel search, favorites,custom categories and recent channels
-- Movies and series libraries with category browsing and search
-- Full EPG and now-playing data
+- Android TV-first interface with D-pad-friendly focus, navigation, and playback flows
+- Live TV with favorites, recent channels, custom groups, pinned categories, and fast channel browsing
+- Movie and series libraries with detailed metadata screens, resume support, and category navigation
+- Multi-view split-screen playback for watching multiple channels at once
+- Full EPG support with now-playing data and provider archive or catch-up support when available
+- Strong parental controls with PIN-protected categories and automatic adult-category detection
 - Global search across live channels, movies, and series
-- Favorites and custom favorite groups
-- Continue watching and playback history
-- Multi-view playback for watching multiple streams
-- Parental controls with PIN-protected categories
-- Subtitle, audio-track, playback-speed, and video-track controls
+- Launcher and TV integrations including Android TV entry points and TV input support
+
+## Feature Set
+
+- Provider onboarding for `M3U` playlists and `Xtream Codes`
+- Resilient sync pipeline for live, movie, series, and EPG data
+- TV-optimized search inputs and provider setup forms
+- Favorites, recent history, continue watching, and playback history
+- Custom favorite groups and personalized live-TV organization
+- Multi-view audio focus management and split-screen planning
+- Subtitle, audio-track, aspect-ratio, playback-speed, and video-track controls
 - Cast integration
-- Android TV home integrations such as launcher entry points and TV input support
+- Provider-scoped settings and category visibility or protection preferences
 
 ## Screenshots
 
-Add screenshots to `docs/images/` and update this section when assets are available.
+Placeholder images are included in `docs/images/` so the repository renders cleanly until final screenshots are captured.
 
-Suggested files:
-
-- `docs/images/dashboard.png`
-- `docs/images/live-tv.png`
-- `docs/images/player.png`
-- `docs/images/movies.png`
-- `docs/images/series.png`
-- `docs/images/search.png`
-- `docs/images/multiview.png`
+![Dashboard placeholder](docs/images/dashboard.svg)
+![Live TV placeholder](docs/images/live-tv.svg)
+![Player placeholder](docs/images/player.svg)
+![Movies placeholder](docs/images/movies.svg)
+![Series placeholder](docs/images/series.svg)
+![Search placeholder](docs/images/search.svg)
+![Multiview placeholder](docs/images/multiview.svg)
 
 ## Project Structure
 
-- `app/` Android app UI, navigation, DI, Android TV integrations
-- `data/` Room database, sync, parsers, repositories, provider implementations
-- `domain/` models, repository contracts, use cases, managers
+- `app/` Android app UI, navigation, dependency injection, and Android TV integrations
+- `data/` Room database, sync, parsing, provider implementations, and repositories
+- `domain/` models, repository contracts, managers, and use cases
 - `player/` playback abstraction and Media3 player implementation
+- `docs/` architecture notes and image assets
 
 ## Build
 
@@ -53,16 +53,18 @@ Requirements:
 
 - Android Studio
 - Android SDK
-- JDK 17 or compatible Gradle-supported JDK
+- JDK 17 or another Gradle-supported JDK 17 runtime
 
 Useful commands:
 
 ```bash
 ./gradlew assembleDebug
+./gradlew assembleRelease
 ./gradlew testDebugUnitTest
 ```
 
 ## Notes
 
 - StreamVault is an IPTV client, not a content provider.
-- You are responsible for using playlist sources and streams you are authorized to access.
+- Use only playlists, streams, and guide sources you are authorized to access.
+- Local configuration and signing files are intentionally excluded from git.

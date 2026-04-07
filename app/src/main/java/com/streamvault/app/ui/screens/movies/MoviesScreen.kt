@@ -173,7 +173,7 @@ fun MoviesScreen(
                     subtitle = uiState.errorMessage ?: ""
                 )
             }
-        } else if (uiState.moviesByCategory.isEmpty()) {
+        } else if (uiState.moviesByCategory.isEmpty() && !uiState.isLoadingPreviewRows) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 AppMessageState(
                     title = stringResource(R.string.movies_no_found),
@@ -220,6 +220,7 @@ fun MoviesScreen(
                     viewModel.selectFullLibraryBrowse()
                 },
                 onLoadMore = viewModel::loadMoreSelectedCategory,
+                onLoadMorePreviewRows = viewModel::loadMorePreviewRows,
                 onDismissReorder = viewModel::exitCategoryReorderMode
             )
         }
@@ -309,6 +310,7 @@ private fun MoviesVodContent(
     onOpenTopRated: () -> Unit,
     onOpenFresh: () -> Unit,
     onLoadMore: () -> Unit,
+    onLoadMorePreviewRows: () -> Unit,
     onDismissReorder: () -> Unit
 ) {
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
@@ -587,7 +589,7 @@ private fun MoviesVodContent(
             val catEntries = uiState.moviesByCategory.entries
                 .filter { (name, items) ->
                     name != uiState.favoriteCategoryName && name in visibleCategoryNames && items.isNotEmpty()
-                }.take(8).toList()
+                }.toList()
             items(catEntries, key = { it.key }) { entry ->
                 val categoryName = entry.key
                 val movies = entry.value
@@ -608,6 +610,25 @@ private fun MoviesVodContent(
                         onClick = { if (isLocked) onProtectedMovieClick(movie) else onMovieClick(movie) },
                         onLongClick = { onShowDialog(movie) }
                     )
+                }
+            }
+            if (uiState.isLoadingPreviewRows) {
+                item(key = "preview_loading") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
+                    }
+                }
+            }
+            if (uiState.hasMorePreviewRows && !uiState.isLoadingPreviewRows && catEntries.isNotEmpty()) {
+                item(key = "load_more_preview_trigger") {
+                    LaunchedEffect(catEntries.size) {
+                        onLoadMorePreviewRows()
+                    }
                 }
             }
         }

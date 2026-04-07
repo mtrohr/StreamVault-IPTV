@@ -91,6 +91,14 @@ class MoviesViewModel @Inject constructor(
     private val _selectedCategoryLoadLimit = MutableStateFlow(VodBrowseDefaults.SELECTED_CATEGORY_PAGE_SIZE)
     private val _selectedLibraryFilterType = MutableStateFlow(LibraryFilterType.ALL)
     private val _selectedLibrarySortBy = MutableStateFlow(LibrarySortBy.LIBRARY)
+    private val _previewBatchSize = MutableStateFlow(8)
+    private var activeProviderId: Long? = null
+
+    private data class PreviewLoadResult(
+        val snapshot: MovieCatalogSnapshot,
+        val isLoadingPreviewRows: Boolean,
+        val hasMorePreviewRows: Boolean
+    )
 
     init {
         viewModelScope.launch {
@@ -98,6 +106,7 @@ class MoviesViewModel @Inject constructor(
             providerRepository.getActiveProvider()
                 .filterNotNull()
                 .flatMapLatest { provider ->
+                    activeProviderId = provider.id
                     combine(
                         favoriteRepository.getAllFavorites(ContentType.MOVIE),
                         getCustomCategories(ContentType.MOVIE),
@@ -143,32 +152,57 @@ class MoviesViewModel @Inject constructor(
                     }
                 }
                 .flatMapLatest { params ->
-                    flow {
-                        emit(
-                            if (params.query.isBlank()) {
-                                buildPreviewCatalog(params)
-                            } else if (params.query.length < MIN_SEARCH_QUERY_LENGTH) {
-                                buildSearchCatalog(
-                                    movies = emptyList(),
-                                    allFavorites = params.allFavorites,
-                                    customCategories = params.customCategories,
-                                    providerCategories = params.providerCategories,
-                                    hiddenCategoryIds = params.hiddenCategoryIds
-                                ).copy(libraryCount = 0)
+                    _previewBatchSize.value = 8
+                    _previewBatchSize.flatMapLatest { batchSize ->
+                        if (params.query.isBlank()) {
+                            val categoryIds = params.providerCategories.take(batchSize).map { it.id }
+                            if (categoryIds.isEmpty()) {
+                                flow {
+                                    emit(PreviewLoadResult(buildPreviewCatalog(params, emptyMap()), false, false))
+                                }
                             } else {
-                                val searchResults = movieRepository.searchMovies(params.providerId, params.query).first()
-                                buildSearchCatalog(
-                                    movies = searchResults,
-                                    allFavorites = params.allFavorites,
-                                    customCategories = params.customCategories,
-                                    providerCategories = params.providerCategories,
-                                    hiddenCategoryIds = params.hiddenCategoryIds
-                                ).copy(libraryCount = searchResults.size)
+                                movieRepository.getCategoryPreviewRows(
+                                    providerId = params.providerId,
+                                    categoryIds = categoryIds,
+                                    limitPerCategory = VodBrowseDefaults.PREVIEW_ROW_LIMIT
+                                ).map { providerPreviews ->
+                                    val isLoading = categoryIds.all { id -> providerPreviews[id].isNullOrEmpty() }
+                                    val hasMore = params.providerCategories.size > batchSize
+                                    PreviewLoadResult(buildPreviewCatalog(params, providerPreviews), isLoading, hasMore)
+                                }
                             }
-                        )
+                        } else if (params.query.length < MIN_SEARCH_QUERY_LENGTH) {
+                            flow {
+                                emit(PreviewLoadResult(
+                                    buildSearchCatalog(
+                                        movies = emptyList(),
+                                        allFavorites = params.allFavorites,
+                                        customCategories = params.customCategories,
+                                        providerCategories = params.providerCategories,
+                                        hiddenCategoryIds = params.hiddenCategoryIds
+                                    ).copy(libraryCount = 0),
+                                    false, false
+                                ))
+                            }
+                        } else {
+                            flow {
+                                val searchResults = movieRepository.searchMovies(params.providerId, params.query).first()
+                                emit(PreviewLoadResult(
+                                    buildSearchCatalog(
+                                        movies = searchResults,
+                                        allFavorites = params.allFavorites,
+                                        customCategories = params.customCategories,
+                                        providerCategories = params.providerCategories,
+                                        hiddenCategoryIds = params.hiddenCategoryIds
+                                    ).copy(libraryCount = searchResults.size),
+                                    false, false
+                                ))
+                            }
+                        }
                     }
                 }
-                .collect { snapshot ->
+                .collect { result ->
+                    val snapshot = result.snapshot
                     val isReordering = _uiState.value.isReorderMode
                     val currentSelected = _uiState.value.selectedCategory
                     val preserveSelectedCategory = currentSelected != null && _searchQuery.value.isNotBlank()
@@ -191,6 +225,8 @@ class MoviesViewModel @Inject constructor(
                             canLoadMoreSelectedCategory = if (resolvedSelected == null) false else it.canLoadMoreSelectedCategory,
                             filteredMovies = if (isReordering) it.filteredMovies else emptyList(),
                             isLoading = false,
+                            isLoadingPreviewRows = result.isLoadingPreviewRows,
+                            hasMorePreviewRows = result.hasMorePreviewRows,
                             errorMessage = null
                         )
                     }
@@ -402,6 +438,12 @@ class MoviesViewModel @Inject constructor(
     }
 
     fun selectCategory(categoryName: String?) {
+        activeProviderId?.let { providerId ->
+            parentalControlManager.retainUnlockedCategory(
+                providerId = providerId,
+                categoryId = resolveProviderCategoryId(categoryName)
+            )
+        }
         selectVodCategory(
             categoryName = categoryName,
             selectedCategoryLoadLimit = _selectedCategoryLoadLimit,
@@ -431,6 +473,12 @@ class MoviesViewModel @Inject constructor(
             canLoadMore = _uiState.value.canLoadMoreSelectedCategory,
             selectedCategoryLoadLimit = _selectedCategoryLoadLimit
         )
+    }
+
+    fun loadMorePreviewRows() {
+        if (_uiState.value.hasMorePreviewRows && !_uiState.value.isLoadingPreviewRows) {
+            _previewBatchSize.update { it + 8 }
+        }
     }
 
     fun setSearchQuery(query: String) {
@@ -621,6 +669,11 @@ class MoviesViewModel @Inject constructor(
         _uiState.update { it.copy(selectedCategoryForOptions = null) }
     }
 
+    private fun resolveProviderCategoryId(categoryName: String?): Long? =
+        _uiState.value.providerCategories
+            .firstOrNull { it.name == categoryName && !it.isVirtual && it.id > 0L }
+            ?.id
+
     fun hideCategory(category: Category) {
         if (category.isVirtual) return
         viewModelScope.launch {
@@ -787,10 +840,10 @@ class MoviesViewModel @Inject constructor(
     }
 
     private suspend fun buildPreviewCatalog(
-        params: MovieCatalogParams
+        params: MovieCatalogParams,
+        providerPreviews: Map<Long?, List<Movie>>
     ): MovieCatalogSnapshot {
         val snapshot = buildVodPreviewCatalog(
-            providerId = params.providerId,
             allFavorites = params.allFavorites,
             customCategories = params.customCategories,
             providerCategories = params.providerCategories,
@@ -798,13 +851,7 @@ class MoviesViewModel @Inject constructor(
             libraryCount = params.libraryCount,
             hiddenProviderCategoryIds = params.hiddenCategoryIds,
             loadItemsByIds = { ids -> movieRepository.getMoviesByIds(ids).first() },
-            loadCategoryPreviewRows = { providerId, limit ->
-                movieRepository.getCategoryPreviewRows(
-                    providerId = providerId,
-                    categoryIds = params.providerCategories.take(8).map { it.id },
-                    limitPerCategory = limit
-                ).first()
-            },
+            providerPreviews = providerPreviews,
             itemId = Movie::id,
             itemCategoryId = Movie::categoryId,
             copyWithFavorite = { movie, isFavorite -> movie.copy(isFavorite = isFavorite) }
@@ -1125,6 +1172,8 @@ data class MoviesUiState(
     val vodViewMode: VodViewMode = VodViewMode.MODERN,
     val continueWatching: List<PlaybackHistory> = emptyList(),
     val isLoading: Boolean = true,
+    val isLoadingPreviewRows: Boolean = false,
+    val hasMorePreviewRows: Boolean = false,
     val parentalControlLevel: Int = 0,
     val unlockedCategoryIds: Set<Long> = emptySet(),
     val showDialog: Boolean = false,

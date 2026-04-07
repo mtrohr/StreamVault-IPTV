@@ -4,6 +4,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,11 +22,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -96,7 +100,7 @@ fun LiveChannelRowCard(
     val logoPadding = if (isDense) 5.dp else if (isUltraCompact) 6.dp else 8.dp
     val contentSpacing = if (isUltraCompact) 8.dp else 10.dp
     val badgeSpacing = if (isUltraCompact) 3.dp else 4.dp
-    val nowMs by LiveChannelRowTicker.nowMs.collectAsState()
+    val nowMs by LiveChannelRowTicker.nowMs.collectAsStateWithLifecycle()
 
     Box(
         modifier = modifier
@@ -245,6 +249,7 @@ fun LiveChannelRowSurface(
             .fillMaxWidth()
             .mouseClickable(
                 focusRequester = focusRequester,
+                onLongClick = onLongClick,
                 onClick = {
                     sounds.playSelect()
                     onClick()
@@ -312,6 +317,22 @@ fun LiveChannelRowSurface(
                         label = stringResource(R.string.badge_moving),
                         containerColor = AppColors.Warning,
                         contentColor = Color.Black
+                    )
+                }
+            }
+            if (!isLocked && !isReorderMode && channel.isFavorite) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp)
+                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
+                        .padding(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = AppColors.Warning,
+                        modifier = Modifier.size(11.dp)
                     )
                 }
             }

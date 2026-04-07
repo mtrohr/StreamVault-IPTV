@@ -60,6 +60,8 @@ class PreferencesRepository @Inject constructor(
         val DEFAULT_CATEGORY_ID = longPreferencesKey("default_category_id")
         val APP_LANGUAGE = stringPreferencesKey("app_language")
         val LIVE_TV_CHANNEL_MODE = stringPreferencesKey("live_tv_channel_mode")
+        val LIVE_TV_CATEGORY_FILTERS = stringPreferencesKey("live_tv_category_filters")
+        val LIVE_TV_QUICK_FILTER_VISIBILITY = stringPreferencesKey("live_tv_quick_filter_visibility")
         val LIVE_CHANNEL_NUMBERING_MODE = stringPreferencesKey("live_channel_numbering_mode")
         val VOD_VIEW_MODE = stringPreferencesKey("vod_view_mode")
         val GUIDE_DENSITY = stringPreferencesKey("guide_density")
@@ -88,6 +90,7 @@ class PreferencesRepository @Inject constructor(
         val GUIDE_SCHEDULED_ONLY = intPreferencesKey("guide_scheduled_only")
         val RECENT_SEARCH_QUERIES = stringPreferencesKey("recent_search_queries")
         val XTREAM_TEXT_CLASSIFICATION = booleanPreferencesKey("xtream_text_classification")
+        val PREVENT_STANDBY_DURING_PLAYBACK = booleanPreferencesKey("prevent_standby_during_playback")
     }
 
     private object ParentalSessionKeys {
@@ -230,6 +233,16 @@ class PreferencesRepository @Inject constructor(
     suspend fun setUseXtreamTextClassification(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.XTREAM_TEXT_CLASSIFICATION] = enabled
+        }
+    }
+
+    val preventStandbyDuringPlayback: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.PREVENT_STANDBY_DURING_PLAYBACK] ?: true
+    }
+
+    suspend fun setPreventStandbyDuringPlayback(prevent: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.PREVENT_STANDBY_DURING_PLAYBACK] = prevent
         }
     }
 
@@ -411,27 +424,17 @@ class PreferencesRepository @Inject constructor(
     }
 
     override fun readSessionState(): ParentalControlSessionState {
-        val timeoutMs = parentalSessionPreferences.getLong(
-            ParentalSessionKeys.UNLOCK_TIMEOUT_MS,
-            ParentalControlSessionState.DEFAULT_UNLOCK_TIMEOUT_MS
-        )
         return ParentalControlSessionState(
-            unlockedCategoryExpirationsByProvider = decodeUnlockEntries(
+            unlockedCategoryIdsByProvider = decodeUnlockEntries(
                 parentalSessionPreferences.getString(ParentalSessionKeys.UNLOCK_ENTRIES, null)
-            ),
-            unlockTimeoutMs = timeoutMs
+            )
         )
     }
 
     override fun writeSessionState(state: ParentalControlSessionState) {
         parentalSessionPreferences.edit().apply {
-            putLong(ParentalSessionKeys.UNLOCK_TIMEOUT_MS, state.unlockTimeoutMs)
-            val encodedUnlocks = encodeUnlockEntries(state.unlockedCategoryExpirationsByProvider)
-            if (encodedUnlocks.isBlank()) {
-                remove(ParentalSessionKeys.UNLOCK_ENTRIES)
-            } else {
-                putString(ParentalSessionKeys.UNLOCK_ENTRIES, encodedUnlocks)
-            }
+            remove(ParentalSessionKeys.UNLOCK_TIMEOUT_MS)
+            remove(ParentalSessionKeys.UNLOCK_ENTRIES)
         }.apply()
     }
 
@@ -483,6 +486,55 @@ class PreferencesRepository @Inject constructor(
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.LIVE_TV_CHANNEL_MODE] = mode
         }
+    }
+
+    val liveTvQuickFilterVisibility: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.LIVE_TV_QUICK_FILTER_VISIBILITY]
+    }
+
+    suspend fun setLiveTvQuickFilterVisibility(mode: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LIVE_TV_QUICK_FILTER_VISIBILITY] = mode
+        }
+    }
+
+    val liveTvCategoryFilters: Flow<List<String>> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.LIVE_TV_CATEGORY_FILTERS]
+            ?.split('\n')
+            .orEmpty()
+            .normalizeLiveTvCategoryFilters()
+    }
+
+    suspend fun setLiveTvCategoryFilters(filters: List<String>) {
+        context.dataStore.edit { preferences ->
+            val normalized = filters.normalizeLiveTvCategoryFilters()
+            if (normalized.isEmpty()) {
+                preferences.remove(PreferencesKeys.LIVE_TV_CATEGORY_FILTERS)
+            } else {
+                preferences[PreferencesKeys.LIVE_TV_CATEGORY_FILTERS] = normalized.joinToString("\n")
+            }
+        }
+    }
+
+    suspend fun addLiveTvCategoryFilter(filter: String): Boolean {
+        val normalized = filter.trim()
+        if (normalized.isBlank()) return false
+        val current = liveTvCategoryFilters.first()
+        if (current.any { it.equals(normalized, ignoreCase = true) }) {
+            return false
+        }
+        setLiveTvCategoryFilters(current + normalized)
+        return true
+    }
+
+    suspend fun removeLiveTvCategoryFilter(filter: String): Boolean {
+        val current = liveTvCategoryFilters.first()
+        val updated = current.filterNot { it.equals(filter, ignoreCase = true) }
+        if (updated.size == current.size) {
+            return false
+        }
+        setLiveTvCategoryFilters(updated)
+        return true
     }
 
     val liveChannelNumberingMode: Flow<ChannelNumberingMode> = context.dataStore.data.map { preferences ->
@@ -610,6 +662,43 @@ class PreferencesRepository @Inject constructor(
         }
     }
 
+    fun getPinnedCategoryIds(providerId: Long, type: ContentType): Flow<Set<Long>> {
+        val key = stringPreferencesKey(pinnedCategoriesKey(providerId, type))
+        return context.dataStore.data.map { preferences ->
+            preferences[key]
+                ?.split(',')
+                ?.mapNotNull { token -> token.toLongOrNull() }
+                ?.toSet()
+                .orEmpty()
+        }
+    }
+
+    suspend fun setCategoryPinned(
+        providerId: Long,
+        type: ContentType,
+        categoryId: Long,
+        pinned: Boolean
+    ) {
+        val key = stringPreferencesKey(pinnedCategoriesKey(providerId, type))
+        context.dataStore.edit { preferences ->
+            val current = preferences[key]
+                ?.split(',')
+                ?.mapNotNull { token -> token.toLongOrNull() }
+                ?.toMutableSet()
+                ?: mutableSetOf()
+            if (pinned) {
+                current += categoryId
+            } else {
+                current -= categoryId
+            }
+            if (current.isEmpty()) {
+                preferences.remove(key)
+            } else {
+                preferences[key] = current.sorted().joinToString(",")
+            }
+        }
+    }
+
     fun getCategorySortMode(providerId: Long, type: ContentType): Flow<CategorySortMode> {
         val key = stringPreferencesKey(categorySortModeKey(providerId, type))
         return context.dataStore.data.map { preferences ->
@@ -717,6 +806,22 @@ class PreferencesRepository @Inject constructor(
     private fun hiddenCategoriesKey(providerId: Long, type: ContentType): String =
         "hidden_categories_${providerId}_${type.name}"
 
+    private fun pinnedCategoriesKey(providerId: Long, type: ContentType): String =
+        "pinned_categories_${providerId}_${type.name}"
+
+
+    private fun List<String>.normalizeLiveTvCategoryFilters(): List<String> {
+        val seen = linkedSetOf<String>()
+        val normalized = mutableListOf<String>()
+        forEach { filter ->
+            val trimmed = filter.trim()
+            if (trimmed.isBlank()) return@forEach
+            if (seen.add(trimmed.lowercase())) {
+                normalized += trimmed
+            }
+        }
+        return normalized
+    }
     private fun categorySortModeKey(providerId: Long, type: ContentType): String =
         "category_sort_${providerId}_${type.name}"
 
@@ -753,32 +858,20 @@ class PreferencesRepository @Inject constructor(
         editor.apply()
     }
 
-    private fun encodeUnlockEntries(entries: Map<Long, Map<Long, Long>>): String {
-        return entries.entries
-            .sortedBy { it.key }
-            .flatMap { (providerId, categories) ->
-                categories.entries
-                    .sortedBy { it.key }
-                    .map { (categoryId, expiresAtMs) -> "$providerId:$categoryId:$expiresAtMs" }
-            }
-            .joinToString(",")
-    }
-
-    private fun decodeUnlockEntries(encoded: String?): Map<Long, Map<Long, Long>> {
+    private fun decodeUnlockEntries(encoded: String?): Map<Long, Set<Long>> {
         return encoded
             .orEmpty()
             .split(',')
             .asSequence()
             .mapNotNull { token ->
                 val parts = token.split(':')
-                if (parts.size != 3) return@mapNotNull null
+                if (parts.size < 2) return@mapNotNull null
                 val providerId = parts[0].toLongOrNull() ?: return@mapNotNull null
                 val categoryId = parts[1].toLongOrNull() ?: return@mapNotNull null
-                val expiresAtMs = parts[2].toLongOrNull() ?: return@mapNotNull null
-                Triple(providerId, categoryId, expiresAtMs)
+                providerId to categoryId
             }
-            .groupBy({ it.first }, { it.second to it.third })
-            .mapValues { (_, categoryEntries) -> categoryEntries.associate { (categoryId, expiresAtMs) -> categoryId to expiresAtMs } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, categoryIds) -> categoryIds.toSet() }
     }
 
     private fun hasStoredParentalPin(preferences: Preferences): Boolean {

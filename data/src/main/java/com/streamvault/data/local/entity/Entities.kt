@@ -683,6 +683,26 @@ data class MovieCategoryHydrationEntity(
     @ColumnInfo(name = "last_error") val lastError: String? = null
 )
 
+@Entity(
+    tableName = "series_category_hydration",
+    primaryKeys = ["provider_id", "category_id"],
+    foreignKeys = [ForeignKey(
+        entity = ProviderEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["provider_id"],
+        onDelete = ForeignKey.CASCADE
+    )],
+    indices = [Index(value = ["provider_id"])]
+)
+data class SeriesCategoryHydrationEntity(
+    @ColumnInfo(name = "provider_id") val providerId: Long,
+    @ColumnInfo(name = "category_id") val categoryId: Long,
+    @ColumnInfo(name = "last_hydrated_at") val lastHydratedAt: Long = 0L,
+    @ColumnInfo(name = "item_count") val itemCount: Int = 0,
+    @ColumnInfo(name = "last_status") val lastStatus: String = "IDLE",
+    @ColumnInfo(name = "last_error") val lastError: String? = null
+)
+
 // ── External EPG Source ────────────────────────────────────────────
 
 @Entity(

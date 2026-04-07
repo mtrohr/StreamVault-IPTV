@@ -180,6 +180,12 @@ class EpgViewModel @Inject constructor(
 
     fun selectCategory(categoryId: Long) {
         if (selectedCategoryId.value == categoryId) return
+        baseGuideSnapshot.value?.providerId?.let { providerId ->
+            parentalControlManager.retainUnlockedCategory(
+                providerId = providerId,
+                categoryId = categoryId.takeIf { it > 0L && it != ChannelRepository.ALL_CHANNELS_ID }
+            )
+        }
         selectedCategoryId.value = categoryId
     }
 

@@ -293,6 +293,17 @@ fun AppNavigation(mainActivity: MainActivity) {
                         )
                     )
                 },
+                onFavoriteChannelClick = { channel ->
+                    navController.navigateToPlayer(
+                        Routes.livePlayer(
+                            channel = channel,
+                            categoryId = com.streamvault.domain.model.VirtualCategoryIds.FAVORITES,
+                            providerId = channel.providerId,
+                            isVirtual = true,
+                            returnRoute = Routes.HOME
+                        )
+                    )
+                },
                 onMovieClick = { movie ->
                     navController.navigateIfResumed(Routes.movieDetail(movie.id, Routes.HOME))
                 },

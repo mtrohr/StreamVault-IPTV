@@ -14,15 +14,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -191,7 +195,7 @@ fun ChannelCard(
     isReorderMode: Boolean = false,
     isDragging: Boolean = false
 ) {
-    val nowMs by ChannelProgressTicker.nowMs.collectAsState()
+    val nowMs by ChannelProgressTicker.nowMs.collectAsStateWithLifecycle()
     val channelCardShape = LocalAppShapes.current.small
     val channelDescription = buildString {
         append(
@@ -299,7 +303,12 @@ fun ChannelCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (channel.isFavorite) {
-                    StatusPill(label = stringResource(R.string.badge_fav), containerColor = AccentAmber, contentColor = Color.Black, cornerRadius = 4.dp, horizontalPadding = 6.dp, verticalPadding = 2.dp)
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = AccentAmber,
+                        modifier = Modifier.size(14.dp)
+                    )
                 }
                 if (channel.errorCount > 0) {
                     StatusPill(label = stringResource(R.string.badge_error), containerColor = AccentRed, cornerRadius = 4.dp, horizontalPadding = 6.dp, verticalPadding = 2.dp)
@@ -412,8 +421,19 @@ fun MovieCard(
             }
 
             if (movie.isFavorite) {
-                Box(modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
-                    StatusPill(label = stringResource(R.string.badge_fav), containerColor = AccentRed, cornerRadius = 4.dp, horizontalPadding = 6.dp, verticalPadding = 2.dp)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
+                        .padding(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = AccentAmber,
+                        modifier = Modifier.size(12.dp)
+                    )
                 }
             }
         }
@@ -511,8 +531,19 @@ fun SeriesCard(
             }
 
             if (series.isFavorite) {
-                Box(modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
-                    StatusPill(label = stringResource(R.string.badge_fav), containerColor = AccentRed, cornerRadius = 4.dp, horizontalPadding = 6.dp, verticalPadding = 2.dp)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
+                        .padding(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = AccentAmber,
+                        modifier = Modifier.size(12.dp)
+                    )
                 }
             }
         }

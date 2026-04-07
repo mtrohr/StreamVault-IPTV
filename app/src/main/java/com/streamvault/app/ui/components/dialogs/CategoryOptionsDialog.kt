@@ -41,6 +41,8 @@ fun CategoryOptionsDialog(
     category: Category,
     onDismissRequest: () -> Unit,
     onSetAsDefault: (() -> Unit)? = null,
+    isPinned: Boolean = false,
+    onTogglePinned: (() -> Unit)? = null,
     onRename: (() -> Unit)? = null,
     onHide: (() -> Unit)? = null,
     onToggleLock: (() -> Unit)? = null,
@@ -57,7 +59,11 @@ fun CategoryOptionsDialog(
 
     Dialog(
         onDismissRequest = safeDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            dismissOnBackPress = canInteract,
+            dismissOnClickOutside = canInteract,
+            usePlatformDefaultWidth = false
+        )
     ) {
         BoxWithConstraints(
             modifier = Modifier.fillMaxWidth(),
@@ -101,6 +107,19 @@ fun CategoryOptionsDialog(
                     PremiumDialogAction(
                         label = stringResource(R.string.category_options_set_default),
                         onClick = { if (canInteract) onSetAsDefault() }
+                    )
+                }
+
+                if (onTogglePinned != null) {
+                    PremiumDialogAction(
+                        label = stringResource(
+                            if (isPinned) R.string.category_options_unpin else R.string.category_options_pin
+                        ),
+                        onClick = {
+                            if (canInteract) {
+                                onTogglePinned()
+                            }
+                        }
                     )
                 }
 

@@ -19,7 +19,12 @@ captures/
 .externalNativeBuild
 .cxx
 local.properties
+*.local.properties
 keystore.properties
+secrets.properties
+secret.properties
+.env
+.env.*
 keystore/
 release-signing-info.local.txt
 *.jks

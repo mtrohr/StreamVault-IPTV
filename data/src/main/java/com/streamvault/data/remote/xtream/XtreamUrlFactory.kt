@@ -4,8 +4,42 @@ import com.streamvault.domain.model.ContentType
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 import java.util.Locale
+
+internal object XtreamUrlCodec {
+    private const val UTF_8_NAME = "UTF-8"
+    private val encodeWithCharsetMethod = runCatching {
+        URLEncoder::class.java.getMethod(
+            "encode",
+            String::class.java,
+            java.nio.charset.Charset::class.java
+        )
+    }.getOrNull()
+    private val decodeWithCharsetMethod = runCatching {
+        URLDecoder::class.java.getMethod(
+            "decode",
+            String::class.java,
+            java.nio.charset.Charset::class.java
+        )
+    }.getOrNull()
+
+    fun encode(value: String): String {
+        val encoded = encodeWithCharsetMethod
+            ?.let { method ->
+                runCatching { method.invoke(null, value, Charsets.UTF_8) as? String }.getOrNull()
+            }
+            ?: URLEncoder.encode(value, UTF_8_NAME)
+        return encoded.replace("+", "%20")
+    }
+
+    fun decode(value: String): String {
+        return decodeWithCharsetMethod
+            ?.let { method ->
+                runCatching { method.invoke(null, value, Charsets.UTF_8) as? String }.getOrNull()
+            }
+            ?: URLDecoder.decode(value, UTF_8_NAME)
+    }
+}
 
 enum class XtreamStreamKind(val pathSegment: String) {
     LIVE("live"),
@@ -367,11 +401,11 @@ object XtreamUrlFactory {
     private fun encodePathSegment(value: String): String = encodeQueryComponent(value)
 
     private fun encodeQueryComponent(value: String): String {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20")
+        return XtreamUrlCodec.encode(value)
     }
 
     private fun decodeQueryComponent(value: String): String {
-        return URLDecoder.decode(value, StandardCharsets.UTF_8)
+        return XtreamUrlCodec.decode(value)
     }
 
     private fun normalizeContainerExtension(containerExtension: String?): String? {

@@ -3,9 +3,13 @@ package com.streamvault.app.ui.screens.series
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.streamvault.domain.model.ContentType
+import com.streamvault.domain.model.ExternalRatings
+import com.streamvault.domain.model.ExternalRatingsLookup
 import com.streamvault.domain.model.Result
 import com.streamvault.domain.model.Season
 import com.streamvault.domain.model.Series
+import com.streamvault.domain.repository.ExternalRatingsRepository
 import com.streamvault.domain.repository.PlaybackHistoryRepository
 import com.streamvault.domain.repository.SeriesRepository
 import com.streamvault.domain.repository.ProviderRepository
@@ -23,7 +27,8 @@ class SeriesDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val seriesRepository: SeriesRepository,
     private val providerRepository: ProviderRepository,
-    private val playbackHistoryRepository: PlaybackHistoryRepository
+    private val playbackHistoryRepository: PlaybackHistoryRepository,
+    private val externalRatingsRepository: ExternalRatingsRepository
 ) : ViewModel() {
 
     private val seriesId: Long = checkNotNull(
@@ -53,6 +58,7 @@ class SeriesDetailViewModel @Inject constructor(
 
                 when (val result = seriesRepository.getSeriesDetails(provider.id, seriesId)) {
                     is Result.Success -> {
+                        loadExternalRatings(result.data)
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
@@ -82,6 +88,33 @@ class SeriesDetailViewModel @Inject constructor(
         }
     }
 
+    private fun loadExternalRatings(series: Series) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingExternalRatings = true) }
+            val ratingsResult = externalRatingsRepository.getRatings(
+                ExternalRatingsLookup(
+                    contentType = ContentType.SERIES,
+                    title = series.name,
+                    releaseYear = series.releaseDate,
+                    tmdbId = series.tmdbId
+                )
+            )
+            _uiState.update { currentState ->
+                when (ratingsResult) {
+                    is Result.Success -> currentState.copy(
+                        isLoadingExternalRatings = false,
+                        externalRatings = ratingsResult.data
+                    )
+                    is Result.Error -> currentState.copy(
+                        isLoadingExternalRatings = false,
+                        externalRatings = ExternalRatings.unavailable()
+                    )
+                    is Result.Loading -> currentState
+                }
+            }
+        }
+    }
+
     private fun observeUnwatchedCount(providerId: Long) {
         viewModelScope.launch {
             playbackHistoryRepository.getUnwatchedCount(providerId = providerId, seriesId = seriesId).collect { count ->
@@ -100,5 +133,7 @@ data class SeriesDetailUiState(
     val series: Series? = null,
     val selectedSeason: Season? = null,
     val unwatchedEpisodeCount: Int = 0,
-    val error: String? = null
+    val error: String? = null,
+    val isLoadingExternalRatings: Boolean = false,
+    val externalRatings: ExternalRatings = ExternalRatings.unavailable()
 )

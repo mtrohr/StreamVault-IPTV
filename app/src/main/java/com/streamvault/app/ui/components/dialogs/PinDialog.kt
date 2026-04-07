@@ -58,15 +58,22 @@ fun PinDialog(
     // Auto-submit when all 4 digits entered
     LaunchedEffect(pin) {
         if (pin.length == 4) {
+            val submittedPin = pin
             delay(200)
-            onPinEntered(pin)
-            pin = ""
+            if (pin == submittedPin) {
+                onPinEntered(submittedPin)
+                pin = ""
+            }
         }
     }
 
     Dialog(
-        onDismissRequest = { if (canInteract) onDismissRequest() },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(
+            dismissOnBackPress = canInteract,
+            dismissOnClickOutside = canInteract,
+            usePlatformDefaultWidth = false
+        )
     ) {
         val dialogContent: @Composable (Modifier) -> Unit = { resolvedModifier ->
             Box(

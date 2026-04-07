@@ -22,12 +22,13 @@ class UrlSecurityPolicyTest {
     }
 
     @Test
-    fun `validatePlaylistSourceUrl allows local and https only`() {
+    fun `validatePlaylistSourceUrl allows local http and https`() {
         assertThat(UrlSecurityPolicy.validatePlaylistSourceUrl("file:///storage/emulated/0/playlist.m3u")).isNull()
         assertThat(UrlSecurityPolicy.validatePlaylistSourceUrl("content://downloads/public_downloads/1")).isNull()
         assertThat(UrlSecurityPolicy.validatePlaylistSourceUrl("https://example.com/playlist.m3u")).isNull()
-        assertThat(UrlSecurityPolicy.validatePlaylistSourceUrl("http://example.com/playlist.m3u"))
-            .isEqualTo("Playlist sources must use HTTPS or point to a local file.")
+        assertThat(UrlSecurityPolicy.validatePlaylistSourceUrl("http://example.com/playlist.m3u")).isNull()
+        assertThat(UrlSecurityPolicy.validatePlaylistSourceUrl("ftp://example.com/playlist.m3u"))
+            .isEqualTo("Playlist sources must use HTTP, HTTPS, or point to a local file.")
     }
 
     @Test

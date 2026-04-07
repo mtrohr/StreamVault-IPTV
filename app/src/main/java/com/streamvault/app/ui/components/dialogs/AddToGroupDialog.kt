@@ -122,7 +122,8 @@ fun AddToGroupDialog(
                                 modifier = Modifier.weight(1f)
                             )
                             IconButton(
-                                onClick = safeDismiss
+                                onClick = safeDismiss,
+                                modifier = Modifier.mouseClickable(onClick = safeDismiss)
                             ) {
                                 Icon(Icons.Default.Close, contentDescription = stringResource(R.string.add_group_close_cd))
                             }

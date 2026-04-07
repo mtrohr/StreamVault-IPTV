@@ -1693,6 +1693,21 @@ interface MovieCategoryHydrationDao {
     suspend fun deleteByProvider(providerId: Long)
 }
 
+@Dao
+interface SeriesCategoryHydrationDao {
+    @Query("SELECT * FROM series_category_hydration WHERE provider_id = :providerId AND category_id = :categoryId")
+    suspend fun get(providerId: Long, categoryId: Long): SeriesCategoryHydrationEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(metadata: SeriesCategoryHydrationEntity)
+
+    @Query("DELETE FROM series_category_hydration WHERE provider_id = :providerId AND category_id = :categoryId")
+    suspend fun delete(providerId: Long, categoryId: Long)
+
+    @Query("DELETE FROM series_category_hydration WHERE provider_id = :providerId")
+    suspend fun deleteByProvider(providerId: Long)
+}
+
 // ── EPG Source DAOs ────────────────────────────────────────────────
 
 @Dao

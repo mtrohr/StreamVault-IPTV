@@ -7,10 +7,14 @@ import com.streamvault.data.remote.xtream.XtreamApiService
 import com.streamvault.data.remote.xtream.XtreamProvider
 import com.streamvault.data.remote.xtream.XtreamStreamUrlResolver
 import com.streamvault.data.security.CredentialCrypto
+import com.streamvault.data.sync.ContentCachePolicy
 import com.streamvault.domain.model.*
 import com.streamvault.domain.model.Result.Success
 import com.streamvault.domain.repository.SeriesRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -20,6 +24,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import com.streamvault.data.util.toFtsPrefixQuery
 import com.streamvault.data.util.rankSearchResults
@@ -42,7 +47,8 @@ class SeriesRepositoryImpl @Inject constructor(
     private val providerDao: ProviderDao,
     private val xtreamApiService: XtreamApiService,
     private val preferencesRepository: PreferencesRepository,
-    private val xtreamStreamUrlResolver: XtreamStreamUrlResolver
+    private val xtreamStreamUrlResolver: XtreamStreamUrlResolver,
+    private val seriesCategoryHydrationDao: SeriesCategoryHydrationDao
 ) : SeriesRepository {
     private companion object {
         const val SEARCH_RESULT_LIMIT = 200
@@ -59,6 +65,8 @@ class SeriesRepositoryImpl @Inject constructor(
     private val xtreamProviderCache = ConcurrentHashMap<Long, CachedXtreamProvider>()
     private val xtreamCategoryLoadLocks = ConcurrentHashMap<String, Mutex>()
     private val loadedXtreamCategories = ConcurrentHashMap.newKeySet<String>()
+    private val backgroundRefreshes = ConcurrentHashMap.newKeySet<String>()
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun getSeries(providerId: Long): Flow<List<Series>> =
         combine(
@@ -127,18 +135,27 @@ class SeriesRepositoryImpl @Inject constructor(
             )
         }
 
-    override fun getCategoryPreviewRows(providerId: Long, limitPerCategory: Int): Flow<Map<Long?, List<Series>>> =
+    override fun getCategoryPreviewRows(providerId: Long, categoryIds: List<Long>, limitPerCategory: Int): Flow<Map<Long?, List<Series>>> =
         combine(
             categoryDao.getByProviderAndType(providerId, ContentType.SERIES.name),
             preferencesRepository.parentalControlLevel
         ) { categories, level ->
+            val requestedIds = categoryIds.toSet()
             val filtered = if (level == 2) categories.filter { !it.isAdult && !it.isUserProtected } else categories
-            filtered to level
+            filtered.filter { it.categoryId in requestedIds } to level
         }.flatMapLatest { (filteredCategories, level) ->
             if (filteredCategories.isEmpty()) {
                 flowOf(emptyMap())
             } else {
-                // SQL LIMIT applied per-category — avoids loading the full catalog into memory
+                filteredCategories.forEach { category ->
+                    val key = "${providerId}:${category.categoryId}"
+                    if (!loadedXtreamCategories.contains(key)) {
+                        val provider = providerDao.getById(providerId)
+                        if (provider != null && provider.type == com.streamvault.domain.model.ProviderType.XTREAM_CODES) {
+                            triggerSeriesCategoryHydration(providerId, category.categoryId, provider)
+                        }
+                    }
+                }
                 val categoryGroupFlows: List<Flow<Pair<Long?, List<Series>>>> = filteredCategories.map { cat ->
                     seriesDao.getByCategoryPreview(providerId, cat.categoryId, limitPerCategory)
                         .map { entities ->
@@ -697,18 +714,57 @@ class SeriesRepositoryImpl @Inject constructor(
     private suspend fun ensureXtreamCategoryLoaded(providerId: Long, categoryId: Long) {
         val key = "$providerId:$categoryId"
         if (loadedXtreamCategories.contains(key)) return
-        if (seriesDao.getCountByCategory(providerId, categoryId).first() > 0) {
-            loadedXtreamCategories.add(key)
-            return
-        }
 
         val provider = providerDao.getById(providerId) ?: return
         if (provider.type != ProviderType.XTREAM_CODES) return
 
+        val localCount = seriesDao.getCountByCategory(providerId, categoryId).first()
+        val hydration = seriesCategoryHydrationDao.get(providerId, categoryId)
+        val isFresh = hydration?.isFresh() == true && (localCount > 0 || hydration.itemCount == 0)
+
+        if (isFresh) {
+            loadedXtreamCategories.add(key)
+            return
+        }
+
+        // Stale but has cached data — show immediately, refresh in background
+        if (localCount > 0) {
+            loadedXtreamCategories.add(key)
+            triggerSeriesCategoryHydration(providerId, categoryId, provider)
+            return
+        }
+
+        // No data — fetch inline so the user sees something right away
+        hydrateSeriesCategory(providerId, categoryId, provider)
+    }
+
+    private fun triggerSeriesCategoryHydration(
+        providerId: Long,
+        categoryId: Long,
+        provider: ProviderEntity
+    ) {
+        val key = "$providerId:$categoryId"
+        if (!backgroundRefreshes.add(key)) return
+        repositoryScope.launch {
+            try {
+                hydrateSeriesCategory(providerId, categoryId, provider)
+            } finally {
+                backgroundRefreshes.remove(key)
+            }
+        }
+    }
+
+    private suspend fun hydrateSeriesCategory(
+        providerId: Long,
+        categoryId: Long,
+        provider: ProviderEntity
+    ) {
+        val key = "$providerId:$categoryId"
         val lock = xtreamCategoryLoadLocks.getOrPut(key) { Mutex() }
         lock.withLock {
-            if (loadedXtreamCategories.contains(key)) return
-            if (seriesDao.getCountByCategory(providerId, categoryId).first() > 0) {
+            val localCount = seriesDao.getCountByCategory(providerId, categoryId).first()
+            val hydration = seriesCategoryHydrationDao.get(providerId, categoryId)
+            if (hydration?.isFresh() == true && (localCount > 0 || hydration.itemCount == 0)) {
                 loadedXtreamCategories.add(key)
                 return
             }
@@ -719,18 +775,42 @@ class SeriesRepositoryImpl @Inject constructor(
                     xtreamProvider.getSeriesList(categoryId)
                 }) {
                     is Success -> {
-                        seriesDao.replaceCategory(
-                            providerId,
-                            categoryId,
-                            result.data.map { item -> item.toEntity() }
-                        )
+                        val entities = result.data.map { item -> item.toEntity() }
+                        seriesDao.replaceCategory(providerId, categoryId, entities)
                         episodeDao.deleteOrphans()
+                        seriesCategoryHydrationDao.upsert(
+                            SeriesCategoryHydrationEntity(
+                                providerId = providerId,
+                                categoryId = categoryId,
+                                lastHydratedAt = System.currentTimeMillis(),
+                                itemCount = entities.size,
+                                lastStatus = "SUCCESS",
+                                lastError = null
+                            )
+                        )
                         loadedXtreamCategories.add(key)
                     }
                     else -> Unit
                 }
+            }.onFailure { error ->
+                val currentCount = seriesDao.getCountByCategory(providerId, categoryId).first()
+                seriesCategoryHydrationDao.upsert(
+                    SeriesCategoryHydrationEntity(
+                        providerId = providerId,
+                        categoryId = categoryId,
+                        lastHydratedAt = hydration?.lastHydratedAt ?: 0L,
+                        itemCount = currentCount,
+                        lastStatus = "ERROR",
+                        lastError = error.message
+                    )
+                )
             }
         }
+    }
+
+    private fun SeriesCategoryHydrationEntity.isFresh(now: Long = System.currentTimeMillis()): Boolean {
+        if (lastStatus != "SUCCESS") return false
+        return !ContentCachePolicy.shouldRefresh(lastHydratedAt, ContentCachePolicy.SERIES_CATEGORY_TTL_MILLIS, now)
     }
 
     private suspend fun <T> withXtreamSeriesCategoryTimeout(

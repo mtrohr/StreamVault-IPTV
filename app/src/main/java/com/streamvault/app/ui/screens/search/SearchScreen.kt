@@ -1,6 +1,7 @@
 package com.streamvault.app.ui.screens.search
 
 import androidx.annotation.StringRes
+import com.streamvault.app.ui.interaction.TvClickableSurface
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -41,6 +42,7 @@ import com.streamvault.app.ui.components.SeriesCard
 import com.streamvault.app.ui.components.TvEmptyState
 import com.streamvault.app.ui.components.shell.AppNavigationChrome
 import com.streamvault.app.ui.components.shell.AppScreenScaffold
+import com.streamvault.app.ui.design.requestFocusSafely
 import com.streamvault.app.ui.theme.*
 import com.streamvault.domain.manager.ParentalControlManager
 import com.streamvault.domain.model.Channel
@@ -275,7 +277,7 @@ fun SearchScreen(
     }
 
     LaunchedEffect(Unit) {
-        runCatching { searchFocusRequester.requestFocus() }
+        searchFocusRequester.requestFocusSafely(tag = "SearchScreen", target = "Search field")
     }
 
     LaunchedEffect(initialQuery) {
@@ -287,7 +289,7 @@ fun SearchScreen(
 
     LaunchedEffect(showPinDialog) {
         if (!showPinDialog) {
-            runCatching { searchFocusRequester.requestFocus() }
+            searchFocusRequester.requestFocusSafely(tag = "SearchScreen", target = "Search field")
         }
     }
 
@@ -712,7 +714,7 @@ private fun SearchPill(
     modifier: Modifier = Modifier,
     compact: Boolean = false
 ) {
-    Surface(
+    TvClickableSurface(
         modifier = modifier,
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(CircleShape),

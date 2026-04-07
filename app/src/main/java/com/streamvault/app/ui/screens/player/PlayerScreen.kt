@@ -15,6 +15,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
@@ -61,6 +62,8 @@ import javax.inject.Inject
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -172,6 +175,7 @@ fun PlayerScreen(
     val playbackSpeed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
     val castConnectionState by viewModel.castConnectionState.collectAsStateWithLifecycle()
     val seekPreview by viewModel.seekPreview.collectAsStateWithLifecycle()
+    val preventStandbyDuringPlayback by viewModel.preventStandbyDuringPlayback.collectAsStateWithLifecycle()
 
     var showTrackSelection by remember { mutableStateOf<TrackType?>(null) }
     var showSpeedSelection by remember { mutableStateOf(false) }
@@ -242,8 +246,11 @@ fun PlayerScreen(
     DisposableEffect(Unit) {
         onDispose { playerWindow?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
-    LaunchedEffect(isPlaying, playbackState) {
-        if (isPlaying || playbackState == PlaybackState.BUFFERING) {
+    LaunchedEffect(preventStandbyDuringPlayback, isPlaying, playbackState) {
+        if (preventStandbyDuringPlayback) {
+            // Keep screen always on while in player — prevents TV OS standby nag
+            playerWindow?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else if (isPlaying || playbackState == PlaybackState.BUFFERING) {
             playerWindow?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         } else {
             playerWindow?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -253,9 +260,9 @@ fun PlayerScreen(
     // Consolidated focus management for all overlays
     val liveOverlayVisible = contentType == "LIVE" && (showChannelListOverlay || showCategoryListOverlay || showEpgOverlay || showChannelInfoOverlay)
     val anyOverlayVisible = liveOverlayVisible || showTrackSelection != null || showSpeedSelection || showProgramHistory || showSplitDialog || showDiagnostics
-    
-    LaunchedEffect(anyOverlayVisible) {
-        if (anyOverlayVisible) {
+
+    LaunchedEffect(contentType, showCategoryListOverlay, showChannelListOverlay, showEpgOverlay, showChannelInfoOverlay) {
+        if (contentType == "LIVE" && (showCategoryListOverlay || showChannelListOverlay || showEpgOverlay || showChannelInfoOverlay)) {
             // Give overlays a moment to animate in before requesting focus
             delay(150)
             when {
@@ -264,12 +271,16 @@ fun PlayerScreen(
                 showEpgOverlay -> epgFocusRequester.requestFocusSafely(tag = "PlayerScreen", target = "EPG overlay")
                 showChannelInfoOverlay -> channelInfoFocusRequester.requestFocusSafely(tag = "PlayerScreen", target = "Channel info overlay")
             }
-        } else {
+        }
+    }
+
+    LaunchedEffect(anyOverlayVisible) {
+        if (!anyOverlayVisible) {
             // Restore focus to main player when all overlays are gone
             focusRequester.requestFocusSafely(tag = "PlayerScreen", target = "Player root")
         }
     }
-    
+
     val resolutionBadgeLabel = buildResolutionBadgeLabel(
         videoFormat = videoFormat,
         videoTracks = availableVideoQualities,
@@ -417,6 +428,52 @@ fun PlayerScreen(
                 canFocus = !anyOverlayVisible && !showControls
             }
             .focusable()
+            .pointerInput(contentType, anyOverlayVisible, showControls) {
+                detectTapGestures {
+                    when {
+                        anyOverlayVisible -> return@detectTapGestures
+                        showControls -> viewModel.toggleControls()
+                        contentType == "LIVE" -> viewModel.openChannelInfoOverlay()
+                        else -> viewModel.toggleControls()
+                    }
+                }
+            }
+            .onPreviewKeyEvent { event ->
+                if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) {
+                    return@onPreviewKeyEvent false
+                }
+                if (contentType != "LIVE") {
+                    return@onPreviewKeyEvent false
+                }
+                if (showChannelListOverlay || showCategoryListOverlay || showEpgOverlay) {
+                    return@onPreviewKeyEvent false
+                }
+                if (showTrackSelection != null || showSpeedSelection || showProgramHistory || showSplitDialog) {
+                    return@onPreviewKeyEvent false
+                }
+
+                when (event.nativeKeyEvent.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_UP,
+                    KeyEvent.KEYCODE_CHANNEL_UP,
+                    KeyEvent.KEYCODE_DPAD_UP_RIGHT -> {
+                        if (showChannelInfoOverlay || showDiagnostics) {
+                            viewModel.onLiveOverlayInteraction()
+                        }
+                        viewModel.playNext()
+                        true
+                    }
+                    KeyEvent.KEYCODE_DPAD_DOWN,
+                    KeyEvent.KEYCODE_CHANNEL_DOWN,
+                    KeyEvent.KEYCODE_DPAD_DOWN_LEFT -> {
+                        if (showChannelInfoOverlay || showDiagnostics) {
+                            viewModel.onLiveOverlayInteraction()
+                        }
+                        viewModel.playPrevious()
+                        true
+                    }
+                    else -> false
+                }
+            }
             .onKeyEvent { event ->
                 // Only handle KeyDown to avoid double actions
                 if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
@@ -509,7 +566,7 @@ fun PlayerScreen(
                             if (showChannelListOverlay || showCategoryListOverlay || showEpgOverlay || showChannelInfoOverlay || showDiagnostics) {
                                 viewModel.onLiveOverlayInteraction()
                             }
-                            if (showChannelListOverlay || showCategoryListOverlay || showEpgOverlay) return@onKeyEvent false
+                            if (showChannelListOverlay || showCategoryListOverlay || showEpgOverlay || showChannelInfoOverlay) return@onKeyEvent false
                             if (showControls && contentType != "LIVE") return@onKeyEvent false
 
                             if (contentType == "LIVE") {

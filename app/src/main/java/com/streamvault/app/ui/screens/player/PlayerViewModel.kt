@@ -552,6 +552,10 @@ class PlayerViewModel @Inject constructor(
     val mediaTitle: StateFlow<String?> = playerEngine.mediaTitle
     val playbackSpeed: StateFlow<Float> = playerEngine.playbackSpeed
 
+    val preventStandbyDuringPlayback: StateFlow<Boolean> =
+        preferencesRepository.preventStandbyDuringPlayback
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), true)
+
     fun selectAudioTrack(trackId: String) {
         playerEngine.selectAudioTrack(trackId)
     }
@@ -1136,20 +1140,26 @@ class PlayerViewModel @Inject constructor(
                             }
                         }
                 } else if (categoryId == VirtualCategoryIds.FAVORITES) {
-                    // Global Favorites
+                    // Global Favorites — preserve user-defined position order
                     favoriteRepository.getFavorites(com.streamvault.domain.model.ContentType.LIVE)
-                        .map { favorites -> favorites.map { it.contentId } }
-                        .flatMapLatest { ids -> 
-                            if (ids.isEmpty()) flowOf(emptyList()) 
-                            else channelRepository.getChannelsByIds(ids)
+                        .map { favorites -> favorites.sortedBy { it.position }.map { it.contentId } }
+                        .flatMapLatest { ids ->
+                            if (ids.isEmpty()) flowOf(emptyList())
+                            else channelRepository.getChannelsByIds(ids).map { unsorted ->
+                                val byId = unsorted.associateBy { it.id }
+                                ids.mapNotNull { byId[it] }
+                            }
                         }
                 } else {
                     val groupId = if (categoryId < 0) -categoryId else categoryId
                     favoriteRepository.getFavoritesByGroup(groupId)
-                        .map { favorites -> favorites.map { it.contentId } }
-                        .flatMapLatest { ids -> 
-                            if (ids.isEmpty()) flowOf(emptyList()) 
-                            else channelRepository.getChannelsByIds(ids)
+                        .map { favorites -> favorites.sortedBy { it.position }.map { it.contentId } }
+                        .flatMapLatest { ids ->
+                            if (ids.isEmpty()) flowOf(emptyList())
+                            else channelRepository.getChannelsByIds(ids).map { unsorted ->
+                                val byId = unsorted.associateBy { it.id }
+                                ids.mapNotNull { byId[it] }
+                            }
                         }
                 }
             } else {
@@ -1276,29 +1286,51 @@ class PlayerViewModel @Inject constructor(
         openChannelListOverlay()
     }
 
+    private fun resolveCurrentLiveChannelIndex(): Int {
+        if (channelList.isEmpty()) return -1
+
+        val currentIndexMatchesChannel = currentChannelIndex in channelList.indices && run {
+            val currentChannel = channelList[currentChannelIndex]
+            currentChannel.id == currentContentId || currentChannel.streamUrl == currentStreamUrl
+        }
+        if (currentIndexMatchesChannel) {
+            return currentChannelIndex
+        }
+
+        currentChannelIndex = when {
+            currentContentId > 0 -> channelList.indexOfFirst { it.id == currentContentId }
+            else -> -1
+        }
+
+        if (currentChannelIndex == -1) {
+            currentChannelIndex = channelList.indexOfFirst { it.streamUrl == currentStreamUrl }
+        }
+
+        return currentChannelIndex
+    }
+
+    private fun wrappedChannelIndex(offset: Int): Int {
+        val resolvedIndex = resolveCurrentLiveChannelIndex()
+        if (resolvedIndex == -1) return -1
+        val size = channelList.size
+        return ((resolvedIndex + offset) % size + size) % size
+    }
+
     fun playNext() {
         clearNumericChannelInput()
         if (channelList.isEmpty()) return
-        
-        if (currentChannelIndex == -1) {
-             currentChannelIndex = channelList.indexOfFirst { it.streamUrl == currentStreamUrl }
-             if (currentChannelIndex == -1) return
-        }
-        
-        val nextIndex = (currentChannelIndex + 1) % channelList.size
+
+        val nextIndex = wrappedChannelIndex(offset = 1)
+        if (nextIndex == -1) return
         changeChannel(nextIndex)
     }
 
     fun playPrevious() {
         clearNumericChannelInput()
         if (channelList.isEmpty()) return
-        
-        if (currentChannelIndex == -1) {
-             currentChannelIndex = channelList.indexOfFirst { it.streamUrl == currentStreamUrl }
-             if (currentChannelIndex == -1) return
-        }
-        
-        val prevIndex = if (currentChannelIndex - 1 < 0) channelList.size - 1 else currentChannelIndex - 1
+
+        val prevIndex = wrappedChannelIndex(offset = -1)
+        if (prevIndex == -1) return
         changeChannel(prevIndex)
     }
 

@@ -50,8 +50,12 @@ fun PremiumDialog(
     val isTelevisionDevice = rememberIsTelevisionDevice()
     LaunchedEffect(Unit) { delay(500); canInteract = true }
     Dialog(
-        onDismissRequest = { if (canInteract) onDismissRequest() },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(
+            dismissOnBackPress = canInteract,
+            dismissOnClickOutside = canInteract,
+            usePlatformDefaultWidth = false
+        )
     ) {
         if (isTelevisionDevice) {
             Surface(

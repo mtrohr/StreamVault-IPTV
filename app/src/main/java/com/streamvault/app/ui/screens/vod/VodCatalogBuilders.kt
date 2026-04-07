@@ -12,7 +12,6 @@ data class VodCatalogSnapshot<Item>(
 )
 
 suspend fun <Item> buildVodPreviewCatalog(
-    providerId: Long,
     allFavorites: List<Favorite>,
     customCategories: List<Category>,
     providerCategories: List<Category>,
@@ -20,7 +19,7 @@ suspend fun <Item> buildVodPreviewCatalog(
     libraryCount: Int,
     hiddenProviderCategoryIds: Set<Long>,
     loadItemsByIds: suspend (List<Long>) -> List<Item>,
-    loadCategoryPreviewRows: suspend (Long, Int) -> Map<Long?, List<Item>>,
+    providerPreviews: Map<Long?, List<Item>>,
     itemId: (Item) -> Long,
     itemCategoryId: (Item) -> Long?,
     copyWithFavorite: (Item, Boolean) -> Item
@@ -82,8 +81,6 @@ suspend fun <Item> buildVodPreviewCatalog(
             }
         }
     }
-
-    val providerPreviews = loadCategoryPreviewRows(providerId, VodBrowseDefaults.PREVIEW_ROW_LIMIT)
 
     providerCategories
         .forEach { category ->

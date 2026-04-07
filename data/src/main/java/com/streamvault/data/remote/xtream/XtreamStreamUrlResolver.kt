@@ -6,8 +6,6 @@ import com.streamvault.data.util.UrlSecurityPolicy
 import com.streamvault.domain.model.ContentType
 import com.streamvault.domain.model.ProviderType
 import java.net.URI
-import java.net.URLDecoder
-import java.nio.charset.StandardCharsets
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -112,7 +110,7 @@ internal fun extractStreamExpirationTime(url: String): Long? {
             if (key !in expirationKeys) return@mapNotNull null
 
             val rawValue = part.substringAfter('=', missingDelimiterValue = "")
-            val decodedValue = URLDecoder.decode(rawValue, StandardCharsets.UTF_8)
+            val decodedValue = XtreamUrlCodec.decode(rawValue)
             parseXtreamExpirationDate(decodedValue)
         }
         .firstOrNull()

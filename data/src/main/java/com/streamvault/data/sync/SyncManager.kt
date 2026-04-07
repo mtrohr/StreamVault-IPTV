@@ -381,20 +381,40 @@ class SyncManager @Inject constructor(
             val resolvedCategoryId = categoryId ?: return
             val resolvedCategoryName = categoryName?.trim().takeUnless { it.isNullOrEmpty() }
                 ?: "Category $resolvedCategoryId"
-            categories.putIfAbsent(
-                resolvedCategoryId,
-                CategoryEntity(
-                    categoryId = resolvedCategoryId,
-                    name = resolvedCategoryName,
-                    parentId = 0,
-                    type = type,
-                    providerId = providerId,
-                    isAdult = isAdult || AdultContentClassifier.isAdultCategoryName(resolvedCategoryName)
-                )
+            val candidate = CategoryEntity(
+                categoryId = resolvedCategoryId,
+                name = resolvedCategoryName,
+                parentId = 0,
+                type = type,
+                providerId = providerId,
+                isAdult = isAdult || AdultContentClassifier.isAdultCategoryName(resolvedCategoryName)
             )
+            val existing = categories[resolvedCategoryId]
+            categories[resolvedCategoryId] = if (existing == null) {
+                candidate
+            } else {
+                existing.copy(
+                    name = preferredCategoryName(existing.name, candidate.name, resolvedCategoryId),
+                    isAdult = existing.isAdult || candidate.isAdult,
+                    isUserProtected = existing.isUserProtected || candidate.isUserProtected
+                )
+            }
         }
 
         fun entities(): List<CategoryEntity> = categories.values.toList()
+
+        private fun preferredCategoryName(
+            currentName: String,
+            candidateName: String,
+            categoryId: Long
+        ): String {
+            val placeholderName = "Category $categoryId"
+            return when {
+                currentName == placeholderName && candidateName != placeholderName -> candidateName
+                currentName != placeholderName -> currentName
+                else -> candidateName
+            }
+        }
     }
 
     private data class StagedCatalogSnapshot(
@@ -562,7 +582,7 @@ class SyncManager @Inject constructor(
             progress(
                 provider.id,
                 onProgress,
-                if (provider.xtreamFastSyncEnabled) "Loading movie categories..." else "Downloading Movies..."
+                "Downloading Movies..."
             )
             val movieSyncResult = syncXtreamMoviesCatalog(
                 provider = provider,
@@ -584,21 +604,14 @@ class SyncManager @Inject constructor(
 
             when (val catalogResult = movieSyncResult.catalogResult) {
                 is CatalogStrategyResult.Success -> {
-                    val acceptedCount = if (movieSyncResult.syncMode == VodSyncMode.FAST_SYNC) {
-                        movieSyncResult.categories?.let {
-                            syncCatalogStore.replaceCategories(provider.id, "MOVIE", it)
-                        }
-                        movieDao.getCount(provider.id).first()
-                    } else {
-                        movieSyncResult.stagedSessionId?.let { sessionId ->
-                            syncCatalogStore.applyStagedMovieCatalog(provider.id, sessionId, movieSyncResult.categories)
-                            movieSyncResult.stagedAcceptedCount
-                        } ?: syncCatalogStore.replaceMovieCatalog(
-                            providerId = provider.id,
-                            categories = movieSyncResult.categories,
-                            movies = catalogResult.items.asSequence().map { movie -> movie.toEntity() }
-                        )
-                    }
+                    val acceptedCount = movieSyncResult.stagedSessionId?.let { sessionId ->
+                        syncCatalogStore.applyStagedMovieCatalog(provider.id, sessionId, movieSyncResult.categories)
+                        movieSyncResult.stagedAcceptedCount
+                    } ?: syncCatalogStore.replaceMovieCatalog(
+                        providerId = provider.id,
+                        categories = movieSyncResult.categories,
+                        movies = catalogResult.items.asSequence().map { movie -> movie.toEntity() }
+                    )
                     metadata = metadata.copy(
                         lastMovieSync = now,
                         lastMovieAttempt = now,
@@ -1070,7 +1083,7 @@ class SyncManager @Inject constructor(
                 progress(
                     provider.id,
                     onProgress,
-                    if (provider.xtreamFastSyncEnabled) "Refreshing movie categories..." else "Retrying Movies..."
+                    "Retrying Movies..."
                 )
                 val useTextClassification = preferencesRepository.useXtreamTextClassification.first()
                 val api = createXtreamSyncProvider(provider, useTextClassification)
@@ -1333,36 +1346,11 @@ class SyncManager @Inject constructor(
             TAG,
             "Xtream movies strategy start for provider ${provider.id}. previousMode=${existingMetadata.movieSyncMode} rememberSequential=${existingMetadata.movieParallelFailuresRemembered}"
         )
-        if (provider.xtreamFastSyncEnabled) {
-            progress(provider.id, onProgress, "Loading movie categories...")
-        }
         val rawVodCategories = fetchXtreamVodCategories(provider)
         val resolvedCategories = rawVodCategories
             ?.let { categories -> api.mapCategories(ContentType.MOVIE, categories) }
             ?.map { category -> category.toEntity(provider.id) }
             ?.takeIf { it.isNotEmpty() }
-
-        if (provider.xtreamFastSyncEnabled) {
-            return if (!resolvedCategories.isNullOrEmpty()) {
-                MovieCatalogSyncResult(
-                    catalogResult = CatalogStrategyResult.Success(
-                        strategyName = "fast_sync",
-                        items = emptyList()
-                    ),
-                    categories = resolvedCategories,
-                    syncMode = VodSyncMode.FAST_SYNC
-                )
-            } else {
-                MovieCatalogSyncResult(
-                    catalogResult = CatalogStrategyResult.Failure(
-                        strategyName = "fast_sync",
-                        error = IllegalStateException("Fast Sync could not load VOD categories")
-                    ),
-                    categories = null,
-                    syncMode = VodSyncMode.FAST_SYNC
-                )
-            }
-        }
 
         var fullPayload = CatalogSyncPayload<Movie>(
             catalogResult = CatalogStrategyResult.EmptyValid("full"),
@@ -1377,18 +1365,88 @@ class SyncManager @Inject constructor(
             categories = null
         )
 
-        progress(provider.id, onProgress, "Preparing Movies category sync...")
-        categoryPayload = loadXtreamMoviesByCategory(
-            provider = provider,
-            api = api,
-            rawCategories = rawVodCategories.orEmpty(),
-            onProgress = onProgress,
-            preferSequential = existingMetadata.movieParallelFailuresRemembered
-        )
+        // Fast sync: skip all downloads, expose categories only and hydrate on demand.
+        if (provider.xtreamFastSyncEnabled) {
+            return if (!resolvedCategories.isNullOrEmpty()) {
+                Log.i(TAG, "Xtream movies fast sync: returning LAZY_BY_CATEGORY for provider ${provider.id} with ${resolvedCategories.size} categories.")
+                MovieCatalogSyncResult(
+                    catalogResult = CatalogStrategyResult.Failure(
+                        strategyName = "fast_sync",
+                        error = IllegalStateException("Fast sync enabled; movies will hydrate on demand"),
+                        warnings = emptyList()
+                    ),
+                    categories = resolvedCategories,
+                    syncMode = VodSyncMode.LAZY_BY_CATEGORY,
+                    warnings = emptyList(),
+                    strategyFeedback = XtreamStrategyFeedback(preferredSegmentedFirst = false)
+                )
+            } else {
+                Log.w(TAG, "Xtream movies fast sync: no categories available for provider ${provider.id}, falling through to standard strategies.")
+                // No categories — fall through to normal strategies below
+                MovieCatalogSyncResult(
+                    catalogResult = CatalogStrategyResult.Failure(
+                        strategyName = "fast_sync_no_categories",
+                        error = IllegalStateException("Fast sync enabled but no categories available"),
+                        warnings = listOf("Fast sync enabled but no categories returned from server.")
+                    ),
+                    categories = null,
+                    syncMode = VodSyncMode.UNKNOWN,
+                    warnings = listOf("Fast sync enabled but no categories returned from server."),
+                    strategyFeedback = XtreamStrategyFeedback(preferredSegmentedFirst = false)
+                )
+            }
+        }
+
+        progress(provider.id, onProgress, "Checking Movies full catalog...")
+        fullPayload = loadXtreamMoviesFull(provider, api)
+        when (val fullResult = fullPayload.catalogResult) {
+            is CatalogStrategyResult.Success -> return MovieCatalogSyncResult(
+                catalogResult = fullResult,
+                categories = mergePreferredAndFallbackCategories(resolvedCategories, fullPayload.categories),
+                syncMode = VodSyncMode.FULL,
+                warnings = emptyList(),
+                strategyFeedback = XtreamStrategyFeedback(
+                    preferredSegmentedFirst = false,
+                    attemptedFullCatalog = true,
+                    fullCatalogUnsafe = false
+                ),
+                stagedSessionId = fullPayload.stagedSessionId,
+                stagedAcceptedCount = fullPayload.stagedAcceptedCount
+            ).also {
+                Log.i(TAG, "Xtream movies strategy selected FULL for provider ${provider.id} with ${fullPayload.stagedAcceptedCount} items.")
+            }
+            is CatalogStrategyResult.Partial -> return MovieCatalogSyncResult(
+                catalogResult = fullResult,
+                categories = mergePreferredAndFallbackCategories(resolvedCategories, fullPayload.categories),
+                syncMode = VodSyncMode.FULL,
+                warnings = emptyList(),
+                strategyFeedback = XtreamStrategyFeedback(
+                    preferredSegmentedFirst = false,
+                    attemptedFullCatalog = true,
+                    fullCatalogUnsafe = false
+                ),
+                stagedSessionId = fullPayload.stagedSessionId,
+                stagedAcceptedCount = fullPayload.stagedAcceptedCount
+            ).also {
+                Log.w(TAG, "Xtream movies strategy selected FULL(partial) for provider ${provider.id} with ${fullPayload.stagedAcceptedCount} items.")
+            }
+            else -> Unit
+        }
+
+        if (!resolvedCategories.isNullOrEmpty()) {
+            progress(provider.id, onProgress, "Preparing Movies category sync...")
+            categoryPayload = loadXtreamMoviesByCategory(
+                provider = provider,
+                api = api,
+                rawCategories = rawVodCategories.orEmpty(),
+                onProgress = onProgress,
+                preferSequential = existingMetadata.movieParallelFailuresRemembered
+            )
+        }
         when (val categoryResult = categoryPayload.catalogResult) {
             is CatalogStrategyResult.Success -> return MovieCatalogSyncResult(
                 catalogResult = categoryResult,
-                categories = resolvedCategories ?: categoryPayload.categories,
+                categories = mergePreferredAndFallbackCategories(resolvedCategories, categoryPayload.categories),
                 syncMode = VodSyncMode.CATEGORY_BULK,
                 warnings = strategyWarnings(fullPayload.catalogResult) + strategyWarnings(pagedPayload.catalogResult),
                 strategyFeedback = XtreamStrategyFeedback(
@@ -1406,7 +1464,7 @@ class SyncManager @Inject constructor(
             }
             is CatalogStrategyResult.Partial -> return MovieCatalogSyncResult(
                 catalogResult = categoryResult,
-                categories = resolvedCategories ?: categoryPayload.categories,
+                categories = mergePreferredAndFallbackCategories(resolvedCategories, categoryPayload.categories),
                 syncMode = VodSyncMode.CATEGORY_BULK,
                 warnings = strategyWarnings(fullPayload.catalogResult) + strategyWarnings(pagedPayload.catalogResult),
                 strategyFeedback = XtreamStrategyFeedback(
@@ -1474,7 +1532,7 @@ class SyncManager @Inject constructor(
         when (val fullResult = fullPayload.catalogResult) {
             is CatalogStrategyResult.Success -> return MovieCatalogSyncResult(
                 catalogResult = fullResult,
-                categories = resolvedCategories ?: fullPayload.categories,
+                categories = mergePreferredAndFallbackCategories(resolvedCategories, fullPayload.categories),
                 syncMode = VodSyncMode.FULL,
                 warnings = strategyWarnings(categoryPayload.catalogResult) + strategyWarnings(pagedPayload.catalogResult),
                 strategyFeedback = XtreamStrategyFeedback(
@@ -1702,7 +1760,10 @@ class SyncManager @Inject constructor(
         when (fullResult) {
             is CatalogStrategyResult.Success -> return CatalogSyncPayload(
                 catalogResult = fullResult,
-                categories = resolvedCategories ?: buildFallbackLiveCategories(provider.id, fullResult.items),
+                categories = mergePreferredAndFallbackCategories(
+                    resolvedCategories,
+                    buildFallbackLiveCategories(provider.id, fullResult.items)
+                ),
                 warnings = emptyList(),
                 strategyFeedback = XtreamStrategyFeedback(
                     attemptedFullCatalog = true,
@@ -1711,7 +1772,10 @@ class SyncManager @Inject constructor(
             )
             is CatalogStrategyResult.Partial -> return CatalogSyncPayload(
                 catalogResult = fullResult,
-                categories = resolvedCategories ?: buildFallbackLiveCategories(provider.id, fullResult.items),
+                categories = mergePreferredAndFallbackCategories(
+                    resolvedCategories,
+                    buildFallbackLiveCategories(provider.id, fullResult.items)
+                ),
                 warnings = emptyList(),
                 strategyFeedback = XtreamStrategyFeedback(
                     attemptedFullCatalog = true,
@@ -1732,8 +1796,14 @@ class SyncManager @Inject constructor(
         return CatalogSyncPayload(
             catalogResult = categoryResult,
             categories = when (categoryResult) {
-                is CatalogStrategyResult.Success -> resolvedCategories ?: buildFallbackLiveCategories(provider.id, categoryResult.items)
-                is CatalogStrategyResult.Partial -> resolvedCategories ?: buildFallbackLiveCategories(provider.id, categoryResult.items)
+                is CatalogStrategyResult.Success -> mergePreferredAndFallbackCategories(
+                    resolvedCategories,
+                    buildFallbackLiveCategories(provider.id, categoryResult.items)
+                )
+                is CatalogStrategyResult.Partial -> mergePreferredAndFallbackCategories(
+                    resolvedCategories,
+                    buildFallbackLiveCategories(provider.id, categoryResult.items)
+                )
                 else -> null
             },
             warnings = strategyWarnings(fullResult),
@@ -2219,6 +2289,35 @@ class SyncManager @Inject constructor(
             categories = null
         )
 
+        // Fast sync: skip all downloads, expose categories only and hydrate on demand.
+        if (provider.xtreamFastSyncEnabled) {
+            return if (!resolvedCategories.isNullOrEmpty()) {
+                Log.i(TAG, "Xtream series fast sync: returning lazy_by_category for provider ${provider.id} with ${resolvedCategories.size} categories.")
+                CatalogSyncPayload(
+                    catalogResult = CatalogStrategyResult.Failure(
+                        strategyName = "lazy_by_category",
+                        error = IllegalStateException("Fast sync enabled; series will hydrate on demand"),
+                        warnings = emptyList()
+                    ),
+                    categories = resolvedCategories,
+                    warnings = emptyList(),
+                    strategyFeedback = XtreamStrategyFeedback(preferredSegmentedFirst = false)
+                )
+            } else {
+                Log.w(TAG, "Xtream series fast sync: no categories available for provider ${provider.id}.")
+                CatalogSyncPayload(
+                    catalogResult = CatalogStrategyResult.Failure(
+                        strategyName = "fast_sync_no_categories",
+                        error = IllegalStateException("Fast sync enabled but no series categories available"),
+                        warnings = listOf("Fast sync enabled but no series categories returned from server.")
+                    ),
+                    categories = null,
+                    warnings = listOf("Fast sync enabled but no series categories returned from server."),
+                    strategyFeedback = XtreamStrategyFeedback(preferredSegmentedFirst = false)
+                )
+            }
+        }
+
         if (!resolvedCategories.isNullOrEmpty()) {
             progress(provider.id, onProgress, "Preparing Series category sync...")
             categoryPayload = loadXtreamSeriesByCategory(
@@ -2232,7 +2331,7 @@ class SyncManager @Inject constructor(
                 is CatalogStrategyResult.Success,
                 is CatalogStrategyResult.Partial -> return CatalogSyncPayload(
                     catalogResult = categoryResult,
-                    categories = resolvedCategories ?: categoryPayload.categories,
+                    categories = mergePreferredAndFallbackCategories(resolvedCategories, categoryPayload.categories),
                 warnings = strategyWarnings(fullPayload.catalogResult),
                 strategyFeedback = XtreamStrategyFeedback(
                     preferredSegmentedFirst = true,
@@ -3268,23 +3367,71 @@ class SyncManager @Inject constructor(
         categoryName: (T) -> String?,
         isAdult: (T) -> Boolean
     ): List<CategoryEntity> {
-        return items
-            .asSequence()
-            .mapNotNull { item ->
-                val resolvedCategoryId = categoryId(item) ?: return@mapNotNull null
-                val resolvedCategoryName = categoryName(item)?.trim().takeUnless { it.isNullOrEmpty() }
-                    ?: "Category $resolvedCategoryId"
-                CategoryEntity(
-                    categoryId = resolvedCategoryId,
-                    name = resolvedCategoryName,
-                    parentId = 0,
-                    type = type,
-                    providerId = providerId,
-                    isAdult = isAdult(item) || AdultContentClassifier.isAdultCategoryName(resolvedCategoryName)
+        val categories = LinkedHashMap<Long, CategoryEntity>()
+        items.forEach { item ->
+            val resolvedCategoryId = categoryId(item) ?: return@forEach
+            val resolvedCategoryName = categoryName(item)?.trim().takeUnless { it.isNullOrEmpty() }
+                ?: "Category $resolvedCategoryId"
+            val candidate = CategoryEntity(
+                categoryId = resolvedCategoryId,
+                name = resolvedCategoryName,
+                parentId = 0,
+                type = type,
+                providerId = providerId,
+                isAdult = isAdult(item) || AdultContentClassifier.isAdultCategoryName(resolvedCategoryName)
+            )
+            val existing = categories[resolvedCategoryId]
+            categories[resolvedCategoryId] = if (existing == null) {
+                candidate
+            } else {
+                existing.copy(
+                    name = preferredFallbackCategoryName(existing.name, candidate.name, resolvedCategoryId),
+                    isAdult = existing.isAdult || candidate.isAdult,
+                    isUserProtected = existing.isUserProtected || candidate.isUserProtected
                 )
             }
-            .distinctBy { it.categoryId }
-            .toList()
+        }
+        return categories.values.toList()
+    }
+
+    private fun preferredFallbackCategoryName(
+        currentName: String,
+        candidateName: String,
+        categoryId: Long
+    ): String {
+        val placeholderName = "Category $categoryId"
+        return when {
+            currentName == placeholderName && candidateName != placeholderName -> candidateName
+            currentName != placeholderName -> currentName
+            else -> candidateName
+        }
+    }
+
+    private fun mergePreferredAndFallbackCategories(
+        preferred: List<CategoryEntity>?,
+        fallback: List<CategoryEntity>?
+    ): List<CategoryEntity>? {
+        if (preferred.isNullOrEmpty()) return fallback?.takeIf { it.isNotEmpty() }
+        if (fallback.isNullOrEmpty()) return preferred
+
+        val merged = LinkedHashMap<Pair<Long, ContentType>, CategoryEntity>()
+        preferred.forEach { category ->
+            merged[category.categoryId to category.type] = category
+        }
+        fallback.forEach { category ->
+            val key = category.categoryId to category.type
+            val existing = merged[key]
+            merged[key] = if (existing == null) {
+                category
+            } else {
+                existing.copy(
+                    isAdult = existing.isAdult || category.isAdult,
+                    isUserProtected = existing.isUserProtected || category.isUserProtected,
+                    name = existing.name.ifBlank { category.name }
+                )
+            }
+        }
+        return merged.values.toList()
     }
 
     private suspend fun stageMovieItems(

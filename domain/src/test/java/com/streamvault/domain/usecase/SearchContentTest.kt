@@ -139,7 +139,7 @@ private class FakeSeriesRepository(
     override fun getSeriesByCategory(providerId: Long, categoryId: Long): Flow<List<Series>> = unsupported()
     override fun getSeriesByCategoryPage(providerId: Long, categoryId: Long, limit: Int, offset: Int): Flow<List<Series>> = unsupported()
     override fun getSeriesByCategoryPreview(providerId: Long, categoryId: Long, limit: Int): Flow<List<Series>> = unsupported()
-    override fun getCategoryPreviewRows(providerId: Long, limitPerCategory: Int): Flow<Map<Long?, List<Series>>> = unsupported()
+    override fun getCategoryPreviewRows(providerId: Long, categoryIds: List<Long>, limitPerCategory: Int): Flow<Map<Long?, List<Series>>> = unsupported()
     override fun getTopRatedPreview(providerId: Long, limit: Int): Flow<List<Series>> = unsupported()
     override fun getFreshPreview(providerId: Long, limit: Int): Flow<List<Series>> = unsupported()
     override fun getSeriesByIds(ids: List<Long>): Flow<List<Series>> = unsupported()

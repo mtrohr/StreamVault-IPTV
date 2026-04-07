@@ -259,6 +259,86 @@ class XtreamProviderTest {
     }
 
     @Test
+    fun `getLiveCategories honors explicit adult flag from xtream category payload`() = runBlocking {
+        val provider = XtreamProvider(
+            providerId = 42,
+            api = FakeXtreamApiService(
+                liveCategories = listOf(
+                    XtreamCategory(
+                        categoryId = "28",
+                        categoryName = "General",
+                        isAdult = true
+                    )
+                )
+            ),
+            serverUrl = "https://example.com",
+            username = "user",
+            password = "pass"
+        )
+
+        val category = provider.getLiveCategories().getOrNull().orEmpty().single()
+
+        assertThat(category.id).isEqualTo(28L)
+        assertThat(category.isAdult).isTrue()
+    }
+
+    @Test
+    fun `getLiveStreams inherits adult status from xtream category flag`() = runBlocking {
+        val provider = XtreamProvider(
+            providerId = 42,
+            api = FakeXtreamApiService(
+                liveCategories = listOf(
+                    XtreamCategory(
+                        categoryId = "28",
+                        categoryName = "General",
+                        isAdult = true
+                    )
+                ),
+                liveStreams = listOf(
+                    XtreamStream(
+                        name = "Channel",
+                        streamId = 77,
+                        categoryId = "28",
+                        categoryName = "General",
+                        isAdult = null
+                    )
+                )
+            ),
+            serverUrl = "https://example.com",
+            username = "user",
+            password = "pass"
+        )
+
+        val channel = provider.getLiveStreams().getOrNull().orEmpty().single()
+
+        assertThat(channel.isAdult).isTrue()
+    }
+
+    @Test
+    fun `getSeriesCategories honors explicit adult flag from xtream category payload`() = runBlocking {
+        val provider = XtreamProvider(
+            providerId = 42,
+            api = FakeXtreamApiService(
+                seriesCategories = listOf(
+                    XtreamCategory(
+                        categoryId = "683",
+                        categoryName = "Series",
+                        isAdult = true
+                    )
+                )
+            ),
+            serverUrl = "https://example.com",
+            username = "user",
+            password = "pass"
+        )
+
+        val category = provider.getSeriesCategories().getOrNull().orEmpty().single()
+
+        assertThat(category.id).isEqualTo(683L)
+        assertThat(category.isAdult).isTrue()
+    }
+
+    @Test
     fun `vod list and details both normalize ratings to ten point scale`() = runBlocking {
         val provider = XtreamProvider(
             providerId = 42,

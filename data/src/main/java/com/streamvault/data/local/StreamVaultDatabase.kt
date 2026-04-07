@@ -30,13 +30,14 @@ import com.streamvault.data.local.entity.*
         PlaybackHistoryEntity::class,
         SyncMetadataEntity::class,
         MovieCategoryHydrationEntity::class,
+        SeriesCategoryHydrationEntity::class,
         EpgSourceEntity::class,
         ProviderEpgSourceEntity::class,
         EpgChannelEntity::class,
         EpgProgrammeEntity::class,
         ChannelEpgMappingEntity::class
     ],
-    version = 25,
+    version = 26,
     exportSchema = true   // ← was false; schema JSON now tracked in version control
 )
 @TypeConverters(RoomEnumConverters::class)
@@ -55,6 +56,7 @@ abstract class StreamVaultDatabase : RoomDatabase() {
     abstract fun playbackHistoryDao(): PlaybackHistoryDao
     abstract fun syncMetadataDao(): SyncMetadataDao
     abstract fun movieCategoryHydrationDao(): MovieCategoryHydrationDao
+    abstract fun seriesCategoryHydrationDao(): SeriesCategoryHydrationDao
     abstract fun epgSourceDao(): EpgSourceDao
     abstract fun providerEpgSourceDao(): ProviderEpgSourceDao
     abstract fun epgChannelDao(): EpgChannelDao
@@ -1177,6 +1179,24 @@ abstract class StreamVaultDatabase : RoomDatabase() {
                 database.execSQL(
                     "CREATE INDEX IF NOT EXISTS index_movie_category_hydration_provider_id ON movie_category_hydration(provider_id)"
                 )
+            }
+        }
+
+        val MIGRATION_25_26 = object : Migration(25, 26) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS series_category_hydration (
+                        provider_id INTEGER NOT NULL,
+                        category_id INTEGER NOT NULL,
+                        last_hydrated_at INTEGER NOT NULL DEFAULT 0,
+                        item_count INTEGER NOT NULL DEFAULT 0,
+                        last_status TEXT NOT NULL DEFAULT 'IDLE',
+                        last_error TEXT,
+                        PRIMARY KEY(provider_id, category_id),
+                        FOREIGN KEY(provider_id) REFERENCES providers(id) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_series_category_hydration_provider_id ON series_category_hydration(provider_id)")
             }
         }
 
