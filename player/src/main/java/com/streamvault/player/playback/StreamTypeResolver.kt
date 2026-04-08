@@ -20,6 +20,9 @@ object StreamTypeResolver {
         "application/x-mpegurl"
     )
     private val dashMimeHints = listOf("application/dash+xml")
+    private val hlsQueryHints = listOf("ext=m3u8", "output=m3u8", "format=m3u8", "type=m3u8")
+    private val tsQueryHints = listOf("ext=ts", "output=ts", "format=ts", "type=ts")
+    private val hlsLiveAliases = setOf("sd", "hd", "fhd", "uhd", "4k", "playlist", "master", "index")
 
     fun resolve(streamInfo: StreamInfo, mimeType: String? = null): ResolvedStreamType {
         return when (streamInfo.streamType) {
@@ -33,16 +36,26 @@ object StreamTypeResolver {
 
     fun resolve(url: String, mimeType: String? = null, isLive: Boolean = false): ResolvedStreamType {
         val normalizedMimeType = mimeType?.trim()?.lowercase(Locale.ROOT)
-        val path = runCatching { URI(url).path.orEmpty() }.getOrDefault(url)
+        val uri = runCatching { URI(url) }.getOrNull()
+        val path = uri?.path.orEmpty().ifBlank { url }
             .substringBefore('?')
             .substringBefore('#')
             .lowercase(Locale.ROOT)
+        val query = uri?.rawQuery
+            ?.lowercase(Locale.ROOT)
+            ?: url.substringAfter('?', "")
+                .substringBefore('#')
+                .lowercase(Locale.ROOT)
+        val lastSegment = path.substringAfterLast('/').trim()
         return when {
             normalizedMimeType != null && hlsMimeHints.any(normalizedMimeType::contains) -> ResolvedStreamType.HLS
             normalizedMimeType != null && dashMimeHints.any(normalizedMimeType::contains) -> ResolvedStreamType.DASH
+            hlsQueryHints.any(query::contains) -> ResolvedStreamType.HLS
+            tsQueryHints.any(query::contains) -> ResolvedStreamType.MPEG_TS_LIVE
             path.contains(".m3u8") -> ResolvedStreamType.HLS
             path.contains(".mpd") -> ResolvedStreamType.DASH
             path.endsWith(".ts") -> ResolvedStreamType.MPEG_TS_LIVE
+            isLive && path.contains("/live/") && lastSegment in hlsLiveAliases -> ResolvedStreamType.HLS
             isLive && path.contains("/live/") && progressiveExtensions.none(path::endsWith) ->
                 ResolvedStreamType.MPEG_TS_LIVE
             progressiveExtensions.any(path::endsWith) -> ResolvedStreamType.PROGRESSIVE

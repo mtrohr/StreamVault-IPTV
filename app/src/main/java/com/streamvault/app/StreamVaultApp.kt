@@ -25,6 +25,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.streamvault.data.manager.recording.RecordingReconcileWorker
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -62,6 +63,9 @@ class StreamVaultApp : Application(), SingletonImageLoader.Factory {
             ExistingPeriodicWorkPolicy.KEEP,
             gcWorkRequest
         )
+
+        RecordingReconcileWorker.enqueuePeriodic(this)
+        RecordingReconcileWorker.enqueueOneShot(this)
     }
 
     override fun onTerminate() {

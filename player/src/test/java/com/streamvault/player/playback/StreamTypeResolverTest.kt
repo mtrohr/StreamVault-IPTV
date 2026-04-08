@@ -24,6 +24,24 @@ class StreamTypeResolverTest {
     }
 
     @Test
+    fun `live quality alias resolves to HLS`() {
+        assertThat(StreamTypeResolver.resolve("https://example.com/live/AEEast/hd", isLive = true))
+            .isEqualTo(ResolvedStreamType.HLS)
+    }
+
+    @Test
+    fun `query hint ext m3u8 resolves to HLS`() {
+        assertThat(StreamTypeResolver.resolve("https://example.com/play?id=7&ext=m3u8", isLive = true))
+            .isEqualTo(ResolvedStreamType.HLS)
+    }
+
+    @Test
+    fun `query hint ext ts resolves to MPEG TS live`() {
+        assertThat(StreamTypeResolver.resolve("https://example.com/play?id=7&ext=ts", isLive = true))
+            .isEqualTo(ResolvedStreamType.MPEG_TS_LIVE)
+    }
+
+    @Test
     fun `mp4 resolves to progressive`() {
         assertThat(StreamTypeResolver.resolve("http://example.com/movie.mp4"))
             .isEqualTo(ResolvedStreamType.PROGRESSIVE)

@@ -31,6 +31,7 @@ import com.streamvault.domain.model.Provider
 import com.streamvault.domain.model.ProviderStatus
 import com.streamvault.domain.model.ProviderType
 import com.streamvault.domain.model.RecordingItem
+import com.streamvault.domain.model.RecordingStorageConfig
 import com.streamvault.domain.model.RecordingStorageState
 import com.streamvault.domain.model.EpgResolutionSummary
 import com.streamvault.domain.model.Result
@@ -1238,6 +1239,150 @@ class SettingsViewModel @Inject constructor(
                         appContext.getString(R.string.settings_recording_delete_failed, result.message)
                     } else {
                         appContext.getString(R.string.settings_recording_deleted)
+                    }
+                )
+            }
+        }
+    }
+
+    fun retryRecording(recordingId: String) {
+        viewModelScope.launch {
+            val result = recordingManager.retryRecording(recordingId)
+            _uiState.update {
+                it.copy(
+                    userMessage = if (result is Result.Error) {
+                        appContext.getString(R.string.settings_recording_retry_failed, result.message)
+                    } else {
+                        appContext.getString(R.string.settings_recording_retry_started)
+                    }
+                )
+            }
+        }
+    }
+
+    fun setRecordingScheduleEnabled(recordingId: String, enabled: Boolean) {
+        viewModelScope.launch {
+            val result = recordingManager.setScheduleEnabled(recordingId, enabled)
+            _uiState.update {
+                it.copy(
+                    userMessage = if (result is Result.Error) {
+                        appContext.getString(R.string.settings_recording_schedule_toggle_failed, result.message)
+                    } else {
+                        appContext.getString(
+                            if (enabled) R.string.settings_recording_schedule_enabled
+                            else R.string.settings_recording_schedule_disabled
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    fun reconcileRecordings() {
+        viewModelScope.launch {
+            val result = recordingManager.reconcileRecordingState()
+            _uiState.update {
+                it.copy(
+                    userMessage = if (result is Result.Error) {
+                        appContext.getString(R.string.settings_recording_reconcile_failed, result.message)
+                    } else {
+                        appContext.getString(R.string.settings_recording_reconcile_complete)
+                    }
+                )
+            }
+        }
+    }
+
+    fun updateRecordingFolder(treeUri: String?, displayName: String?) {
+        viewModelScope.launch {
+            val current = _uiState.value.recordingStorageState
+            val result = recordingManager.updateStorageConfig(
+                RecordingStorageConfig(
+                    treeUri = treeUri,
+                    displayName = displayName,
+                    fileNamePattern = current.fileNamePattern,
+                    retentionDays = current.retentionDays,
+                    maxSimultaneousRecordings = current.maxSimultaneousRecordings
+                )
+            )
+            _uiState.update {
+                it.copy(
+                    userMessage = if (result is Result.Error) {
+                        appContext.getString(R.string.settings_recording_storage_update_failed, result.message)
+                    } else {
+                        appContext.getString(R.string.settings_recording_storage_updated)
+                    }
+                )
+            }
+        }
+    }
+
+    fun updateRecordingFileNamePattern(pattern: String) {
+        viewModelScope.launch {
+            val current = _uiState.value.recordingStorageState
+            val result = recordingManager.updateStorageConfig(
+                RecordingStorageConfig(
+                    treeUri = current.treeUri,
+                    displayName = current.displayName,
+                    fileNamePattern = pattern,
+                    retentionDays = current.retentionDays,
+                    maxSimultaneousRecordings = current.maxSimultaneousRecordings
+                )
+            )
+            _uiState.update {
+                it.copy(
+                    userMessage = if (result is Result.Error) {
+                        appContext.getString(R.string.settings_recording_pattern_failed, result.message)
+                    } else {
+                        appContext.getString(R.string.settings_recording_pattern_saved)
+                    }
+                )
+            }
+        }
+    }
+
+    fun updateRecordingRetentionDays(retentionDays: Int?) {
+        viewModelScope.launch {
+            val current = _uiState.value.recordingStorageState
+            val result = recordingManager.updateStorageConfig(
+                RecordingStorageConfig(
+                    treeUri = current.treeUri,
+                    displayName = current.displayName,
+                    fileNamePattern = current.fileNamePattern,
+                    retentionDays = retentionDays,
+                    maxSimultaneousRecordings = current.maxSimultaneousRecordings
+                )
+            )
+            _uiState.update {
+                it.copy(
+                    userMessage = if (result is Result.Error) {
+                        appContext.getString(R.string.settings_recording_retention_failed, result.message)
+                    } else {
+                        appContext.getString(R.string.settings_recording_retention_saved)
+                    }
+                )
+            }
+        }
+    }
+
+    fun updateRecordingMaxSimultaneous(maxSimultaneousRecordings: Int) {
+        viewModelScope.launch {
+            val current = _uiState.value.recordingStorageState
+            val result = recordingManager.updateStorageConfig(
+                RecordingStorageConfig(
+                    treeUri = current.treeUri,
+                    displayName = current.displayName,
+                    fileNamePattern = current.fileNamePattern,
+                    retentionDays = current.retentionDays,
+                    maxSimultaneousRecordings = maxSimultaneousRecordings
+                )
+            )
+            _uiState.update {
+                it.copy(
+                    userMessage = if (result is Result.Error) {
+                        appContext.getString(R.string.settings_recording_concurrency_failed, result.message)
+                    } else {
+                        appContext.getString(R.string.settings_recording_concurrency_saved)
                     }
                 )
             }

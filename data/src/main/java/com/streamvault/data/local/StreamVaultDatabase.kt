@@ -35,9 +35,12 @@ import com.streamvault.data.local.entity.*
         ProviderEpgSourceEntity::class,
         EpgChannelEntity::class,
         EpgProgrammeEntity::class,
-        ChannelEpgMappingEntity::class
+        ChannelEpgMappingEntity::class,
+        RecordingScheduleEntity::class,
+        RecordingRunEntity::class,
+        RecordingStorageEntity::class
     ],
-    version = 28,
+    version = 29,
     exportSchema = true   // ← was false; schema JSON now tracked in version control
 )
 @TypeConverters(RoomEnumConverters::class)
@@ -62,6 +65,9 @@ abstract class StreamVaultDatabase : RoomDatabase() {
     abstract fun epgChannelDao(): EpgChannelDao
     abstract fun epgProgrammeDao(): EpgProgrammeDao
     abstract fun channelEpgMappingDao(): ChannelEpgMappingDao
+    abstract fun recordingScheduleDao(): RecordingScheduleDao
+    abstract fun recordingRunDao(): RecordingRunDao
+    abstract fun recordingStorageDao(): RecordingStorageDao
 
     companion object {
         /**
@@ -1209,6 +1215,113 @@ abstract class StreamVaultDatabase : RoomDatabase() {
         val MIGRATION_27_28 = object : Migration(27, 28) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE providers ADD COLUMN m3u_vod_classification_enabled INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
+        val MIGRATION_28_29 = object : Migration(28, 29) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS recording_schedules (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        provider_id INTEGER NOT NULL,
+                        channel_id INTEGER NOT NULL,
+                        channel_name TEXT NOT NULL,
+                        stream_url TEXT NOT NULL,
+                        program_title TEXT,
+                        requested_start_ms INTEGER NOT NULL,
+                        requested_end_ms INTEGER NOT NULL,
+                        recurrence TEXT NOT NULL,
+                        recurring_rule_id TEXT,
+                        enabled INTEGER NOT NULL DEFAULT 1,
+                        is_manual INTEGER NOT NULL DEFAULT 0,
+                        priority INTEGER NOT NULL DEFAULT 0,
+                        created_at INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL,
+                        FOREIGN KEY(provider_id) REFERENCES providers(id) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_recording_schedules_provider_id ON recording_schedules(provider_id)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_recording_schedules_enabled_requested_start_ms ON recording_schedules(enabled, requested_start_ms)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_recording_schedules_recurring_rule_id ON recording_schedules(recurring_rule_id)")
+
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS recording_runs (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        schedule_id INTEGER NOT NULL,
+                        provider_id INTEGER NOT NULL,
+                        channel_id INTEGER NOT NULL,
+                        channel_name TEXT NOT NULL,
+                        stream_url TEXT NOT NULL,
+                        program_title TEXT,
+                        scheduled_start_ms INTEGER NOT NULL,
+                        scheduled_end_ms INTEGER NOT NULL,
+                        recurrence TEXT NOT NULL,
+                        recurring_rule_id TEXT,
+                        status TEXT NOT NULL,
+                        source_type TEXT NOT NULL,
+                        resolved_url TEXT,
+                        headers_json TEXT NOT NULL DEFAULT '{}',
+                        user_agent TEXT,
+                        expiration_time INTEGER,
+                        provider_label TEXT,
+                        output_uri TEXT,
+                        output_display_path TEXT,
+                        bytes_written INTEGER NOT NULL DEFAULT 0,
+                        average_throughput_bps INTEGER NOT NULL DEFAULT 0,
+                        retry_count INTEGER NOT NULL DEFAULT 0,
+                        last_progress_at_ms INTEGER,
+                        failure_category TEXT NOT NULL DEFAULT 'NONE',
+                        failure_reason TEXT,
+                        terminal_at_ms INTEGER,
+                        started_at_ms INTEGER,
+                        ended_at_ms INTEGER,
+                        schedule_enabled INTEGER NOT NULL DEFAULT 1,
+                        priority INTEGER NOT NULL DEFAULT 0,
+                        alarm_start_at_ms INTEGER,
+                        alarm_stop_at_ms INTEGER,
+                        created_at INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL,
+                        FOREIGN KEY(schedule_id) REFERENCES recording_schedules(id) ON DELETE CASCADE,
+                        FOREIGN KEY(provider_id) REFERENCES providers(id) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_recording_runs_schedule_id ON recording_runs(schedule_id)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_recording_runs_provider_id ON recording_runs(provider_id)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_recording_runs_status_scheduled_start_ms ON recording_runs(status, scheduled_start_ms)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_recording_runs_alarm_start_at_ms ON recording_runs(alarm_start_at_ms)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_recording_runs_alarm_stop_at_ms ON recording_runs(alarm_stop_at_ms)")
+
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS recording_storage (
+                        id INTEGER PRIMARY KEY NOT NULL,
+                        tree_uri TEXT,
+                        display_name TEXT,
+                        output_directory TEXT,
+                        available_bytes INTEGER,
+                        is_writable INTEGER NOT NULL DEFAULT 0,
+                        file_name_pattern TEXT NOT NULL DEFAULT 'ChannelName_yyyy-MM-dd_HH-mm_ProgramTitle.ts',
+                        retention_days INTEGER,
+                        max_simultaneous_recordings INTEGER NOT NULL DEFAULT 2,
+                        updated_at INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                val now = System.currentTimeMillis()
+                database.execSQL(
+                    """
+                    INSERT OR IGNORE INTO recording_storage (
+                        id, tree_uri, display_name, output_directory, available_bytes, is_writable, file_name_pattern,
+                        retention_days, max_simultaneous_recordings, updated_at
+                    ) VALUES (
+                        1, NULL, NULL, NULL, NULL, 0, 'ChannelName_yyyy-MM-dd_HH-mm_ProgramTitle.ts', NULL, 2, $now
+                    )
+                    """.trimIndent()
+                )
             }
         }
 

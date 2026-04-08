@@ -79,6 +79,7 @@ dependencies {
 
     // Core
     implementation(libs.core.ktx)
+    implementation(libs.documentfile)
 
     // Unit tests
     testImplementation(libs.junit)

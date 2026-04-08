@@ -146,6 +146,7 @@ dependencies {
 
     // Core
     implementation(libs.core.ktx)
+    implementation(libs.documentfile)
     implementation(libs.coroutines.android)
     implementation(libs.appcompat)
     implementation(libs.mediarouter)

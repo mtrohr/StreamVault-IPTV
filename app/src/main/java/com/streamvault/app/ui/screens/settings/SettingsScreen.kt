@@ -50,6 +50,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.documentfile.provider.DocumentFile
 import com.streamvault.app.ui.interaction.TvClickableSurface
 import com.streamvault.app.ui.interaction.TvButton
 import com.streamvault.app.ui.interaction.TvIconButton
@@ -76,8 +77,10 @@ import com.streamvault.domain.model.DecoderMode
 import com.streamvault.domain.model.Provider
 import com.streamvault.domain.model.ProviderType
 import com.streamvault.domain.model.ProviderStatus
+import com.streamvault.domain.model.RecordingFailureCategory
 import com.streamvault.domain.model.RecordingItem
 import com.streamvault.domain.model.RecordingRecurrence
+import com.streamvault.domain.model.RecordingSourceType
 import com.streamvault.domain.model.RecordingStatus
 import com.streamvault.app.ui.screens.settings.ProviderDiagnosticsUiModel
 import kotlinx.coroutines.launch
@@ -202,6 +205,9 @@ fun SettingsScreen(
     }
     var showEthernetQualityDialog by rememberSaveable { mutableStateOf(false) }
     var showClearHistoryDialog by rememberSaveable { mutableStateOf(false) }
+    var showRecordingPatternDialog by rememberSaveable { mutableStateOf(false) }
+    var showRecordingRetentionDialog by rememberSaveable { mutableStateOf(false) }
+    var showRecordingConcurrencyDialog by rememberSaveable { mutableStateOf(false) }
     var categorySortDialogType by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedCategory by rememberSaveable { mutableStateOf(0) }
     var pinError by rememberSaveable { mutableStateOf<String?>(null) }
@@ -218,6 +224,22 @@ fun SettingsScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let { viewModel.inspectBackup(it.toString()) }
+    }
+
+    val recordingFolderLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        uri?.let {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            val displayName = DocumentFile.fromTreeUri(context, it)?.name
+            viewModel.updateRecordingFolder(it.toString(), displayName)
+        }
     }
 
     val uriHandler = LocalUriHandler.current
@@ -671,11 +693,21 @@ fun SettingsScreen(
                     else if (selectedCategory == 3) {
                         item {
                             RecordingOverviewCard(
+                                treeLabel = uiState.recordingStorageState.displayName,
                                 outputDirectory = uiState.recordingStorageState.outputDirectory,
                                 availableBytes = uiState.recordingStorageState.availableBytes,
                                 isWritable = uiState.recordingStorageState.isWritable,
                                 activeCount = uiState.recordingItems.count { it.status == RecordingStatus.RECORDING },
-                                scheduledCount = uiState.recordingItems.count { it.status == RecordingStatus.SCHEDULED }
+                                scheduledCount = uiState.recordingItems.count { it.status == RecordingStatus.SCHEDULED },
+                                fileNamePattern = uiState.recordingStorageState.fileNamePattern,
+                                retentionDays = uiState.recordingStorageState.retentionDays,
+                                maxSimultaneousRecordings = uiState.recordingStorageState.maxSimultaneousRecordings,
+                                onChooseFolder = { recordingFolderLauncher.launch(null) },
+                                onUseAppStorage = { viewModel.updateRecordingFolder(null, null) },
+                                onChangePattern = { showRecordingPatternDialog = true },
+                                onChangeRetention = { showRecordingRetentionDialog = true },
+                                onChangeConcurrency = { showRecordingConcurrencyDialog = true },
+                                onRepairSchedule = { viewModel.reconcileRecordings() }
                             )
                         }
                         if (uiState.recordingItems.isEmpty()) {
@@ -701,7 +733,9 @@ fun SettingsScreen(
                                     item = item,
                                     onStop = { viewModel.stopRecording(item.id) },
                                     onCancel = { viewModel.cancelRecording(item.id) },
-                                    onDelete = { viewModel.deleteRecording(item.id) }
+                                    onDelete = { viewModel.deleteRecording(item.id) },
+                                    onRetry = { viewModel.retryRecording(item.id) },
+                                    onToggleSchedule = { enabled -> viewModel.setRecordingScheduleEnabled(item.id, enabled) }
                                 )
                             }
                         }
@@ -1559,6 +1593,62 @@ fun SettingsScreen(
                 onImportRecordingSchedulesChanged = { viewModel.setImportRecordingSchedules(it) },
                 onConfirm = { viewModel.confirmBackupImport() }
             )
+        }
+
+        if (showRecordingPatternDialog) {
+            SimpleTextValueDialog(
+                title = stringResource(R.string.settings_recording_pattern_title),
+                subtitle = stringResource(R.string.settings_recording_pattern_hint),
+                initialValue = uiState.recordingStorageState.fileNamePattern,
+                onDismiss = { showRecordingPatternDialog = false },
+                onConfirm = { pattern ->
+                    viewModel.updateRecordingFileNamePattern(pattern)
+                    showRecordingPatternDialog = false
+                }
+            )
+        }
+
+        if (showRecordingRetentionDialog) {
+            val retentionOptions = listOf<Int?>(null, 7, 14, 30, 60, 90)
+            PremiumSelectionDialog(
+                title = stringResource(R.string.settings_recording_retention_title),
+                onDismiss = { showRecordingRetentionDialog = false }
+            ) {
+                retentionOptions.forEachIndexed { index, days ->
+                    LevelOption(
+                        level = index,
+                        text = if (days == null) {
+                            stringResource(R.string.settings_recording_retention_keep_all)
+                        } else {
+                            stringResource(R.string.settings_recording_retention_days, days)
+                        },
+                        currentLevel = if (days == uiState.recordingStorageState.retentionDays) index else -1,
+                        onSelect = {
+                            viewModel.updateRecordingRetentionDays(days)
+                            showRecordingRetentionDialog = false
+                        }
+                    )
+                }
+            }
+        }
+
+        if (showRecordingConcurrencyDialog) {
+            PremiumSelectionDialog(
+                title = stringResource(R.string.settings_recording_concurrency_title),
+                onDismiss = { showRecordingConcurrencyDialog = false }
+            ) {
+                (1..4).forEach { value ->
+                    LevelOption(
+                        level = value,
+                        text = value.toString(),
+                        currentLevel = if (value == uiState.recordingStorageState.maxSimultaneousRecordings) value else -1,
+                        onSelect = {
+                            viewModel.updateRecordingMaxSimultaneous(value)
+                            showRecordingConcurrencyDialog = false
+                        }
+                    )
+                }
+            }
         }
 
         if (showClearHistoryDialog) {
@@ -3466,11 +3556,21 @@ private fun BackupToggleRow(
 
 @Composable
 private fun RecordingOverviewCard(
+    treeLabel: String?,
     outputDirectory: String?,
     availableBytes: Long?,
     isWritable: Boolean,
     activeCount: Int,
-    scheduledCount: Int
+    scheduledCount: Int,
+    fileNamePattern: String,
+    retentionDays: Int?,
+    maxSimultaneousRecordings: Int,
+    onChooseFolder: () -> Unit,
+    onUseAppStorage: () -> Unit,
+    onChangePattern: () -> Unit,
+    onChangeRetention: () -> Unit,
+    onChangeConcurrency: () -> Unit,
+    onRepairSchedule: () -> Unit
 ) {
     TvClickableSurface(
         onClick = {},
@@ -3497,6 +3597,13 @@ private fun RecordingOverviewCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = OnSurfaceDim
             )
+            treeLabel?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Secondary
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 SettingsOverviewStat(
                     label = stringResource(R.string.settings_recording_active_label),
@@ -3519,6 +3626,33 @@ private fun RecordingOverviewCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = if (isWritable) Primary else ErrorColor
             )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                RecordingMetaPill(
+                    label = stringResource(R.string.settings_recording_pattern_title),
+                    value = fileNamePattern
+                )
+                RecordingMetaPill(
+                    label = stringResource(R.string.settings_recording_retention_title),
+                    value = retentionDays?.let {
+                        stringResource(R.string.settings_recording_retention_days, it)
+                    } ?: stringResource(R.string.settings_recording_retention_keep_all)
+                )
+                RecordingMetaPill(
+                    label = stringResource(R.string.settings_recording_concurrency_title),
+                    value = maxSimultaneousRecordings.toString()
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                RecordingActionButton(stringResource(R.string.settings_recording_choose_folder), Primary, onChooseFolder)
+                RecordingActionButton(stringResource(R.string.settings_recording_use_app_storage), Secondary, onUseAppStorage)
+                RecordingActionButton(stringResource(R.string.settings_recording_pattern_title), OnBackground, onChangePattern)
+                RecordingActionButton(stringResource(R.string.settings_recording_retention_title), OnBackground, onChangeRetention)
+                RecordingActionButton(stringResource(R.string.settings_recording_concurrency_title), OnBackground, onChangeConcurrency)
+                RecordingActionButton(stringResource(R.string.settings_recording_reconcile), Secondary, onRepairSchedule)
+            }
         }
     }
 }
@@ -3528,7 +3662,9 @@ private fun RecordingItemCard(
     item: RecordingItem,
     onStop: () -> Unit,
     onCancel: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onRetry: () -> Unit,
+    onToggleSchedule: (Boolean) -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -3589,6 +3725,44 @@ private fun RecordingItemCard(
             item.failureReason?.takeIf { it.isNotBlank() }?.let { reason ->
                 Text(reason, style = MaterialTheme.typography.bodySmall, color = ErrorColor)
             }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                RecordingMetaPill(
+                    label = stringResource(R.string.settings_recording_source_label),
+                    value = formatRecordingSourceType(item.sourceType)
+                )
+                RecordingMetaPill(
+                    label = stringResource(R.string.settings_recording_bytes_label),
+                    value = formatBytes(item.bytesWritten)
+                )
+                RecordingMetaPill(
+                    label = stringResource(R.string.settings_recording_speed_label),
+                    value = if (item.averageThroughputBytesPerSecond > 0L) {
+                        "${formatBytes(item.averageThroughputBytesPerSecond)}/s"
+                    } else {
+                        "–"
+                    }
+                )
+                if (item.retryCount > 0) {
+                    RecordingMetaPill(
+                        label = stringResource(R.string.settings_recording_retry_count_label),
+                        value = item.retryCount.toString()
+                    )
+                }
+            }
+            item.outputDisplayPath?.takeIf { it.isNotBlank() }?.let { output ->
+                Text(
+                    text = "${stringResource(R.string.settings_recording_output_label)}: $output",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OnSurfaceDim
+                )
+            }
+            if (item.failureCategory != RecordingFailureCategory.NONE) {
+                Text(
+                    text = "${stringResource(R.string.settings_recording_failure_label)}: ${formatRecordingFailureCategory(item.failureCategory)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ErrorColor
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (item.status == RecordingStatus.RECORDING) {
                     TvClickableSurface(
@@ -3608,6 +3782,23 @@ private fun RecordingItemCard(
                 }
                 if (item.status == RecordingStatus.SCHEDULED) {
                     TvClickableSurface(
+                        onClick = { onToggleSchedule(!item.scheduleEnabled) },
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Secondary.copy(alpha = 0.16f),
+                            focusedContainerColor = Secondary.copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Text(
+                            text = stringResource(
+                                if (item.scheduleEnabled) R.string.settings_recording_disable
+                                else R.string.settings_recording_enable
+                            ),
+                            color = Secondary,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                        )
+                    }
+                    TvClickableSurface(
                         onClick = onCancel,
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                         colors = ClickableSurfaceDefaults.colors(
@@ -3623,6 +3814,22 @@ private fun RecordingItemCard(
                     }
                 }
                 if (item.status == RecordingStatus.COMPLETED || item.status == RecordingStatus.FAILED || item.status == RecordingStatus.CANCELLED) {
+                    if (item.status == RecordingStatus.FAILED) {
+                        TvClickableSurface(
+                            onClick = onRetry,
+                            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                            colors = ClickableSurfaceDefaults.colors(
+                                containerColor = Primary.copy(alpha = 0.16f),
+                                focusedContainerColor = Primary.copy(alpha = 0.3f)
+                            )
+                        ) {
+                            Text(
+                                text = stringResource(R.string.settings_recording_retry),
+                                color = Primary,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                            )
+                        }
+                    }
                     TvClickableSurface(
                         onClick = onDelete,
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
@@ -4059,6 +4266,94 @@ private fun formatPlaybackSpeedLabel(speed: Float): String {
     } else {
         "${("%.2f".format(Locale.US, speed)).trimEnd('0').trimEnd('.')}x"
     }
+}
+
+@Composable
+private fun RecordingMetaPill(label: String, value: String) {
+    Column(
+        modifier = Modifier
+            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+    ) {
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = OnSurfaceDim)
+        Text(text = value, style = MaterialTheme.typography.bodySmall, color = OnBackground)
+    }
+}
+
+@Composable
+private fun RecordingActionButton(label: String, accent: Color, onClick: () -> Unit) {
+    TvClickableSurface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = accent.copy(alpha = 0.14f),
+            focusedContainerColor = accent.copy(alpha = 0.28f)
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f)
+    ) {
+        Text(
+            text = label,
+            color = accent,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+        )
+    }
+}
+
+@Composable
+private fun SimpleTextValueDialog(
+    title: String,
+    subtitle: String,
+    initialValue: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var value by remember(initialValue) { mutableStateOf(initialValue) }
+    PremiumDialog(
+        title = title,
+        subtitle = subtitle,
+        onDismissRequest = onDismiss,
+        widthFraction = 0.58f,
+        content = {
+            EpgSourceTextField(
+                value = value,
+                onValueChange = { value = it },
+                placeholder = initialValue
+            )
+        },
+        footer = {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                PremiumDialogFooterButton(
+                    label = stringResource(R.string.settings_cancel),
+                    onClick = onDismiss
+                )
+                PremiumDialogActionButton(
+                    label = stringResource(R.string.settings_save),
+                    onClick = { onConfirm(value.trim()) }
+                )
+            }
+        }
+    )
+}
+
+private fun formatRecordingSourceType(sourceType: RecordingSourceType): String = when (sourceType) {
+    RecordingSourceType.TS -> "TS"
+    RecordingSourceType.HLS -> "HLS"
+    RecordingSourceType.DASH -> "DASH"
+    RecordingSourceType.UNKNOWN -> "Auto"
+}
+
+private fun formatRecordingFailureCategory(category: RecordingFailureCategory): String = when (category) {
+    RecordingFailureCategory.NONE -> "None"
+    RecordingFailureCategory.NETWORK -> "Network"
+    RecordingFailureCategory.STORAGE -> "Storage"
+    RecordingFailureCategory.AUTH -> "Auth"
+    RecordingFailureCategory.TOKEN_EXPIRED -> "Token"
+    RecordingFailureCategory.DRM_UNSUPPORTED -> "DRM"
+    RecordingFailureCategory.FORMAT_UNSUPPORTED -> "Format"
+    RecordingFailureCategory.SCHEDULE_CONFLICT -> "Conflict"
+    RecordingFailureCategory.PROVIDER_LIMIT -> "Connection limit"
+    RecordingFailureCategory.UNKNOWN -> "Unknown"
 }
 
 private fun playerTimeoutOptions(): List<Int> = listOf(2, 3, 4, 5, 6, 8, 10, 15, 20, 30)

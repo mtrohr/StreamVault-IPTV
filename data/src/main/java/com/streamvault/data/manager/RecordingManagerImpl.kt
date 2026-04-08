@@ -1,620 +1,704 @@
 package com.streamvault.data.manager
 
 import android.content.Context
-import android.os.StatFs
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.streamvault.data.remote.xtream.XtreamStreamUrlResolver
+import com.streamvault.data.local.dao.ProviderDao
+import com.streamvault.data.local.dao.RecordingRunDao
+import com.streamvault.data.local.dao.RecordingScheduleDao
+import com.streamvault.data.local.dao.RecordingStorageDao
+import com.streamvault.data.local.entity.RecordingRunEntity
+import com.streamvault.data.local.entity.RecordingScheduleEntity
+import com.streamvault.data.local.entity.RecordingStorageEntity
+import com.streamvault.data.manager.recording.CaptureProgress
+import com.streamvault.data.manager.recording.HlsLiveCaptureEngine
+import com.streamvault.data.manager.recording.RecordingAlarmScheduler
+import com.streamvault.data.manager.recording.RecordingForegroundService
+import com.streamvault.data.manager.recording.RecordingOutputTarget
+import com.streamvault.data.manager.recording.RecordingSourceResolver
+import com.streamvault.data.manager.recording.ResolvedRecordingSource
+import com.streamvault.data.manager.recording.TsPassThroughCaptureEngine
+import com.streamvault.data.manager.recording.UnsupportedRecordingException
+import com.streamvault.data.manager.recording.asPersistenceValues
+import com.streamvault.data.manager.recording.createOutputTarget
+import com.streamvault.data.manager.recording.deleteOutputTarget
+import com.streamvault.data.manager.recording.headersFromJson
+import com.streamvault.data.manager.recording.headersToJson
+import com.streamvault.data.manager.recording.inferFailureCategory
+import com.streamvault.data.manager.recording.resolveStorageDetails
+import com.streamvault.data.manager.recording.sanitizeRecordingFileName
+import com.streamvault.data.manager.recording.toEntity
+import com.streamvault.data.manager.recording.toDomain
 import com.streamvault.domain.manager.RecordingManager
-import com.streamvault.domain.model.ContentType
+import com.streamvault.domain.model.RecordingFailureCategory
 import com.streamvault.domain.model.RecordingItem
 import com.streamvault.domain.model.RecordingRecurrence
 import com.streamvault.domain.model.RecordingRequest
+import com.streamvault.domain.model.RecordingSourceType
 import com.streamvault.domain.model.RecordingStatus
+import com.streamvault.domain.model.RecordingStorageConfig
 import com.streamvault.domain.model.RecordingStorageState
 import com.streamvault.domain.model.Result
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import java.io.IOException
-import kotlin.coroutines.coroutineContext
 
 @Singleton
 class RecordingManagerImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val gson: Gson,
-    private val okHttpClient: OkHttpClient,
-    private val xtreamStreamUrlResolver: XtreamStreamUrlResolver
+    private val providerDao: ProviderDao,
+    private val recordingScheduleDao: RecordingScheduleDao,
+    private val recordingRunDao: RecordingRunDao,
+    private val recordingStorageDao: RecordingStorageDao,
+    private val recordingSourceResolver: RecordingSourceResolver,
+    private val tsPassThroughCaptureEngine: TsPassThroughCaptureEngine,
+    private val hlsLiveCaptureEngine: HlsLiveCaptureEngine,
+    private val alarmScheduler: RecordingAlarmScheduler
 ) : RecordingManager {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val stateFile by lazy { File(recordingsDir, "recordings_state.json") }
-    private val recordingsDir by lazy { File(context.filesDir, "recordings").apply { mkdirs() } }
-
-    private val itemsState = MutableStateFlow(loadState())
-    private val storageState = MutableStateFlow(readStorageState())
-    private val stateMutex = Mutex()
     private val activeJobs = mutableMapOf<String, Job>()
-    private var lastRetentionSweepMs = 0L
-
-    /** Cancels the background polling coroutine. Call when the manager is no longer needed. */
-    fun cancel() {
-        scope.cancel()
-    }
+    private val activeJobsMutex = Mutex()
+    private val legacyStateFile by lazy { File(File(context.filesDir, "recordings"), "recordings_state.json") }
 
     init {
         scope.launch {
-            while (isActive) {
-                processSchedules()
-                runRetentionSweepIfDue()
-                storageState.value = readStorageState()
-                delay(15_000L)
-            }
+            migrateLegacyStateIfNeeded()
+            ensureStorageState()
+            reconcileRecordingState()
         }
     }
 
-    override fun observeRecordingItems(): Flow<List<RecordingItem>> = itemsState.asStateFlow()
+    override fun observeRecordingItems(): Flow<List<RecordingItem>> =
+        recordingRunDao.observeAll().map { runs -> runs.map { it.toDomain() } }
 
-    override fun observeStorageState(): Flow<RecordingStorageState> = storageState.asStateFlow()
+    override fun observeStorageState(): Flow<RecordingStorageState> =
+        recordingStorageDao.observe().map { entity ->
+            (entity ?: ensureStorageStateSync()).toDomain()
+        }
 
     override suspend fun startManualRecording(request: RecordingRequest): Result<RecordingItem> = withContext(Dispatchers.IO) {
-        val effectiveStreamUrl = resolveRecordingStreamUrl(request.providerId, request.channelId, request.streamUrl)
-            ?: return@withContext Result.error("Recording stream URL could not be resolved.")
-        if (isAdaptiveStream(effectiveStreamUrl)) {
-            return@withContext Result.error("Live recording currently supports direct stream URLs only. Adaptive streams are not recordable yet.")
-        }
-        if (!storageState.value.isWritable) {
-            return@withContext Result.error("Recording storage is not writable.")
-        }
+        runCatching {
+            val storage = ensureStorageStateSync()
+            if (!storage.isWritable) {
+                return@withContext Result.error("Recording storage is not writable.")
+            }
+            validateRecordingWindow(request.scheduledStartMs, request.scheduledEndMs, request.providerId)
+                ?.let { return@withContext Result.error(it) }
 
-        val item = RecordingItem(
-            id = UUID.randomUUID().toString(),
-            providerId = request.providerId,
-            channelId = request.channelId,
-            channelName = request.channelName,
-            streamUrl = request.streamUrl,
-            scheduledStartMs = System.currentTimeMillis(),
-            scheduledEndMs = request.scheduledEndMs,
-            programTitle = request.programTitle,
-            outputPath = request.outputPath ?: buildOutputFile(request).absolutePath,
-            recurrence = RecordingRecurrence.NONE,
-            recurringRuleId = null,
-            status = RecordingStatus.RECORDING
+            val scheduleId = recordingScheduleDao.insert(
+                RecordingScheduleEntity(
+                    providerId = request.providerId,
+                    channelId = request.channelId,
+                    channelName = request.channelName,
+                    streamUrl = request.streamUrl,
+                    programTitle = request.programTitle,
+                    requestedStartMs = request.scheduledStartMs,
+                    requestedEndMs = request.scheduledEndMs,
+                    recurrence = RecordingRecurrence.NONE,
+                    enabled = true,
+                    isManual = true,
+                    priority = request.priority
+                )
+            )
+
+            val recordingId = UUID.randomUUID().toString()
+            val source = resolveRecordableSource(request.providerId, request.channelId, request.streamUrl)
+            val outputTarget = createOutputTarget(
+                context = context,
+                storage = storage,
+                fileName = sanitizeRecordingFileName(
+                    channelName = request.channelName,
+                    programTitle = request.programTitle,
+                    startMs = request.scheduledStartMs,
+                    pattern = storage.fileNamePattern
+                )
+            )
+            val (outputUri, outputDisplayPath) = outputTarget.asPersistenceValues()
+            val now = System.currentTimeMillis()
+            val run = RecordingRunEntity(
+                id = recordingId,
+                scheduleId = scheduleId,
+                providerId = request.providerId,
+                channelId = request.channelId,
+                channelName = request.channelName,
+                streamUrl = request.streamUrl,
+                programTitle = request.programTitle,
+                scheduledStartMs = request.scheduledStartMs,
+                scheduledEndMs = request.scheduledEndMs,
+                recurrence = RecordingRecurrence.NONE,
+                status = RecordingStatus.RECORDING,
+                sourceType = source.sourceType,
+                resolvedUrl = source.url,
+                headersJson = headersToJson(gson, source.headers),
+                userAgent = source.userAgent,
+                expirationTime = source.expirationTime,
+                providerLabel = source.providerLabel,
+                outputUri = outputUri,
+                outputDisplayPath = outputDisplayPath,
+                startedAtMs = now,
+                scheduleEnabled = true,
+                priority = request.priority,
+                alarmStopAtMs = request.scheduledEndMs,
+                createdAt = now,
+                updatedAt = now
+            )
+            recordingRunDao.insert(run)
+            alarmScheduler.scheduleStop(recordingId, request.scheduledEndMs)
+            RecordingForegroundService.startCapture(context, recordingId)
+            run.toStandaloneDomain()
+        }.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { error -> Result.error(error.message ?: "Failed to start recording", error) }
         )
-        val conflict = appendItemIfNoConflict(item)
-        if (conflict != null) {
-            return@withContext Result.error(recordingConflictMessage(conflict))
-        }
-        startCapture(item)
-        storageState.value = readStorageState()
-        Result.success(item)
     }
 
     override suspend fun scheduleRecording(request: RecordingRequest): Result<RecordingItem> = withContext(Dispatchers.IO) {
-        val item = RecordingItem(
-            id = UUID.randomUUID().toString(),
-            providerId = request.providerId,
-            channelId = request.channelId,
-            channelName = request.channelName,
-            streamUrl = request.streamUrl,
-            scheduledStartMs = request.scheduledStartMs,
-            scheduledEndMs = request.scheduledEndMs,
-            programTitle = request.programTitle,
-            outputPath = request.outputPath ?: buildOutputFile(request).absolutePath,
-            recurrence = request.recurrence,
-            recurringRuleId = request.recurringRuleId ?: request.recurrence.takeIf { it != RecordingRecurrence.NONE }?.let { UUID.randomUUID().toString() },
-            status = RecordingStatus.SCHEDULED
+        runCatching {
+            val storage = ensureStorageStateSync()
+            if (!storage.isWritable) {
+                return@withContext Result.error("Recording storage is not writable.")
+            }
+            validateRecordingWindow(request.scheduledStartMs, request.scheduledEndMs, request.providerId)
+                ?.let { return@withContext Result.error(it) }
+
+            val recurringRuleId = request.recurringRuleId
+                ?: request.recurrence.takeIf { it != RecordingRecurrence.NONE }?.let { UUID.randomUUID().toString() }
+            val scheduleId = recordingScheduleDao.insert(
+                RecordingScheduleEntity(
+                    providerId = request.providerId,
+                    channelId = request.channelId,
+                    channelName = request.channelName,
+                    streamUrl = request.streamUrl,
+                    programTitle = request.programTitle,
+                    requestedStartMs = request.scheduledStartMs,
+                    requestedEndMs = request.scheduledEndMs,
+                    recurrence = request.recurrence,
+                    recurringRuleId = recurringRuleId,
+                    enabled = true,
+                    isManual = false,
+                    priority = request.priority
+                )
+            )
+            val run = createPendingRun(
+                scheduleId = scheduleId,
+                request = request.copy(recurringRuleId = recurringRuleId)
+            )
+            recordingRunDao.insert(run)
+            alarmScheduler.scheduleStart(run.id, run.scheduledStartMs)
+            run.toStandaloneDomain()
+        }.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { error -> Result.error(error.message ?: "Failed to schedule recording", error) }
         )
-        val conflict = appendItemIfNoConflict(item)
-        if (conflict != null) {
-            return@withContext Result.error(recordingConflictMessage(conflict))
-        }
-        Result.success(item)
     }
 
     override suspend fun stopRecording(recordingId: String): Result<Unit> = withContext(Dispatchers.IO) {
-        removeActiveJob(recordingId)?.cancel()
-        val item = getItem(recordingId)
-            ?: return@withContext Result.error("Recording not found")
+        val run = recordingRunDao.getById(recordingId) ?: return@withContext Result.error("Recording not found")
+        cancelActiveJob(recordingId)
+        alarmScheduler.cancel(recordingId)
         val now = System.currentTimeMillis()
-        val fileLength = item.outputPath?.let { path -> File(path).takeIf { it.exists() }?.length() } ?: 0L
-        updateItem(recordingId) {
-            it.copy(
-                status = if (fileLength > 0L) RecordingStatus.COMPLETED else RecordingStatus.CANCELLED,
-                scheduledEndMs = now,
-                terminalAtMs = now
+        recordingRunDao.update(
+            run.copy(
+                status = if (run.bytesWritten > 0L) RecordingStatus.COMPLETED else RecordingStatus.CANCELLED,
+                endedAtMs = now,
+                terminalAtMs = now,
+                updatedAt = now
             )
-        }
+        )
         Result.success(Unit)
     }
 
     override suspend fun cancelRecording(recordingId: String): Result<Unit> = withContext(Dispatchers.IO) {
-        removeActiveJob(recordingId)?.cancel()
+        val run = recordingRunDao.getById(recordingId) ?: return@withContext Result.error("Recording not found")
+        cancelActiveJob(recordingId)
+        alarmScheduler.cancel(recordingId)
         val now = System.currentTimeMillis()
-        updateItem(recordingId) {
-            it.copy(
+        recordingRunDao.update(
+            run.copy(
                 status = RecordingStatus.CANCELLED,
-                terminalAtMs = now
+                terminalAtMs = now,
+                endedAtMs = now,
+                scheduleEnabled = false,
+                updatedAt = now
             )
+        )
+        recordingScheduleDao.getById(run.scheduleId)?.let { schedule ->
+            recordingScheduleDao.update(schedule.copy(enabled = false, updatedAt = now))
         }
         Result.success(Unit)
     }
 
     override suspend fun deleteRecording(recordingId: String): Result<Unit> = withContext(Dispatchers.IO) {
-        removeActiveJob(recordingId)?.cancel()
-        val item = getItem(recordingId)
-            ?: return@withContext Result.error("Recording not found")
-        if (item.status == RecordingStatus.RECORDING || item.status == RecordingStatus.SCHEDULED) {
+        val run = recordingRunDao.getById(recordingId) ?: return@withContext Result.error("Recording not found")
+        if (run.status == RecordingStatus.SCHEDULED || run.status == RecordingStatus.RECORDING) {
             return@withContext Result.error("Only finished recordings can be deleted.")
         }
-        deleteOutputFile(item.outputPath)
-        removeItem(recordingId)
-        storageState.value = readStorageState()
+        deleteOutputTarget(context, run.outputUri, run.outputDisplayPath)
+        recordingRunDao.delete(recordingId)
         Result.success(Unit)
     }
 
-    private suspend fun processSchedules() {
+    override suspend fun retryRecording(recordingId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val run = recordingRunDao.getById(recordingId) ?: return@withContext Result.error("Recording not found")
+        val schedule = recordingScheduleDao.getById(run.scheduleId) ?: return@withContext Result.error("Recording schedule not found")
+        val retriedRun = createPendingRun(
+            scheduleId = schedule.id,
+            request = RecordingRequest(
+                providerId = schedule.providerId,
+                channelId = schedule.channelId,
+                channelName = schedule.channelName,
+                streamUrl = schedule.streamUrl,
+                scheduledStartMs = maxOf(System.currentTimeMillis() + 2_000L, schedule.requestedStartMs),
+                scheduledEndMs = schedule.requestedEndMs,
+                programTitle = schedule.programTitle,
+                recurrence = schedule.recurrence,
+                recurringRuleId = schedule.recurringRuleId,
+                priority = schedule.priority
+            )
+        )
+        recordingRunDao.insert(retriedRun)
+        alarmScheduler.scheduleStart(retriedRun.id, retriedRun.scheduledStartMs)
+        Result.success(Unit)
+    }
+
+    override suspend fun setScheduleEnabled(recordingId: String, enabled: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
+        val run = recordingRunDao.getById(recordingId) ?: return@withContext Result.error("Recording not found")
+        val schedule = recordingScheduleDao.getById(run.scheduleId) ?: return@withContext Result.error("Recording schedule not found")
         val now = System.currentTimeMillis()
-        val snapshot = stateMutex.withLock { itemsState.value }
-
-        snapshot
-            .filter { it.status == RecordingStatus.SCHEDULED && it.scheduledStartMs <= now }
-            .sortedBy(RecordingItem::scheduledStartMs)
-            .forEach { scheduled ->
-                val startDecision = promoteScheduledItemToRecordingIfNoConflict(scheduled.id)
-                if (startDecision == null) {
-                    return@forEach
-                }
-                if (startDecision.conflict != null) {
-                    scheduleNextRecurringOccurrence(startDecision.recording)
-                    val failureTime = System.currentTimeMillis()
-                    updateItemIf(scheduled.id, expectedStatus = RecordingStatus.SCHEDULED) {
-                        it.copy(
-                            status = RecordingStatus.FAILED,
-                            failureReason = recordingConflictMessage(startDecision.conflict),
-                            terminalAtMs = failureTime
-                        )
-                    }
-                    return@forEach
-                }
-
-                scheduleNextRecurringOccurrence(startDecision.recording)
-
-                val effectiveStreamUrl = resolveRecordingStreamUrl(scheduled.providerId, scheduled.channelId, scheduled.streamUrl)
-                if (effectiveStreamUrl == null) {
-                    val failureTime = System.currentTimeMillis()
-                    updateItemIf(scheduled.id, expectedStatus = RecordingStatus.RECORDING) {
-                        it.copy(
-                            status = RecordingStatus.FAILED,
-                            failureReason = "Recording stream URL could not be resolved.",
-                            terminalAtMs = failureTime
-                        )
-                    }
-                } else if (isAdaptiveStream(effectiveStreamUrl)) {
-                    val failureTime = System.currentTimeMillis()
-                    updateItemIf(scheduled.id, expectedStatus = RecordingStatus.RECORDING) {
-                        it.copy(
-                            status = RecordingStatus.FAILED,
-                            failureReason = "Scheduled recording supports direct stream URLs only.",
-                            terminalAtMs = failureTime
-                        )
-                    }
-                } else {
-                    startCapture(startDecision.recording)
-                }
-            }
-
-        snapshot
-            .filter { it.status == RecordingStatus.RECORDING && it.scheduledEndMs in 1 until now }
-            .forEach { stopCandidate ->
-                removeActiveJob(stopCandidate.id)?.cancel()
-                val fileLength = stopCandidate.outputPath?.let { path -> File(path).takeIf { it.exists() }?.length() } ?: 0L
-                updateItemIf(stopCandidate.id, expectedStatus = RecordingStatus.RECORDING) {
-                    it.copy(
-                        status = if (fileLength > 0L) RecordingStatus.COMPLETED else RecordingStatus.CANCELLED,
-                        scheduledEndMs = now,
-                        terminalAtMs = now
-                    )
-                }
-            }
-    }
-
-    private suspend fun startCapture(item: RecordingItem) {
-        val job = scope.launch(start = CoroutineStart.LAZY) {
-            val outputFile = File(item.outputPath ?: return@launch)
-            outputFile.parentFile?.mkdirs()
-            runCatching {
-                captureStreamToFile(item, outputFile)
-            }.onSuccess {
-                val completedAt = System.currentTimeMillis()
-                updateItemIf(item.id, expectedStatus = RecordingStatus.RECORDING) { current ->
-                    current.copy(status = RecordingStatus.COMPLETED, terminalAtMs = completedAt)
-                }
-            }.onFailure { error ->
-                if (error is CancellationException) {
-                    val cancelledAt = System.currentTimeMillis()
-                    val fileLength = outputFile.takeIf { it.exists() }?.length() ?: 0L
-                    updateItemIf(item.id, expectedStatus = RecordingStatus.RECORDING) { current ->
-                        current.copy(
-                            status = if (fileLength > 0L) RecordingStatus.COMPLETED else RecordingStatus.CANCELLED,
-                            terminalAtMs = cancelledAt
-                        )
-                    }
-                } else {
-                    val failureTime = System.currentTimeMillis()
-                    updateItemIf(item.id, expectedStatus = RecordingStatus.RECORDING) { current ->
-                        current.copy(
-                            status = RecordingStatus.FAILED,
-                            failureReason = error.message,
-                            terminalAtMs = failureTime
-                        )
-                    }
-                }
-            }
-            removeActiveJob(item.id)
-            storageState.value = readStorageState()
+        recordingScheduleDao.update(schedule.copy(enabled = enabled, updatedAt = now))
+        recordingRunDao.update(run.copy(scheduleEnabled = enabled, updatedAt = now))
+        if (enabled && run.status == RecordingStatus.SCHEDULED) {
+            alarmScheduler.scheduleStart(run.id, run.scheduledStartMs)
+        } else {
+            alarmScheduler.cancel(run.id)
         }
-        val replaced = stateMutex.withLock { activeJobs.putIfAbsent(item.id, job) }
-        if (replaced != null) {
-            job.cancel()
-            return
-        }
-        job.start()
+        Result.success(Unit)
     }
 
-    private suspend fun captureStreamToFile(item: RecordingItem, outputFile: File) {
-        val resolvedUrl = resolveRecordingStreamUrl(item.providerId, item.channelId, item.streamUrl)
-            ?: throw IOException("Recording stream URL could not be resolved")
-        var attempt = 0
-        var retryDelayMs = 1_000L
-        while (true) {
-            currentCoroutineContext().ensureActive()
-            try {
-                streamResponseBody(resolvedUrl, outputFile)
-                return
-            } catch (error: Throwable) {
-                if (error is CancellationException || !isRetryableRecordingError(error) || attempt >= MAX_RECORDING_RETRIES) {
-                    throw error
-                }
-                attempt++
-                delay(retryDelayMs)
-                retryDelayMs = (retryDelayMs * 2).coerceAtMost(8_000L)
-            }
-        }
-    }
-
-    private fun buildOutputFile(request: RecordingRequest): File {
-        return buildOutputFile(request.channelName, request.scheduledStartMs)
-    }
-
-    private fun buildOutputFile(channelName: String, scheduledStartMs: Long): File {
-        val safeName = channelName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-        return File(recordingsDir, "${safeName}_${scheduledStartMs}.ts")
-    }
-
-    private fun readStorageState(): RecordingStorageState {
-        recordingsDir.mkdirs()
-        val stat = StatFs(recordingsDir.absolutePath)
-        return RecordingStorageState(
-            outputDirectory = recordingsDir.absolutePath,
-            availableBytes = stat.availableBytes,
-            isWritable = recordingsDir.canWrite()
+    override suspend fun updateStorageConfig(config: RecordingStorageConfig): Result<RecordingStorageState> = withContext(Dispatchers.IO) {
+        runCatching {
+            val existing = recordingStorageDao.get()
+            val (outputDirectory, availableBytes, isWritable) = resolveStorageDetails(context, config.treeUri)
+            val entity = config.toEntity(existing, outputDirectory, availableBytes, isWritable)
+            recordingStorageDao.upsert(entity)
+            reconcileRecordingState()
+            entity.toDomain()
+        }.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { error -> Result.error(error.message ?: "Failed to update recording storage", error) }
         )
     }
 
-    private fun persistStateLocked() {
-        stateFile.parentFile?.mkdirs()
-        val tmpFile = File(stateFile.parentFile, "${stateFile.name}.tmp")
-        tmpFile.writeText(gson.toJson(itemsState.value))
-        tmpFile.renameTo(stateFile)
+    override suspend fun reconcileRecordingState(): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching<Unit> {
+            ensureStorageState()
+            recordingRunDao.getAlarmManagedScheduledRuns()
+                .filter { it.scheduleEnabled && it.status == RecordingStatus.SCHEDULED }
+                .forEach { run ->
+                    if (run.scheduledEndMs <= System.currentTimeMillis()) {
+                        markRunFailed(run.id, "Recording window expired before capture started.", RecordingFailureCategory.UNKNOWN)
+                    } else {
+                        alarmScheduler.scheduleStart(run.id, run.scheduledStartMs)
+                    }
+                }
+            recordingRunDao.getRecordingRuns().forEach { run ->
+                if (run.scheduledEndMs <= System.currentTimeMillis()) {
+                    stopRecording(run.id)
+                } else if (!isActiveJob(run.id)) {
+                    RecordingForegroundService.startCapture(context, run.id)
+                }
+            }
+        }.fold(
+            onSuccess = { Result.success(Unit) },
+            onFailure = { error -> Result.error(error.message ?: "Failed to reconcile recording state", error) }
+        )
     }
 
-    private fun loadState(): List<RecordingItem> {
-        if (!stateFile.exists()) return emptyList()
-        return runCatching {
-            val listType = object : TypeToken<List<RecordingItem>>() {}.type
-            FileInputStream(stateFile).bufferedReader().use { reader ->
+    override suspend fun promoteScheduledRecording(recordingId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val run = recordingRunDao.getById(recordingId) ?: return@withContext Result.error("Recording not found")
+        when (run.status) {
+            RecordingStatus.RECORDING -> startCapture(run)
+            RecordingStatus.SCHEDULED -> {
+                val source = resolveRecordableSource(run.providerId, run.channelId, run.streamUrl)
+                val storage = ensureStorageStateSync()
+                if (!storage.isWritable) {
+                    return@withContext Result.error("Recording storage is not writable.")
+                }
+                val outputTarget = if (!run.outputUri.isNullOrBlank() || !run.outputDisplayPath.isNullOrBlank()) {
+                    existingOutputTarget(run)
+                } else {
+                    createOutputTarget(
+                        context = context,
+                        storage = storage,
+                        fileName = sanitizeRecordingFileName(run.channelName, run.programTitle, run.scheduledStartMs, storage.fileNamePattern)
+                    )
+                }
+                val (outputUri, outputDisplayPath) = outputTarget.asPersistenceValues()
+                val now = System.currentTimeMillis()
+                val updatedRun = run.copy(
+                    status = RecordingStatus.RECORDING,
+                    sourceType = source.sourceType,
+                    resolvedUrl = source.url,
+                    headersJson = headersToJson(gson, source.headers),
+                    userAgent = source.userAgent,
+                    expirationTime = source.expirationTime,
+                    providerLabel = source.providerLabel,
+                    outputUri = outputUri ?: run.outputUri,
+                    outputDisplayPath = outputDisplayPath ?: run.outputDisplayPath,
+                    startedAtMs = now,
+                    updatedAt = now,
+                    alarmStopAtMs = run.scheduledEndMs
+                )
+                recordingRunDao.update(updatedRun)
+                alarmScheduler.scheduleStop(updatedRun.id, updatedRun.scheduledEndMs)
+                spawnNextRecurringRunIfNeeded(updatedRun)
+                startCapture(updatedRun)
+            }
+            else -> Result.error("Recording is no longer active.")
+        }
+    }
+
+    internal suspend fun onCaptureFinished(recordingId: String) {
+        val remaining = observeActiveRecordingCountSync().coerceAtLeast(0)
+        if (remaining == 0) {
+            RecordingForegroundService.stopIfIdle(context)
+        }
+    }
+
+    private suspend fun startCapture(run: RecordingRunEntity): Result<Unit> {
+        if (isActiveJob(run.id)) return Result.success(Unit)
+        val target = existingOutputTarget(run)
+        val source = ResolvedRecordingSource(
+            url = run.resolvedUrl ?: return Result.error("Recording stream URL could not be resolved."),
+            sourceType = run.sourceType,
+            headers = headersFromJson(gson, run.headersJson),
+            userAgent = run.userAgent,
+            expirationTime = run.expirationTime,
+            providerLabel = run.providerLabel
+        )
+        val engine = when (source.sourceType) {
+            RecordingSourceType.HLS -> hlsLiveCaptureEngine
+            RecordingSourceType.TS,
+            RecordingSourceType.UNKNOWN -> tsPassThroughCaptureEngine
+            RecordingSourceType.DASH -> return Result.error("DASH live recording is not supported yet.")
+        }
+        val job = scope.launch {
+            try {
+                engine.capture(
+                    source = source,
+                    outputTarget = target,
+                    contentResolver = context.contentResolver,
+                    scheduledEndMs = run.scheduledEndMs,
+                    onProgress = { progress -> updateRunProgress(run.id, progress) }
+                )
+                completeRun(run.id)
+            } catch (cancelled: CancellationException) {
+                Log.i("RecordingManager", "Capture cancelled for ${run.id}")
+            } catch (unsupported: UnsupportedRecordingException) {
+                markRunFailed(run.id, unsupported.message ?: "Recording format is unsupported.", unsupported.category)
+            } catch (error: Throwable) {
+                markRunFailed(run.id, error.message ?: "Recording failed.", inferFailureCategory(error.message))
+            } finally {
+                removeActiveJob(run.id)
+                onCaptureFinished(run.id)
+            }
+        }
+        registerActiveJob(run.id, job)
+        return Result.success(Unit)
+    }
+
+    private suspend fun migrateLegacyStateIfNeeded() {
+        if (!legacyStateFile.exists()) return
+        val hasExistingRuns = runCatching {
+            recordingRunDao.getByStatus(RecordingStatus.SCHEDULED).isNotEmpty() || recordingRunDao.getRecordingRuns().isNotEmpty()
+        }.getOrDefault(false)
+        if (hasExistingRuns) return
+        val listType = object : TypeToken<List<RecordingItem>>() {}.type
+        val legacyItems = runCatching {
+            FileInputStream(legacyStateFile).bufferedReader().use { reader ->
                 gson.fromJson<List<RecordingItem>>(reader, listType).orEmpty()
             }
         }.getOrDefault(emptyList())
+        legacyItems.forEach { item ->
+            val scheduleId = recordingScheduleDao.insert(
+                RecordingScheduleEntity(
+                    providerId = item.providerId,
+                    channelId = item.channelId,
+                    channelName = item.channelName,
+                    streamUrl = item.streamUrl,
+                    programTitle = item.programTitle,
+                    requestedStartMs = item.scheduledStartMs,
+                    requestedEndMs = item.scheduledEndMs,
+                    recurrence = item.recurrence,
+                    recurringRuleId = item.recurringRuleId,
+                    enabled = item.scheduleEnabled,
+                    isManual = item.recurrence == RecordingRecurrence.NONE && item.status == RecordingStatus.RECORDING,
+                    priority = item.priority
+                )
+            )
+            recordingRunDao.insert(
+                RecordingRunEntity(
+                    id = item.id,
+                    scheduleId = scheduleId,
+                    providerId = item.providerId,
+                    channelId = item.channelId,
+                    channelName = item.channelName,
+                    streamUrl = item.streamUrl,
+                    programTitle = item.programTitle,
+                    scheduledStartMs = item.scheduledStartMs,
+                    scheduledEndMs = item.scheduledEndMs,
+                    recurrence = item.recurrence,
+                    recurringRuleId = item.recurringRuleId,
+                    status = item.status,
+                    sourceType = item.sourceType,
+                    outputUri = item.outputUri,
+                    outputDisplayPath = item.outputDisplayPath ?: item.outputPath,
+                    bytesWritten = item.bytesWritten,
+                    averageThroughputBytesPerSecond = item.averageThroughputBytesPerSecond,
+                    retryCount = item.retryCount,
+                    lastProgressAtMs = item.lastProgressAtMs,
+                    failureCategory = item.failureCategory,
+                    failureReason = item.failureReason,
+                    terminalAtMs = item.terminalAtMs,
+                    startedAtMs = item.scheduledStartMs,
+                    endedAtMs = item.terminalAtMs,
+                    scheduleEnabled = item.scheduleEnabled,
+                    priority = item.priority
+                )
+            )
+        }
+        legacyStateFile.delete()
     }
 
-    private fun isAdaptiveStream(url: String): Boolean {
-        val lower = url.lowercase()
-        return lower.contains(".m3u8") || lower.contains(".mpd")
+    private suspend fun ensureStorageState() {
+        ensureStorageStateSync()
     }
 
-    private suspend fun resolveRecordingStreamUrl(providerId: Long, channelId: Long, logicalUrl: String): String? {
-        return xtreamStreamUrlResolver.resolve(
-            url = logicalUrl,
-            fallbackProviderId = providerId,
-            fallbackStreamId = channelId,
-            fallbackContentType = ContentType.LIVE
+    private suspend fun ensureStorageStateSync(): RecordingStorageEntity {
+        val existing = recordingStorageDao.get()
+        if (existing != null) {
+            val (outputDirectory, availableBytes, isWritable) = resolveStorageDetails(context, existing.treeUri)
+            val refreshed = existing.copy(
+                outputDirectory = outputDirectory,
+                availableBytes = availableBytes,
+                isWritable = isWritable,
+                updatedAt = System.currentTimeMillis()
+            )
+            recordingStorageDao.upsert(refreshed)
+            return refreshed
+        }
+        val (outputDirectory, availableBytes, isWritable) = resolveStorageDetails(context, null)
+        return RecordingStorageEntity(
+            outputDirectory = outputDirectory,
+            availableBytes = availableBytes,
+            isWritable = isWritable
+        ).also { recordingStorageDao.upsert(it) }
+    }
+
+    private suspend fun resolveRecordableSource(providerId: Long, channelId: Long, streamUrl: String): ResolvedRecordingSource {
+        val source = recordingSourceResolver.resolveLiveSource(providerId, channelId, streamUrl)
+        return when (source.sourceType) {
+            RecordingSourceType.DASH -> throw UnsupportedRecordingException("DASH live recording is not supported yet.", RecordingFailureCategory.FORMAT_UNSUPPORTED)
+            else -> source
+        }
+    }
+
+    private suspend fun updateRunProgress(recordingId: String, progress: CaptureProgress) {
+        val run = recordingRunDao.getById(recordingId) ?: return
+        recordingRunDao.update(
+            run.copy(
+                bytesWritten = progress.bytesWritten,
+                averageThroughputBytesPerSecond = progress.averageThroughputBytesPerSecond,
+                retryCount = maxOf(run.retryCount, progress.retryCount),
+                lastProgressAtMs = progress.lastProgressAtMs,
+                updatedAt = System.currentTimeMillis()
+            )
         )
     }
 
-    private suspend fun appendItem(item: RecordingItem) {
-        stateMutex.withLock {
-            itemsState.value = itemsState.value + item
-            persistStateLocked()
-        }
-    }
-
-    private suspend fun appendItemIfNoConflict(item: RecordingItem): RecordingItem? = stateMutex.withLock {
-        val conflict = itemsState.value.findRecordingConflict(
-            candidateStartMs = item.scheduledStartMs,
-            candidateEndMs = item.scheduledEndMs,
-            statuses = ACTIVE_RECORDING_STATUSES
-        )
-        if (conflict != null) {
-            return@withLock conflict
-        }
-        itemsState.value = itemsState.value + item
-        persistStateLocked()
-        null
-    }
-
-    private suspend fun removeItem(recordingId: String): RecordingItem? = stateMutex.withLock {
-        val existing = itemsState.value.firstOrNull { it.id == recordingId } ?: return@withLock null
-        itemsState.value = itemsState.value.filterNot { it.id == recordingId }
-        persistStateLocked()
-        existing
-    }
-
-    private suspend fun getItem(recordingId: String): RecordingItem? =
-        stateMutex.withLock { itemsState.value.firstOrNull { it.id == recordingId } }
-
-    private suspend fun updateItem(
-        recordingId: String,
-        transform: (RecordingItem) -> RecordingItem
-    ): RecordingItem? = stateMutex.withLock {
-        var updated: RecordingItem? = null
-        itemsState.value = itemsState.value.map { item ->
-            if (item.id == recordingId) {
-                transform(item).also { updated = it }
-            } else {
-                item
-            }
-        }
-        if (updated != null) {
-            persistStateLocked()
-        }
-        updated
-    }
-
-    private suspend fun updateItemIf(
-        recordingId: String,
-        expectedStatus: RecordingStatus,
-        transform: (RecordingItem) -> RecordingItem
-    ): RecordingItem? = stateMutex.withLock {
-        var updated: RecordingItem? = null
-        itemsState.value = itemsState.value.map { item ->
-            if (item.id == recordingId && item.status == expectedStatus) {
-                transform(item).also { updated = it }
-            } else {
-                item
-            }
-        }
-        if (updated != null) {
-            persistStateLocked()
-        }
-        updated
-    }
-
-    private suspend fun removeActiveJob(recordingId: String): Job? =
-        stateMutex.withLock { activeJobs.remove(recordingId) }
-
-    private suspend fun scheduleNextRecurringOccurrence(source: RecordingItem) {
-        if (source.recurrence == RecordingRecurrence.NONE || source.recurringRuleId.isNullOrBlank()) {
-            return
-        }
-        stateMutex.withLock {
-            val nextStartMs = source.scheduledStartMs + source.recurrence.intervalMs
-            val duplicateExists = itemsState.value.any { item ->
-                item.recurringRuleId == source.recurringRuleId &&
-                    item.scheduledStartMs == nextStartMs &&
-                    item.status == RecordingStatus.SCHEDULED
-            }
-            if (duplicateExists) {
-                return@withLock
-            }
-            val nextItem = source.copy(
-                id = UUID.randomUUID().toString(),
-                scheduledStartMs = nextStartMs,
-                scheduledEndMs = source.scheduledEndMs + source.recurrence.intervalMs,
-                outputPath = buildOutputFile(source.channelName, nextStartMs).absolutePath,
-                status = RecordingStatus.SCHEDULED,
-                failureReason = null,
-                terminalAtMs = null
-            )
-            itemsState.value = itemsState.value + nextItem
-            persistStateLocked()
-        }
-    }
-
-    private suspend fun promoteScheduledItemToRecordingIfNoConflict(recordingId: String): RecordingStartDecision? =
-        stateMutex.withLock {
-            val scheduled = itemsState.value.firstOrNull {
-                it.id == recordingId && it.status == RecordingStatus.SCHEDULED
-            } ?: return@withLock null
-            val conflict = itemsState.value.findRecordingConflict(
-                candidateStartMs = scheduled.scheduledStartMs,
-                candidateEndMs = scheduled.scheduledEndMs,
-                ignoreRecordingId = recordingId,
-                statuses = setOf(RecordingStatus.RECORDING)
-            )
-            if (conflict != null) {
-                return@withLock RecordingStartDecision(recording = scheduled, conflict = conflict)
-            }
-            val updated = scheduled.copy(status = RecordingStatus.RECORDING)
-            itemsState.value = itemsState.value.map { item ->
-                if (item.id == recordingId) updated else item
-            }
-            persistStateLocked()
-            RecordingStartDecision(recording = updated, conflict = null)
-        }
-
-    private suspend fun runRetentionSweepIfDue() {
+    private suspend fun completeRun(recordingId: String) {
+        val run = recordingRunDao.getById(recordingId) ?: return
         val now = System.currentTimeMillis()
-        if (now - lastRetentionSweepMs < RETENTION_SWEEP_INTERVAL_MS) {
-            return
-        }
-        lastRetentionSweepMs = now
-
-        val expiredIds = stateMutex.withLock {
-            itemsState.value
-                .filter { item ->
-                    item.status.isTerminal() &&
-                        item.terminalAtMs?.let { terminalAt -> now - terminalAt >= FINISHED_RECORDING_RETENTION_MS } == true
-                }
-                .map(RecordingItem::id)
-        }
-        if (expiredIds.isEmpty()) {
-            return
-        }
-        expiredIds.forEach { recordingId ->
-            val removed = removeItem(recordingId)
-            deleteOutputFile(removed?.outputPath)
-        }
+        recordingRunDao.update(
+            run.copy(
+                status = RecordingStatus.COMPLETED,
+                terminalAtMs = now,
+                endedAtMs = now,
+                updatedAt = now
+            )
+        )
+        alarmScheduler.cancel(recordingId)
     }
 
-    private fun deleteOutputFile(path: String?) {
-        if (path.isNullOrBlank()) return
-        runCatching {
-            val file = File(path)
-            if (file.exists()) {
-                file.delete()
-            }
+    private suspend fun markRunFailed(recordingId: String, reason: String, category: RecordingFailureCategory) {
+        val run = recordingRunDao.getById(recordingId) ?: return
+        val now = System.currentTimeMillis()
+        recordingRunDao.update(
+            run.copy(
+                status = RecordingStatus.FAILED,
+                failureReason = reason,
+                failureCategory = category,
+                terminalAtMs = now,
+                endedAtMs = now,
+                updatedAt = now
+            )
+        )
+        alarmScheduler.cancel(recordingId)
+    }
+
+    private fun createPendingRun(scheduleId: Long, request: RecordingRequest): RecordingRunEntity {
+        val now = System.currentTimeMillis()
+        return RecordingRunEntity(
+            id = UUID.randomUUID().toString(),
+            scheduleId = scheduleId,
+            providerId = request.providerId,
+            channelId = request.channelId,
+            channelName = request.channelName,
+            streamUrl = request.streamUrl,
+            programTitle = request.programTitle,
+            scheduledStartMs = request.scheduledStartMs,
+            scheduledEndMs = request.scheduledEndMs,
+            recurrence = request.recurrence,
+            recurringRuleId = request.recurringRuleId,
+            status = RecordingStatus.SCHEDULED,
+            scheduleEnabled = true,
+            priority = request.priority,
+            alarmStartAtMs = request.scheduledStartMs,
+            createdAt = now,
+            updatedAt = now
+        )
+    }
+
+    private suspend fun spawnNextRecurringRunIfNeeded(run: RecordingRunEntity) {
+        if (run.recurrence == RecordingRecurrence.NONE || run.recurringRuleId.isNullOrBlank()) return
+        val interval = recurrenceIntervalMs(run.recurrence)
+        val nextStart = run.scheduledStartMs + interval
+        val overlappingPending = recordingRunDao.getByStatus(RecordingStatus.SCHEDULED).any {
+            it.recurringRuleId == run.recurringRuleId && it.scheduledStartMs == nextStart
         }
+        if (overlappingPending) return
+        val nextRun = run.copy(
+            id = UUID.randomUUID().toString(),
+            status = RecordingStatus.SCHEDULED,
+            scheduledStartMs = nextStart,
+            scheduledEndMs = run.scheduledEndMs + interval,
+            sourceType = RecordingSourceType.UNKNOWN,
+            resolvedUrl = null,
+            headersJson = "{}",
+            userAgent = null,
+            expirationTime = null,
+            providerLabel = null,
+            outputUri = null,
+            outputDisplayPath = null,
+            bytesWritten = 0L,
+            averageThroughputBytesPerSecond = 0L,
+            retryCount = 0,
+            lastProgressAtMs = null,
+            failureCategory = RecordingFailureCategory.NONE,
+            failureReason = null,
+            terminalAtMs = null,
+            startedAtMs = null,
+            endedAtMs = null,
+            alarmStartAtMs = nextStart,
+            alarmStopAtMs = null,
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis()
+        )
+        recordingRunDao.insert(nextRun)
+        alarmScheduler.scheduleStart(nextRun.id, nextRun.scheduledStartMs)
     }
 
-    private suspend fun streamResponseBody(url: String, outputFile: File) {
-        val request = Request.Builder().url(url).get().build()
-        val call = okHttpClient.newCall(request)
-        val cancellationHandle = coroutineContext[Job]?.invokeOnCompletion { cause ->
-            if (cause is CancellationException) {
-                call.cancel()
-            }
+    private suspend fun validateRecordingWindow(startMs: Long, endMs: Long, providerId: Long): String? {
+        val storage = ensureStorageStateSync()
+        val overlapping = recordingRunDao.getOverlapping(startMs, endMs)
+            .filter { it.status == RecordingStatus.SCHEDULED || it.status == RecordingStatus.RECORDING }
+            .filter { it.scheduleEnabled }
+        if (overlapping.size >= storage.maxSimultaneousRecordings) {
+            val title = overlapping.firstOrNull()?.programTitle ?: overlapping.firstOrNull()?.channelName.orEmpty()
+            return "Recording conflicts with an existing active recording for $title."
         }
-        try {
-            call.execute().use { response ->
-                ensureSuccessfulRecordingResponse(response)
-                val body = response.body ?: throw IOException("Recording stream returned an empty body")
-                body.byteStream().use { input ->
-                    FileOutputStream(outputFile, false).use { output ->
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                        while (true) {
-                            currentCoroutineContext().ensureActive()
-                            val bytes = input.read(buffer)
-                            if (bytes <= 0) {
-                                break
-                            }
-                            output.write(buffer, 0, bytes)
-                        }
-                    }
-                }
-            }
-        } finally {
-            cancellationHandle?.dispose()
+        val providerMaxConnections = providerDao.getById(providerId)?.maxConnections ?: Int.MAX_VALUE
+        if (overlapping.count { it.providerId == providerId } >= providerMaxConnections) {
+            return "Recording exceeds the provider connection limit for this account."
         }
+        return null
     }
 
-    private fun ensureSuccessfulRecordingResponse(response: Response) {
-        if (response.isSuccessful) {
-            return
+    private suspend fun registerActiveJob(id: String, job: Job) {
+        activeJobsMutex.withLock { activeJobs[id] = job }
+    }
+
+    private suspend fun removeActiveJob(id: String): Job? =
+        activeJobsMutex.withLock { activeJobs.remove(id) }
+
+    private suspend fun cancelActiveJob(id: String) {
+        removeActiveJob(id)?.cancel()
+    }
+
+    private suspend fun isActiveJob(id: String): Boolean =
+        activeJobsMutex.withLock { activeJobs[id]?.isActive == true }
+
+    private suspend fun observeActiveRecordingCountSync(): Int =
+        activeJobsMutex.withLock { activeJobs.values.count { it.isActive } }
+
+    private fun existingOutputTarget(run: RecordingRunEntity): RecordingOutputTarget =
+        when {
+            !run.outputUri.isNullOrBlank() -> RecordingOutputTarget.DocumentTarget(
+                uri = android.net.Uri.parse(run.outputUri),
+                displayPath = run.outputDisplayPath
+            )
+            !run.outputDisplayPath.isNullOrBlank() -> RecordingOutputTarget.FileTarget(File(run.outputDisplayPath))
+            else -> throw IllegalStateException("Recording output target is unavailable.")
         }
-        if (response.code in 500..599 || response.code == 429) {
-            throw IOException("Transient HTTP ${response.code}")
-        }
-        throw IllegalStateException("Recording stream failed with HTTP ${response.code}")
-    }
 
-    private fun isRetryableRecordingError(error: Throwable): Boolean {
-        if (error is IOException) {
-            return true
-        }
-        val message = error.message.orEmpty().lowercase()
-        return message.contains("timeout") ||
-            message.contains("timed out") ||
-            message.contains("connection reset") ||
-            message.contains("connect") ||
-            message.contains("network")
-    }
+    private fun RecordingRunEntity.toStandaloneDomain(): RecordingItem = RecordingItem(
+        id = id,
+        scheduleId = scheduleId,
+        providerId = providerId,
+        channelId = channelId,
+        channelName = channelName,
+        streamUrl = streamUrl,
+        scheduledStartMs = scheduledStartMs,
+        scheduledEndMs = scheduledEndMs,
+        programTitle = programTitle,
+        outputPath = outputDisplayPath,
+        outputUri = outputUri,
+        outputDisplayPath = outputDisplayPath,
+        recurrence = recurrence,
+        recurringRuleId = recurringRuleId,
+        status = status,
+        sourceType = sourceType,
+        bytesWritten = bytesWritten,
+        averageThroughputBytesPerSecond = averageThroughputBytesPerSecond,
+        retryCount = retryCount,
+        lastProgressAtMs = lastProgressAtMs,
+        failureCategory = failureCategory,
+        scheduleEnabled = scheduleEnabled,
+        priority = priority,
+        failureReason = failureReason,
+        terminalAtMs = terminalAtMs
+    )
 
-    private companion object {
-        val ACTIVE_RECORDING_STATUSES = setOf(RecordingStatus.SCHEDULED, RecordingStatus.RECORDING)
-        const val MAX_RECORDING_RETRIES = 3
-        const val FINISHED_RECORDING_RETENTION_MS = 30L * 24L * 60L * 60L * 1000L
-        const val RETENTION_SWEEP_INTERVAL_MS = 60L * 60L * 1000L
-    }
-}
-
-private data class RecordingStartDecision(
-    val recording: RecordingItem,
-    val conflict: RecordingItem?
-)
-
-internal fun List<RecordingItem>.findRecordingConflict(
-    candidateStartMs: Long,
-    candidateEndMs: Long,
-    ignoreRecordingId: String? = null,
-    statuses: Set<RecordingStatus>
-): RecordingItem? = asSequence()
-    .filter { it.id != ignoreRecordingId }
-    .filter { it.status in statuses }
-    .sortedWith(compareBy<RecordingItem> { it.scheduledStartMs }.thenBy { it.id })
-    .firstOrNull { existing ->
-        candidateStartMs < existing.scheduledEndMs && existing.scheduledStartMs < candidateEndMs
-    }
-
-private fun recordingConflictMessage(conflict: RecordingItem): String {
-    val title = conflict.programTitle?.takeIf { it.isNotBlank() } ?: conflict.channelName
-    val stateLabel = when (conflict.status) {
-        RecordingStatus.SCHEDULED -> "scheduled"
-        RecordingStatus.RECORDING -> "active"
-        RecordingStatus.COMPLETED,
-        RecordingStatus.FAILED,
-        RecordingStatus.CANCELLED -> "finished"
-    }
-    return "Recording conflicts with an existing $stateLabel recording for $title on ${conflict.channelName}."
-}
-
-private val RecordingRecurrence.intervalMs: Long
-    get() = when (this) {
+    private fun recurrenceIntervalMs(recurrence: RecordingRecurrence): Long = when (recurrence) {
         RecordingRecurrence.NONE -> 0L
         RecordingRecurrence.DAILY -> 24L * 60L * 60L * 1000L
         RecordingRecurrence.WEEKLY -> 7L * 24L * 60L * 60L * 1000L
     }
-
-private fun RecordingStatus.isTerminal(): Boolean = when (this) {
-    RecordingStatus.SCHEDULED,
-    RecordingStatus.RECORDING -> false
-    RecordingStatus.COMPLETED,
-    RecordingStatus.FAILED,
-    RecordingStatus.CANCELLED -> true
 }

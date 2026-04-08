@@ -8,6 +8,26 @@ enum class RecordingStatus {
     CANCELLED
 }
 
+enum class RecordingSourceType {
+    TS,
+    HLS,
+    DASH,
+    UNKNOWN
+}
+
+enum class RecordingFailureCategory {
+    NONE,
+    NETWORK,
+    STORAGE,
+    AUTH,
+    TOKEN_EXPIRED,
+    DRM_UNSUPPORTED,
+    FORMAT_UNSUPPORTED,
+    SCHEDULE_CONFLICT,
+    PROVIDER_LIMIT,
+    UNKNOWN
+}
+
 enum class RecordingRecurrence {
     NONE,
     DAILY,
@@ -24,7 +44,9 @@ data class RecordingRequest(
     val programTitle: String? = null,
     val outputPath: String? = null,
     val recurrence: RecordingRecurrence = RecordingRecurrence.NONE,
-    val recurringRuleId: String? = null
+    val recurringRuleId: String? = null,
+    val recordNextProgram: Boolean = false,
+    val priority: Int = 0
 ) {
     init {
         require(channelName.isNotBlank()) { "channelName must not be blank" }
@@ -36,6 +58,7 @@ data class RecordingRequest(
 
 data class RecordingItem(
     val id: String,
+    val scheduleId: Long? = null,
     val providerId: Long,
     val channelId: Long,
     val channelName: String,
@@ -44,9 +67,19 @@ data class RecordingItem(
     val scheduledEndMs: Long,
     val programTitle: String? = null,
     val outputPath: String? = null,
+    val outputUri: String? = null,
+    val outputDisplayPath: String? = null,
     val recurrence: RecordingRecurrence = RecordingRecurrence.NONE,
     val recurringRuleId: String? = null,
     val status: RecordingStatus = RecordingStatus.SCHEDULED,
+    val sourceType: RecordingSourceType = RecordingSourceType.UNKNOWN,
+    val bytesWritten: Long = 0L,
+    val averageThroughputBytesPerSecond: Long = 0L,
+    val retryCount: Int = 0,
+    val lastProgressAtMs: Long? = null,
+    val failureCategory: RecordingFailureCategory = RecordingFailureCategory.NONE,
+    val scheduleEnabled: Boolean = true,
+    val priority: Int = 0,
     val failureReason: String? = null,
     val terminalAtMs: Long? = null
 ) {
@@ -55,15 +88,39 @@ data class RecordingItem(
         require(channelName.isNotBlank()) { "channelName must not be blank" }
         require(streamUrl.isNotBlank()) { "streamUrl must not be blank" }
         require(scheduledEndMs > scheduledStartMs) { "scheduledEndMs must be after scheduledStartMs" }
+        require(bytesWritten >= 0L) { "bytesWritten must not be negative" }
+        require(averageThroughputBytesPerSecond >= 0L) { "averageThroughputBytesPerSecond must not be negative" }
+        require(retryCount >= 0) { "retryCount must not be negative" }
+    }
+}
+
+data class RecordingStorageConfig(
+    val treeUri: String? = null,
+    val displayName: String? = null,
+    val fileNamePattern: String = "ChannelName_yyyy-MM-dd_HH-mm_ProgramTitle.ts",
+    val retentionDays: Int? = null,
+    val maxSimultaneousRecordings: Int = 2
+) {
+    init {
+        require(fileNamePattern.isNotBlank()) { "fileNamePattern must not be blank" }
+        require(maxSimultaneousRecordings >= 1) { "maxSimultaneousRecordings must be at least 1" }
+        retentionDays?.let { require(it >= 1) { "retentionDays must be at least 1 when set" } }
     }
 }
 
 data class RecordingStorageState(
+    val treeUri: String? = null,
+    val displayName: String? = null,
     val outputDirectory: String? = null,
     val availableBytes: Long? = null,
-    val isWritable: Boolean = false
+    val isWritable: Boolean = false,
+    val fileNamePattern: String = "ChannelName_yyyy-MM-dd_HH-mm_ProgramTitle.ts",
+    val retentionDays: Int? = null,
+    val maxSimultaneousRecordings: Int = 2
 ) {
     init {
         availableBytes?.let { require(it >= 0) { "availableBytes must be non-negative" } }
+        require(maxSimultaneousRecordings >= 1) { "maxSimultaneousRecordings must be at least 1" }
+        retentionDays?.let { require(it >= 1) { "retentionDays must be at least 1 when set" } }
     }
 }
