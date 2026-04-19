@@ -156,9 +156,14 @@ jobs:
           echo "Extracting notes for version $VERSION"
           
           # Extract lines between the header and the next header (or EOF)
+          # Supports both "## [1.0.5] - date" and legacy "## 1.0.5 date" styles.
           {
             echo "notes<<EOF"
-            awk -v ver="$VERSION" '$0 ~ "^## " ver " " {p=1; next} $0 ~ "^## " && p {p=0} p {print}' docs/CHANGELOG.md
+            awk -v ver="$VERSION" '
+              $0 ~ ("^## \\[" ver "\\]") || $0 ~ ("^## " ver " ") { p=1; next }
+              $0 ~ "^## " && p { p=0 }
+              p { print }
+            ' docs/CHANGELOG.md
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
