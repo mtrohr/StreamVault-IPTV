@@ -1082,103 +1082,18 @@ fun SettingsScreen(
                     // ג”€ג”€ 6: About ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
                     else if (selectedCategory == 7) {
                         item {
-                            val downloadStatus = uiState.appUpdate.downloadStatus
-                            LaunchedEffect(downloadStatus) {
-                                if (downloadStatus == com.streamvault.app.update.AppUpdateDownloadStatus.Downloading) {
-                                    while (true) {
-                                        delay(2000L)
-                                        viewModel.refreshDownloadState()
-                                    }
-                                }
-                            }
                             SettingsSectionHeader(
                                 title = stringResource(R.string.settings_updates_title),
                                 subtitle = stringResource(R.string.settings_updates_subtitle)
                             )
                             SettingsRow(label = stringResource(R.string.settings_app_version), value = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-                            SwitchSettingsRow(
-                                label = stringResource(R.string.settings_update_auto_check),
-                                value = stringResource(
-                                    if (uiState.autoCheckAppUpdates) R.string.settings_enabled else R.string.settings_disabled
-                                ),
-                                checked = uiState.autoCheckAppUpdates,
-                                onCheckedChange = viewModel::setAutoCheckAppUpdates
-                            )
-                            if (uiState.autoCheckAppUpdates) {
-                                SwitchSettingsRow(
-                                    label = stringResource(R.string.settings_update_auto_download),
-                                    value = stringResource(
-                                        if (uiState.autoDownloadAppUpdates) R.string.settings_enabled else R.string.settings_disabled
-                                    ),
-                                    checked = uiState.autoDownloadAppUpdates,
-                                    onCheckedChange = viewModel::setAutoDownloadAppUpdates
-                                )
-                            }
-                            SettingsRow(
-                                label = stringResource(R.string.settings_update_latest_release),
-                                value = formatLatestReleaseLabel(uiState.appUpdate, context)
-                            )
-                            SettingsRow(
-                                label = stringResource(R.string.settings_update_status),
-                                value = formatUpdateStatusLabel(uiState.appUpdate, context)
-                            )
-                            SettingsRow(
-                                label = stringResource(R.string.settings_update_last_checked),
-                                value = formatUpdateCheckTimeLabel(uiState.appUpdate.lastCheckedAt, context)
-                            )
-                            ClickableSettingsRow(
-                                label = stringResource(R.string.settings_update_check_now),
-                                value = stringResource(
-                                    if (uiState.isCheckingForUpdates) R.string.settings_update_checking else R.string.settings_update_check_action
-                                ),
-                                onClick = {
-                                    if (!uiState.isCheckingForUpdates) {
-                                        viewModel.checkForAppUpdates()
-                                    }
-                                }
-                            )
-                            if (shouldShowUpdateDownloadAction(uiState.appUpdate)) {
-                                ClickableSettingsRow(
-                                    label = stringResource(R.string.settings_update_download),
-                                    value = formatUpdateDownloadLabel(uiState.appUpdate, context),
-                                    onClick = {
-                                        if (uiState.appUpdate.downloadStatus == com.streamvault.app.update.AppUpdateDownloadStatus.Downloaded) {
-                                            viewModel.installDownloadedUpdate()
-                                        } else if (uiState.appUpdate.downloadStatus != com.streamvault.app.update.AppUpdateDownloadStatus.Downloading) {
-                                            viewModel.downloadLatestUpdate()
-                                        }
-                                    }
-                                )
-                            }
-                            if (!uiState.appUpdate.releaseUrl.isNullOrBlank()) {
-                                ClickableSettingsRow(
-                                    label = stringResource(R.string.settings_update_view_release),
-                                    value = uiState.appUpdate.latestVersionName ?: stringResource(R.string.settings_update_release_notes),
-                                    onClick = { uriHandler.openUri(uiState.appUpdate.releaseUrl.orEmpty()) }
-                                )
-                            }
-                            if (!uiState.appUpdate.errorMessage.isNullOrBlank()) {
-                                SettingsRow(
-                                    label = stringResource(R.string.settings_update_error),
-                                    value = uiState.appUpdate.errorMessage.orEmpty()
-                                )
-                            }
+
                         }
 
                         item {
                             SettingsRow(label = stringResource(R.string.settings_build), value = stringResource(R.string.settings_build_desc))
                             SettingsRow(label = stringResource(R.string.settings_build_verification), value = buildVerificationLabel)
                             SettingsRow(label = stringResource(R.string.settings_developed_by), value = stringResource(R.string.settings_developer_name))
-                            ClickableSettingsRow(
-                                label = stringResource(R.string.settings_github),
-                                value = stringResource(R.string.settings_github_url),
-                                onClick = { uriHandler.openUri(context.getString(R.string.settings_github_url)) }
-                            )
-                            ClickableSettingsRow(
-                                label = stringResource(R.string.settings_donate),
-                                value = stringResource(R.string.settings_donate_url),
-                                onClick = { uriHandler.openUri(context.getString(R.string.settings_donate_url)) }
-                            )
                         }
                     }
                 }
