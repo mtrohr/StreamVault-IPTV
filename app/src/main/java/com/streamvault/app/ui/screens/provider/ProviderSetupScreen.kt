@@ -107,7 +107,8 @@ fun ProviderSetupScreen(
     var fileImportError by rememberSaveable { mutableStateOf<String?>(null) }
     var handledInitialImportUri by rememberSaveable { mutableStateOf<String?>(null) }
     var showDiscardDraftDialog by rememberSaveable { mutableStateOf(false) }
-    var selectedSellerServiceId by rememberSaveable { mutableStateOf(SellerProviderCatalog.services.firstOrNull()?.id.orEmpty()) }
+    var sellerServices by remember { mutableStateOf(SellerProviderCatalog.services) }
+    var selectedSellerServiceId by rememberSaveable { mutableStateOf(sellerServices.firstOrNull()?.id.orEmpty()) }
 
     // ?? File import helper ????????????????????????????????????????????????????
     fun importM3uUri(uri: android.net.Uri) {
@@ -160,6 +161,14 @@ fun ProviderSetupScreen(
     // ?? Effects ???????????????????????????????????????????????????????????????
     LaunchedEffect(knownLocalM3uUrls) {
         cleanupOldImportedM3uFilesAsync(context.filesDir, knownLocalM3uUrls, 20)
+    }
+
+    LaunchedEffect(Unit) {
+        val loadedServices = SellerProviderCatalog.load(context)
+        sellerServices = loadedServices
+        if (selectedSellerServiceId.isBlank() || loadedServices.none { it.id == selectedSellerServiceId }) {
+            selectedSellerServiceId = loadedServices.firstOrNull()?.id.orEmpty()
+        }
     }
 
     LaunchedEffect(initialImportUri) {
@@ -236,7 +245,7 @@ fun ProviderSetupScreen(
 
     // Xtream-only provider setup flow
     val sourceType = SourceType.XTREAM
-    val selectedSellerService = SellerProviderCatalog.findById(selectedSellerServiceId)
+    val selectedSellerService = sellerServices.firstOrNull { it.id == selectedSellerServiceId }
     val resolvedXtreamServerUrl = if (uiState.isEditing) serverUrl else selectedSellerService?.serverUrl.orEmpty()
 
     fun onSourceTypeSelected(type: SourceType) {
@@ -315,7 +324,7 @@ fun ProviderSetupScreen(
                         uiState = uiState,
                         name = name, onNameChange = { name = ProviderInputSanitizer.sanitizeProviderNameForEditing(it) },
                         serverUrl = serverUrl, onServerUrlChange = { serverUrl = ProviderInputSanitizer.sanitizeUrlForEditing(it) },
-                        sellerServices = SellerProviderCatalog.services,
+                        sellerServices = sellerServices,
                         selectedSellerServiceId = selectedSellerServiceId,
                         onSelectSellerService = { selectedSellerServiceId = it },
                         username = username, onUsernameChange = { username = ProviderInputSanitizer.sanitizeUsernameForEditing(it) },
@@ -355,7 +364,7 @@ fun ProviderSetupScreen(
                         uiState = uiState,
                         name = name, onNameChange = { name = ProviderInputSanitizer.sanitizeProviderNameForEditing(it) },
                         serverUrl = serverUrl, onServerUrlChange = { serverUrl = ProviderInputSanitizer.sanitizeUrlForEditing(it) },
-                        sellerServices = SellerProviderCatalog.services,
+                        sellerServices = sellerServices,
                         selectedSellerServiceId = selectedSellerServiceId,
                         onSelectSellerService = { selectedSellerServiceId = it },
                         username = username, onUsernameChange = { username = ProviderInputSanitizer.sanitizeUsernameForEditing(it) },
