@@ -109,6 +109,8 @@ fun ProviderSetupScreen(
     var showDiscardDraftDialog by rememberSaveable { mutableStateOf(false) }
     var sellerServices by remember { mutableStateOf(SellerProviderCatalog.services) }
     var selectedSellerServiceId by rememberSaveable { mutableStateOf(sellerServices.firstOrNull()?.id.orEmpty()) }
+    var sellerCatalogStatusText by remember { mutableStateOf("Config: v0 • source: default") }
+    var isRefreshingSellerCatalog by remember { mutableStateOf(false) }
 
     // ?? File import helper ????????????????????????????????????????????????????
     fun importM3uUri(uri: android.net.Uri) {
@@ -166,6 +168,9 @@ fun ProviderSetupScreen(
     LaunchedEffect(Unit) {
         val loadedServices = SellerProviderCatalog.load(context)
         sellerServices = loadedServices
+        val status = SellerProviderCatalog.status
+        val updatedMins = if (status.fetchedAtMs <= 0L) "n/a" else "${((System.currentTimeMillis() - status.fetchedAtMs).coerceAtLeast(0L) / 60000)}m ago"
+        sellerCatalogStatusText = "Config: v${status.version} • source: ${status.source} • updated $updatedMins"
         if (selectedSellerServiceId.isBlank() || loadedServices.none { it.id == selectedSellerServiceId }) {
             selectedSellerServiceId = loadedServices.firstOrNull()?.id.orEmpty()
         }
@@ -248,6 +253,29 @@ fun ProviderSetupScreen(
     val selectedSellerService = sellerServices.firstOrNull { it.id == selectedSellerServiceId }
     val resolvedXtreamServerUrl = if (uiState.isEditing) serverUrl else selectedSellerService?.serverUrl.orEmpty()
 
+    fun refreshSellerCatalog(force: Boolean) {
+        if (isRefreshingSellerCatalog) return
+        isRefreshingSellerCatalog = true
+        coroutineScope.launch {
+            try {
+                val loadedServices = if (force) {
+                    SellerProviderCatalog.forceRefresh(context)
+                } else {
+                    SellerProviderCatalog.load(context)
+                }
+                sellerServices = loadedServices
+                val status = SellerProviderCatalog.status
+                val updatedMins = if (status.fetchedAtMs <= 0L) "n/a" else "${((System.currentTimeMillis() - status.fetchedAtMs).coerceAtLeast(0L) / 60000)}m ago"
+                sellerCatalogStatusText = "Config: v${status.version} • source: ${status.source} • updated $updatedMins"
+                if (selectedSellerServiceId.isBlank() || loadedServices.none { it.id == selectedSellerServiceId }) {
+                    selectedSellerServiceId = loadedServices.firstOrNull()?.id.orEmpty()
+                }
+            } finally {
+                isRefreshingSellerCatalog = false
+            }
+        }
+    }
+
     fun onSourceTypeSelected(type: SourceType) {
         if (uiState.isEditing) return
         when (type) {
@@ -327,6 +355,9 @@ fun ProviderSetupScreen(
                         sellerServices = sellerServices,
                         selectedSellerServiceId = selectedSellerServiceId,
                         onSelectSellerService = { selectedSellerServiceId = it },
+                        sellerCatalogStatusText = sellerCatalogStatusText,
+                        isRefreshingSellerCatalog = isRefreshingSellerCatalog,
+                        onForceRefreshSellerCatalog = { refreshSellerCatalog(force = true) },
                         username = username, onUsernameChange = { username = ProviderInputSanitizer.sanitizeUsernameForEditing(it) },
                         password = password, onPasswordChange = { password = ProviderInputSanitizer.sanitizePasswordForEditing(it) },
                         m3uUrl = m3uUrl, onM3uUrlChange = { m3uUrl = ProviderInputSanitizer.sanitizeUrlForEditing(it) },
@@ -367,6 +398,9 @@ fun ProviderSetupScreen(
                         sellerServices = sellerServices,
                         selectedSellerServiceId = selectedSellerServiceId,
                         onSelectSellerService = { selectedSellerServiceId = it },
+                        sellerCatalogStatusText = sellerCatalogStatusText,
+                        isRefreshingSellerCatalog = isRefreshingSellerCatalog,
+                        onForceRefreshSellerCatalog = { refreshSellerCatalog(force = true) },
                         username = username, onUsernameChange = { username = ProviderInputSanitizer.sanitizeUsernameForEditing(it) },
                         password = password, onPasswordChange = { password = ProviderInputSanitizer.sanitizePasswordForEditing(it) },
                         m3uUrl = m3uUrl, onM3uUrlChange = { m3uUrl = ProviderInputSanitizer.sanitizeUrlForEditing(it) },
@@ -432,6 +466,9 @@ private fun ProviderFormContent(
     sellerServices: List<SellerXtreamService>,
     selectedSellerServiceId: String,
     onSelectSellerService: (String) -> Unit,
+    sellerCatalogStatusText: String,
+    isRefreshingSellerCatalog: Boolean,
+    onForceRefreshSellerCatalog: () -> Unit,
     username: String, onUsernameChange: (String) -> Unit,
     password: String, onPasswordChange: (String) -> Unit,
     m3uUrl: String, onM3uUrlChange: (String) -> Unit,
@@ -481,7 +518,10 @@ private fun ProviderFormContent(
                         SellerServiceSelector(
                             services = sellerServices,
                             selectedServiceId = selectedSellerServiceId,
-                            onSelect = onSelectSellerService
+                            onSelect = onSelectSellerService,
+                            statusText = sellerCatalogStatusText,
+                            isRefreshing = isRefreshingSellerCatalog,
+                            onForceRefresh = onForceRefreshSellerCatalog
                         )
                     } else {
                         ProviderTextField(
@@ -988,12 +1028,32 @@ private fun FormErrors(validationError: String?, error: String?) {
 private fun SellerServiceSelector(
     services: List<SellerXtreamService>,
     selectedServiceId: String,
-    onSelect: (String) -> Unit
+    onSelect: (String) -> Unit,
+    statusText: String,
+    isRefreshing: Boolean,
+    onForceRefresh: () -> Unit
 ) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Select Service",
+            style = MaterialTheme.typography.labelMedium,
+            color = TextPrimary
+        )
+        androidx.compose.material3.TextButton(
+            onClick = onForceRefresh,
+            enabled = !isRefreshing
+        ) {
+            Text(if (isRefreshing) "Updating..." else "Force Update")
+        }
+    }
     Text(
-        text = "Select Service",
-        style = MaterialTheme.typography.labelMedium,
-        color = TextPrimary
+        text = statusText,
+        style = MaterialTheme.typography.bodySmall,
+        color = OnSurfaceDim
     )
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),

@@ -24,6 +24,12 @@ data class SellerXtreamService(
     val defaultPlaylistName: String = displayName
 )
 
+data class SellerCatalogStatus(
+    val version: Int,
+    val source: String,
+    val fetchedAtMs: Long
+)
+
 object SellerProviderCatalog {
     const val REMOTE_CONFIG_URL_PRIMARY: String = "https://astranettv.com/streamvault/config.json"
     const val REMOTE_CONFIG_URL_BACKUP: String = "https://astrahosting.xyz/streamvault/config.json"
@@ -59,8 +65,18 @@ object SellerProviderCatalog {
     @Volatile
     private var inMemoryServices: List<SellerXtreamService> = defaultServices
 
+    @Volatile
+    private var inMemoryStatus: SellerCatalogStatus = SellerCatalogStatus(
+        version = 0,
+        source = "default",
+        fetchedAtMs = 0L
+    )
+
     val services: List<SellerXtreamService>
         get() = inMemoryServices
+
+    val status: SellerCatalogStatus
+        get() = inMemoryStatus
 
     /**
      * Loads the catalog with fallback order:
@@ -72,7 +88,7 @@ object SellerProviderCatalog {
 
         // 1) Fresh cache
         if (cached != null && isCacheFresh(cached)) {
-            inMemoryServices = cached.services
+            applyConfig(cached, source = "cache-fresh")
             return@withContext inMemoryServices
         }
 
@@ -82,7 +98,7 @@ object SellerProviderCatalog {
         val primary = fetchAndValidate(REMOTE_CONFIG_URL_PRIMARY, minAcceptedVersion = cachedVersion)
         if (primary != null) {
             saveCache(prefs, primary)
-            inMemoryServices = primary.services
+            applyConfig(primary, source = "primary")
             return@withContext inMemoryServices
         }
 
@@ -90,22 +106,64 @@ object SellerProviderCatalog {
         val backup = fetchAndValidate(REMOTE_CONFIG_URL_BACKUP, minAcceptedVersion = cachedVersion)
         if (backup != null) {
             saveCache(prefs, backup)
-            inMemoryServices = backup.services
+            applyConfig(backup, source = "backup")
             return@withContext inMemoryServices
         }
 
         // 4) Last-known-good cache (even if stale)
         if (cached != null && cached.services.isNotEmpty()) {
-            inMemoryServices = cached.services
+            applyConfig(cached, source = "cache-stale")
             return@withContext inMemoryServices
         }
 
         // 5) Hardcoded defaults as bootstrap safety net
         inMemoryServices = defaultServices
+        inMemoryStatus = SellerCatalogStatus(version = 0, source = "default", fetchedAtMs = 0L)
+        return@withContext inMemoryServices
+    }
+
+    /**
+     * Force remote refresh (ignore TTL), while still honoring anti-rollback.
+     */
+    suspend fun forceRefresh(context: Context): List<SellerXtreamService> = withContext(Dispatchers.IO) {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val cached = readCachedConfig(prefs)
+        val cachedVersion = cached?.version ?: 0
+
+        val primary = fetchAndValidate(REMOTE_CONFIG_URL_PRIMARY, minAcceptedVersion = cachedVersion)
+        if (primary != null) {
+            saveCache(prefs, primary)
+            applyConfig(primary, source = "primary")
+            return@withContext inMemoryServices
+        }
+
+        val backup = fetchAndValidate(REMOTE_CONFIG_URL_BACKUP, minAcceptedVersion = cachedVersion)
+        if (backup != null) {
+            saveCache(prefs, backup)
+            applyConfig(backup, source = "backup")
+            return@withContext inMemoryServices
+        }
+
+        if (cached != null && cached.services.isNotEmpty()) {
+            applyConfig(cached, source = "cache-stale")
+            return@withContext inMemoryServices
+        }
+
+        inMemoryServices = defaultServices
+        inMemoryStatus = SellerCatalogStatus(version = 0, source = "default", fetchedAtMs = 0L)
         return@withContext inMemoryServices
     }
 
     fun findById(id: String?): SellerXtreamService? = services.firstOrNull { it.id == id }
+
+    private fun applyConfig(config: ParsedConfig, source: String) {
+        inMemoryServices = config.services
+        inMemoryStatus = SellerCatalogStatus(
+            version = config.version,
+            source = source,
+            fetchedAtMs = config.fetchedAtMs
+        )
+    }
 
     private data class ParsedConfig(
         val version: Int,
@@ -189,26 +247,47 @@ object SellerProviderCatalog {
 
     private fun parseServicesFromJson(rawJson: String): List<SellerXtreamService>? {
         val root = runCatching { JSONObject(rawJson) }.getOrNull() ?: return null
-        val servicesArray = root.optJSONArray("services") ?: JSONArray()
-        if (servicesArray.length() == 0) return null
 
-        val parsed = mutableListOf<SellerXtreamService>()
-        for (i in 0 until servicesArray.length()) {
-            val item = servicesArray.optJSONObject(i) ?: continue
-            val id = item.optString("id").trim()
-            val displayName = item.optString("display_name").trim()
-            val serverUrl = item.optString("server_url").trim()
-            if (id.isBlank() || displayName.isBlank() || serverUrl.isBlank()) continue
-            val defaultPlaylistName = item.optString("default_playlist_name").trim().ifBlank { displayName }
+        // Preferred schema: services is an array of objects
+        val servicesArray = root.optJSONArray("services")
+        if (servicesArray != null) {
+            val parsed = mutableListOf<SellerXtreamService>()
+            for (i in 0 until servicesArray.length()) {
+                val item = servicesArray.optJSONObject(i) ?: continue
+                val id = item.optString("id").trim()
+                val displayName = item.optString("display_name").trim()
+                val serverUrl = item.optString("server_url").trim()
+                if (id.isBlank() || displayName.isBlank() || serverUrl.isBlank()) continue
+                val defaultPlaylistName = item.optString("default_playlist_name").trim().ifBlank { displayName }
 
-            parsed += SellerXtreamService(
+                parsed += SellerXtreamService(
+                    id = id,
+                    displayName = displayName,
+                    serverUrl = serverUrl,
+                    defaultPlaylistName = defaultPlaylistName
+                )
+            }
+            if (parsed.isNotEmpty()) return parsed
+        }
+
+        // Backward-compatible schema: services is a map of "Name": "https://url"
+        val servicesObject = root.optJSONObject("services") ?: return null
+        val parsedFromMap = mutableListOf<SellerXtreamService>()
+        val keys = servicesObject.keys()
+        while (keys.hasNext()) {
+            val displayName = keys.next().trim()
+            val serverUrl = servicesObject.optString(displayName).trim()
+            if (displayName.isBlank() || serverUrl.isBlank()) continue
+            val id = displayName.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+            if (id.isBlank()) continue
+            parsedFromMap += SellerXtreamService(
                 id = id,
                 displayName = displayName,
                 serverUrl = serverUrl,
-                defaultPlaylistName = defaultPlaylistName
+                defaultPlaylistName = displayName
             )
         }
 
-        return parsed.takeIf { it.isNotEmpty() }
+        return parsedFromMap.takeIf { it.isNotEmpty() }
     }
 }
